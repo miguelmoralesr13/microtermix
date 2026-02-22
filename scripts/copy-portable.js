@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const isWin = process.platform === 'win32';
-const exeName = isWin ? 'devflow-nexus.exe' : 'devflow-nexus';
+const exeName = isWin ? 'microtermix.exe' : 'microtermix';
 const src = join(root, 'src-tauri', 'target', 'release', exeName);
 const outDir = join(root, 'portable');
 const dest = join(outDir, exeName);
