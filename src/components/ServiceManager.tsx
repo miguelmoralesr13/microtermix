@@ -421,11 +421,21 @@ export const ServiceManager: React.FC = () => {
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col  h-full overflow-hidden">
                 <header className="h-14 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 bg-slate-950/50 relative z-10 w-full gap-4">
-                    {/* Izquierda: Path del Workspace */}
-                    <div className="flex-1 flex justify-start min-w-0">
+                    {/* Izquierda: Path del Workspace + Refresh */}
+                    <div className="flex-1 flex justify-start items-center min-w-0 gap-2">
                         <span className="text-xs text-slate-500 font-mono truncate max-w-sm lg:max-w-md bg-slate-900/50 px-3 py-1.5 rounded-md border border-slate-800" title={state.currentPath}>
                             {state.currentPath || 'No Workspace Loaded'}
                         </span>
+                        {state.currentPath && (
+                            <button
+                                type="button"
+                                onClick={() => scanWorkspace(state.currentPath!)}
+                                className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors hover:rotate-[-90deg] active:rotate-[-180deg]"
+                                title="Refrescar proyectos del workspace"
+                            >
+                                <RotateCcw size={14} />
+                            </button>
+                        )}
                     </div>
 
                     {/* Centro: Título */}

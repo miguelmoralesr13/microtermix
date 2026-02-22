@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useWorkspace, GitConfig } from '../context/WorkspaceContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { Github, Gitlab, Server, X } from 'lucide-react';
 
 interface GitConfigModalProps {
@@ -8,9 +8,34 @@ interface GitConfigModalProps {
 
 export const GitConfigModal: React.FC<GitConfigModalProps> = ({ onClose }) => {
     const { state, setGitConfig } = useWorkspace();
-    const [provider, setProvider] = useState<GitConfig['provider']>(state.gitConfig.provider !== 'none' ? state.gitConfig.provider : 'gitlab');
-    const [url, setUrl] = useState(state.gitConfig.url || 'https://gitlab.com');
-    const [token, setToken] = useState(state.gitConfig.token || '');
+    const [provider, setProvider] = useState<'gitlab' | 'github' | 'bitbucket'>(
+        state.gitConfig.provider === 'none' ? 'gitlab' : state.gitConfig.provider
+    );
+
+    const [drafts, setDrafts] = useState({
+        gitlab: {
+            url: state.gitConfig.provider === 'gitlab' ? state.gitConfig.url : 'https://gitlab.com',
+            token: state.gitConfig.provider === 'gitlab' ? state.gitConfig.token : ''
+        },
+        github: {
+            url: state.gitConfig.provider === 'github' ? state.gitConfig.url : 'https://api.github.com',
+            token: state.gitConfig.provider === 'github' ? state.gitConfig.token : ''
+        },
+        bitbucket: {
+            url: state.gitConfig.provider === 'bitbucket' ? state.gitConfig.url : 'https://api.bitbucket.org/2.0',
+            token: state.gitConfig.provider === 'bitbucket' ? state.gitConfig.token : ''
+        }
+    });
+
+    const url = drafts[provider].url;
+    const token = drafts[provider].token;
+
+    const updateDraft = (field: 'url' | 'token', value: string) => {
+        setDrafts(prev => ({
+            ...prev,
+            [provider]: { ...prev[provider], [field]: value }
+        }));
+    };
 
     const handleSave = () => {
         setGitConfig({ provider, url, token });
@@ -43,13 +68,10 @@ export const GitConfigModal: React.FC<GitConfigModalProps> = ({ onClose }) => {
                         </button>
                         <button
                             onClick={() => setProvider('github')}
-                            className={`flex flex-col items-center justify-center py-4 rounded-lg border transition-all opacity-50 cursor-not-allowed ${provider === 'github' ? 'border-nexus-accent bg-nexus-accent/10 text-white' : 'border-slate-700 bg-slate-800/50 text-slate-400'}`}
-                            disabled
-                            title="Coming Soon..."
+                            className={`flex flex-col items-center justify-center py-4 rounded-lg border transition-all ${provider === 'github' ? 'border-nexus-accent bg-nexus-accent/10 text-white' : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-500'}`}
                         >
                             <Github size={28} className="mb-2" />
                             <span className="text-sm font-semibold">GitHub</span>
-                            <span className="text-[10px] text-slate-500 mt-1">Coming Soon</span>
                         </button>
                         <button
                             onClick={() => setProvider('bitbucket')}
@@ -64,29 +86,36 @@ export const GitConfigModal: React.FC<GitConfigModalProps> = ({ onClose }) => {
                     </div>
 
                     {/* Form Fields */}
-                    {provider === 'gitlab' && (
+                    {(provider === 'gitlab' || provider === 'github') && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1">Instance URL</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">
+                                    {provider === 'github' ? 'API URL (Optional)' : 'Instance URL'}
+                                </label>
                                 <input
                                     type="url"
                                     value={url}
-                                    onChange={e => setUrl(e.target.value)}
-                                    placeholder="https://gitlab.com"
+                                    onChange={e => updateDraft('url', e.target.value)}
+                                    placeholder={provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-nexus-neon"
                                 />
+                                {provider === 'github' && (
+                                    <p className="text-xs text-slate-500 mt-1">Leave as default or change for GitHub Enterprise.</p>
+                                )}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1">Personal Access Token</label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Personal Access Token (PAT)</label>
                                 <input
                                     type="password"
                                     value={token}
-                                    onChange={e => setToken(e.target.value)}
-                                    placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
+                                    onChange={e => updateDraft('token', e.target.value)}
+                                    placeholder={provider === 'github' ? 'ghp_xxxxxxxxxxxxxxxxxxxx' : 'glpat-xxxxxxxxxxxxxxxxxxxx'}
                                     className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-nexus-neon font-mono text-sm"
                                 />
                                 <p className="text-xs text-slate-500 mt-2">
-                                    Requires `api`, `read_repository`, and `write_repository` scopes. This is stored locally and never leaves your machine.
+                                    {provider === 'github'
+                                        ? 'Requires `repo` scope. This is stored locally and never leaves your machine.'
+                                        : 'Requires `api`, `read_repository`, and `write_repository` scopes. This is stored locally and never leaves your machine.'}
                                 </p>
                             </div>
                         </div>

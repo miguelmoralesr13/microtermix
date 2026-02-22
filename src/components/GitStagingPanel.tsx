@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { GitCommit, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw } from 'lucide-react';
+import { GitCommit, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
 
 interface GitStatusEntry {
     file: string;
     stateCode: string;
     isStaged: boolean;
     isUnstaged: boolean;
+    isConflicted: boolean;
 }
 
 interface ArrayTreeNode {
@@ -16,6 +17,7 @@ interface ArrayTreeNode {
     children: ArrayTreeNode[];
     status?: GitStatusEntry;
     checkState: 'checked' | 'unchecked' | 'partial';
+    isConflicted?: boolean;
 }
 
 interface GitStagingPanelProps {
@@ -31,9 +33,21 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const [isCommitting, setIsCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
+    const [isMergeInProgress, setIsMergeInProgress] = useState(false);
+
+    const checkMergeStatus = async () => {
+        try {
+            const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['rev-parse', '-q', '--verify', 'MERGE_HEAD'] });
+            setIsMergeInProgress(res.success);
+        } catch (_) {
+            setIsMergeInProgress(false);
+        }
+    };
+
     const loadStatus = async () => {
         setLoading(true);
         setError(null);
+        await checkMergeStatus();
         try {
             const result: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', {
                 projectPath,
@@ -55,10 +69,11 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                         file = file.substring(1, file.length - 1);
                     }
 
-                    const isStaged = stateCode[0] !== ' ' && stateCode[0] !== '?';
-                    const isUnstaged = stateCode[1] !== ' ' && stateCode[1] !== '?' || stateCode === '??';
+                    const isConflicted = stateCode === 'DD' || stateCode === 'AU' || stateCode === 'UD' || stateCode === 'UA' || stateCode === 'DU' || stateCode === 'AA' || stateCode === 'UU';
+                    const isStaged = (stateCode[0] !== ' ' && stateCode[0] !== '?') && !isConflicted;
+                    const isUnstaged = (stateCode[1] !== ' ' && stateCode[1] !== '?' || stateCode === '??') && !isConflicted;
 
-                    return { file, stateCode, isStaged, isUnstaged };
+                    return { file, stateCode, isStaged, isUnstaged, isConflicted };
                 });
                 setFiles(parsedFiles);
             }
@@ -148,16 +163,13 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     };
 
     const handleCommit = async () => {
-        if (!commitMessage.trim()) return;
+        if (!commitMessage.trim() || !isAnythingStaged) return;
         setIsCommitting(true);
         setError(null);
         try {
-            const result: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', {
-                projectPath,
-                args: ['commit', '-m', commitMessage]
-            });
+            const result: any = await invoke('git_execute', { projectPath, args: ['commit', '-m', commitMessage] });
             if (!result.success) {
-                setError(result.stderr);
+                setError(result.stderr || 'Commit failed');
             } else {
                 setCommitMessage('');
                 await loadStatus();
@@ -165,6 +177,21 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             }
         } finally {
             setIsCommitting(false);
+        }
+    };
+
+    const handleAbortMerge = async () => {
+        if (!confirm('Are you sure you want to abort the merge? This will discard all uncommitted changes.')) return;
+        setLoading(true);
+        try {
+            const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
+            if (!res.success) {
+                setError(res.stderr || 'Failed to abort merge');
+            }
+            await loadStatus();
+            if (onStatusRefresh) onStatusRefresh();
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -251,11 +278,17 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             const isDeleted = f.stateCode.includes('D');
 
             let colorClass = 'text-slate-400';
+            let StatusIcon = File;
+
             if (isAdded) colorClass = 'text-nexus-success';
             if (isModified) colorClass = 'text-nexus-accent';
             if (isDeleted) colorClass = 'text-nexus-danger';
+            if (f.isConflicted) {
+                colorClass = 'text-orange-500';
+                StatusIcon = AlertTriangle;
+            }
 
-            const defaultDiffMode = f.isUnstaged ? 'unstaged' : 'staged';
+            const defaultDiffMode = f.isConflicted ? ('conflicted' as any) : (f.isUnstaged ? 'unstaged' : 'staged');
             const isSelectedForRollback = selectedForRollback.has(node.fullPath);
             return (
                 <div className="min-w-0">
@@ -270,11 +303,13 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                             <button
                                 onClick={(e) => { e.stopPropagation(); handleToggleNode(node); }}
                                 className={`${checkColor} hover:text-white shrink-0 z-10 transition-colors`}
+                                disabled={f.isConflicted}
+                                title={f.isConflicted ? "Cannot stage directly. Resolve conflicts first." : ""}
                             >
-                                <CheckIcon size={14} />
+                                <CheckIcon size={14} className={f.isConflicted ? 'opacity-30' : ''} />
                             </button>
                             <span className={`font-mono text-[10px] w-4 shrink-0 ${colorClass} font-bold`}>{f.stateCode.trim()}</span>
-                            <File size={12} className="text-slate-500 shrink-0" />
+                            <StatusIcon size={12} className={`${colorClass} shrink-0`} />
                             <span className={`truncate transition-colors text-xs ${node.checkState === 'checked' ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>{node.name}</span>
                         </div>
 
@@ -385,6 +420,19 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
 
             {/* Commit Box */}
             <div className="p-4 border-t border-slate-800 bg-slate-900/30">
+                {isMergeInProgress && (
+                    <div className="mb-3 p-2 bg-orange-500/10 border border-orange-500/20 rounded flex items-center justify-between">
+                        <span className="text-xs font-bold text-orange-400 flex items-center">
+                            <AlertTriangle size={12} className="mr-1" /> Merge in Progress
+                        </span>
+                        <button
+                            onClick={handleAbortMerge}
+                            className="text-[10px] font-bold px-2 py-1 bg-red-950 text-red-400 border border-red-900 rounded hover:bg-red-900 transition-colors"
+                        >
+                            Abort Merge
+                        </button>
+                    </div>
+                )}
                 <textarea
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}

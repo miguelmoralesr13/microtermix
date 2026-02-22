@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { GitBranch, GitMerge, FileArchive, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search } from 'lucide-react';
+import { GitBranch, GitMerge, FileArchive, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud } from 'lucide-react';
 import { PushPreviewModal } from './PushPreviewModal';
 
 export type BranchFilter = 'all' | 'local' | 'remote';
@@ -138,6 +138,47 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         }
     };
 
+    const handlePull = async () => {
+        setLoading(true);
+        try {
+            const result: any = await invoke('git_execute', { projectPath, args: ['pull'] });
+            if (!result.success) {
+                alert(`Pull Failed:\n\n${result.stderr || result.stdout}`);
+            }
+            await loadSidebarData();
+            if (onRefreshRequest) onRefreshRequest();
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleMerge = async (branchName: string, isRemote: boolean) => {
+        let mergeTarget = branchName;
+        if (isRemote) {
+            // "origin/main" -> "origin/main"
+            mergeTarget = branchName;
+        }
+        if (!confirm(`Merge '${mergeTarget}' into your current branch?`)) return;
+
+        setLoading(true);
+        try {
+            const result: any = await invoke('git_execute', { projectPath, args: ['merge', mergeTarget] });
+            if (!result.success) {
+                // Determine if it was a conflict or just a fast-forward failure
+                if (result.stdout?.toLowerCase().includes('conflict') || result.stderr?.toLowerCase().includes('conflict')) {
+                    alert(`Merge Conflict Detected!\n\nPlease resolve the conflicts in the Source Control panel.`);
+                } else {
+                    alert(`Merge Failed:\n\n${result.stderr || result.stdout}`);
+                }
+            }
+            await loadSidebarData();
+            if (onRefreshRequest) onRefreshRequest();
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
     const SectionHeader: React.FC<{ title: string, count: number, isExpanded: boolean, onToggle: () => void }> = ({ title, count, isExpanded, onToggle }) => (
         <div
             className="flex items-center justify-between px-3 py-1.5 cursor-pointer hover:bg-slate-800 text-xs font-bold text-slate-400 uppercase group transition-colors"
@@ -166,6 +207,13 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                     <UploadCloud size={14} />
                                 </button>
                             )}
+                            <button
+                                onClick={handlePull}
+                                className={`p-1.5 text-slate-400 hover:text-nexus-success hover:bg-slate-800 rounded transition-colors ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+                                title="Pull (Fetch and Merge)"
+                            >
+                                <DownloadCloud size={14} />
+                            </button>
                             <button
                                 onClick={() => setShowPushModal(true)}
                                 className="p-1.5 text-slate-400 hover:text-nexus-accent hover:bg-slate-800 rounded transition-colors"
@@ -232,6 +280,13 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                                     {!repo.active && (
                                                         <>
                                                             <button
+                                                                onClick={(e) => { e.stopPropagation(); handleMerge(repo.name, false); }}
+                                                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-accent transition-opacity"
+                                                                title="Merge this branch into current"
+                                                            >
+                                                                <GitMerge size={10} />
+                                                            </button>
+                                                            <button
                                                                 onClick={(e) => { e.stopPropagation(); handleCheckout(repo.name, false); }}
                                                                 className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity"
                                                                 title="Checkout Branch"
@@ -278,8 +333,15 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                                     <span className="truncate">{repo}</span>
                                                 </div>
                                                 <button
+                                                    onClick={(e) => { e.stopPropagation(); handleMerge(repo, true); }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-accent transition-opacity shrink-0 ml-2"
+                                                    title="Merge remote branch into current Local branch"
+                                                >
+                                                    <GitMerge size={10} />
+                                                </button>
+                                                <button
                                                     onClick={(e) => { e.stopPropagation(); handleCheckout(repo, true); }}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity shrink-0 ml-2"
+                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity shrink-0 ml-1"
                                                     title="Checkout Remote Branch (Creates Local)"
                                                 >
                                                     <Play size={10} />

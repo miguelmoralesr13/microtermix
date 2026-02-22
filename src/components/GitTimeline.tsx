@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,7 @@ function computeGraph(commits: RawCommit[]): { nodes: GraphNode[], edges: GraphE
 type Filter = 'all' | 'mine' | 'merges' | 'tags';
 
 export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitSelect }) => {
+    const { state } = useWorkspace();
     const [rawCommits, setRawCommits] = useState<RawCommit[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -180,9 +182,12 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         }).catch(() => { });
     }, [projectPath]);
 
+    const [commitStatuses, setCommitStatuses] = useState<Record<string, 'pending' | 'success' | 'failure' | 'error' | null>>({});
+
     const loadTimeline = useCallback(async () => {
         setLoading(true);
         setError(null);
+        let parsed: RawCommit[] = [];
         try {
             const result: any = await invoke('git_execute', {
                 projectPath,
@@ -192,7 +197,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
             if (!result?.success) {
                 setError(result?.stderr || 'Failed to load history.');
             } else {
-                const parsed: RawCommit[] = result.stdout
+                parsed = result.stdout
                     .split('\n').filter((l: string) => l.trim())
                     .map((line: string) => {
                         const parts = line.split('|');
@@ -225,7 +230,34 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         } catch {
             setLocalHashes(new Set());
         }
-    }, [projectPath]);
+
+        // Fetch GitHub CI Statuses for the 10 most recent commits in the timeline
+        if (parsed.length > 0) {
+            const token = state.gitConfig.token;
+            if (token && state.gitConfig.provider === 'github') {
+                // To avoid rate-limits and UI freezing, only check the top 15 commits
+                const topHashes = parsed.slice(0, 15).map(c => c.hash);
+                // We'll import fetchGithubCommitStatus dynamically or keep it simple
+                // Wait, dynamic import or static is fine. We will import statically at the top
+                import('../services/githubApi').then(({ fetchGithubCommitStatus }) => {
+                    Promise.allSettled(
+                        topHashes.map(h => fetchGithubCommitStatus(projectPath, token, h).then(res => ({ hash: h, state: res?.state || null })))
+                    ).then(results => {
+                        const newStatuses: Record<string, any> = {};
+                        results.forEach(r => {
+                            if (r.status === 'fulfilled' && r.value.state) {
+                                newStatuses[r.value.hash] = r.value.state;
+                            }
+                        });
+                        if (Object.keys(newStatuses).length > 0) {
+                            setCommitStatuses(prev => ({ ...prev, ...newStatuses }));
+                        }
+                    });
+                });
+            }
+        }
+
+    }, [projectPath, state.gitConfig.token, state.gitConfig.provider]);
 
     useEffect(() => { if (projectPath) loadTimeline(); }, [loadTimeline]);
 
@@ -424,6 +456,16 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                 {refs.length > 0 && !isEditing && !isDeleting && (
                                     <div className="flex items-center gap-0.5 shrink-0 overflow-hidden" style={{ maxWidth: 140 }}>
                                         {refs.slice(0, 2).map((r, i) => <RefBadge key={i} ref={r} />)}
+                                    </div>
+                                )}
+
+                                {/* CI Status Badge */}
+                                {!isEditing && !isDeleting && commitStatuses[n.hash] && (
+                                    <div className="shrink-0 ml-1 flex items-center" title={`CI Status: ${commitStatuses[n.hash]}`}>
+                                        {commitStatuses[n.hash] === 'success' && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_4px_theme(colors.emerald.500)]" />}
+                                        {commitStatuses[n.hash] === 'failure' && <X size={10} strokeWidth={3} className="text-red-500" />}
+                                        {commitStatuses[n.hash] === 'error' && <AlertTriangle size={10} className="text-red-500" />}
+                                        {commitStatuses[n.hash] === 'pending' && <RefreshCw size={10} className="text-yellow-500 animate-spin" />}
                                     </div>
                                 )}
 

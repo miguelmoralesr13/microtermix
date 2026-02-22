@@ -1,0 +1,156 @@
+import React, { useState, useEffect } from 'react';
+import { GithubPR, GithubIssue, fetchGithubPRs, fetchGithubIssues } from '../services/githubApi';
+import { CircleDot, GitPullRequest, RefreshCw, ExternalLink } from 'lucide-react';
+import { useWorkspace } from '../context/WorkspaceContext';
+
+interface GithubPanelProps {
+    projectPath: string | null;
+}
+
+export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
+    const { state } = useWorkspace();
+    const [activeTab, setActiveTab] = useState<'prs' | 'issues'>('prs');
+    const [prs, setPrs] = useState<GithubPR[]>([]);
+    const [issues, setIssues] = useState<GithubIssue[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const loadData = async () => {
+        if (!projectPath) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const token = state.gitConfig.token || '';
+            if (activeTab === 'prs') {
+                const data = await fetchGithubPRs(projectPath, token);
+                setPrs(data);
+            } else {
+                const data = await fetchGithubIssues(projectPath, token);
+                setIssues(data);
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to fetch data from GitHub');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+    }, [projectPath, activeTab, state.gitConfig.token]);
+
+    if (!projectPath) {
+        return <div className="flex-1 flex items-center justify-center text-slate-500 p-8">No repository selected.</div>;
+    }
+
+    return (
+        <div className="flex flex-col h-full w-full bg-slate-900 overflow-hidden">
+            {/* Header Tabs */}
+            <div className="flex items-center bg-slate-950 border-b border-slate-800 px-4 pt-2">
+                <button
+                    onClick={() => setActiveTab('prs')}
+                    className={`px-4 py-2 text-xs font-bold transition-colors border-b-2 flex items-center ${activeTab === 'prs' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                >
+                    <GitPullRequest size={14} className="mr-2" /> Pull Requests
+                </button>
+                <button
+                    onClick={() => setActiveTab('issues')}
+                    className={`px-4 py-2 text-xs font-bold transition-colors border-b-2 flex items-center ${activeTab === 'issues' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+                >
+                    <CircleDot size={14} className="mr-2" /> Issues
+                </button>
+                <div className="flex-1" />
+                <button
+                    onClick={loadData}
+                    className={`p-1.5 text-slate-400 hover:text-white rounded transition-colors ${loading ? 'animate-spin' : ''}`}
+                    title="Refresh"
+                >
+                    <RefreshCw size={14} />
+                </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-4 scrollbar-hide relative">
+                {error && (
+                    <div className="mb-4 p-3 bg-red-900/20 border border-red-900/50 rounded text-red-400 text-xs">
+                        <p className="font-bold mb-1">Error fetching from GitHub</p>
+                        <p>{error}</p>
+                        <p className="mt-2 text-[10px] opacity-80">Make sure your branch has a remote tracking branch, or configure a valid PAT in Settings.</p>
+                    </div>
+                )}
+
+                {loading && !error && (
+                    <div className="flex justify-center p-8">
+                        <RefreshCw className="animate-spin text-slate-600" size={24} />
+                    </div>
+                )}
+
+                {!loading && !error && activeTab === 'prs' && (
+                    <div className="space-y-2">
+                        {prs.length === 0 ? (
+                            <div className="text-center text-slate-500 text-xs py-8">No open pull requests found.</div>
+                        ) : (
+                            prs.map(pr => (
+                                <a
+                                    key={pr.id}
+                                    href={pr.html_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors group"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-start gap-3">
+                                            <GitPullRequest className="text-emerald-500 mt-0.5 shrink-0" size={16} />
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{pr.title}</h4>
+                                                <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                                                    <span>#{pr.number}</span>
+                                                    <span>•</span>
+                                                    <span>opened by {pr.user.login}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <ExternalLink size={14} className="text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                </a>
+                            ))
+                        )}
+                    </div>
+                )}
+
+                {!loading && !error && activeTab === 'issues' && (
+                    <div className="space-y-2">
+                        {issues.length === 0 ? (
+                            <div className="text-center text-slate-500 text-xs py-8">No open issues found.</div>
+                        ) : (
+                            issues.map(issue => (
+                                <a
+                                    key={issue.id}
+                                    href={issue.html_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block p-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors group"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex items-start gap-3">
+                                            <CircleDot className="text-blue-500 mt-0.5 shrink-0" size={16} />
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{issue.title}</h4>
+                                                <div className="text-xs text-slate-400 mt-1 flex items-center gap-2">
+                                                    <span>#{issue.number}</span>
+                                                    <span>•</span>
+                                                    <span>opened by {issue.user.login}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <ExternalLink size={14} className="text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                </a>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
