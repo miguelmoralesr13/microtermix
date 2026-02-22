@@ -1,0 +1,69 @@
+.diff-line-insert {
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.diff-line-delete {
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
+.diff-line-selected-insert {
+  background-color: rgba(16, 185, 129, 0.22) !important;
+  outline: 1px solid rgba(16, 185, 129, 0.4);
+  outline-offset: -1px;
+}
+
+.diff-line-selected-delete {
+  background-color: rgba(239, 68, 68, 0.22) !important;
+  outline: 1px solid rgba(239, 68, 68, 0.4);
+  outline-offset: -1px;
+}
+
+/* Syntax highlight tokens */
+.diff-token-keyword {
+  color: #c084fc;
+  font-weight: 600;
+}
+
+.diff-token-string {
+  color: #86efac;
+}
+
+.diff-token-comment {
+  color: #64748b;
+  font-style: italic;
+}
+
+.diff-token-number {
+  color: #fb923c;
+}
+
+.monaco-custom-checkbox {
+  cursor: pointer;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.monaco-custom-checkbox.unchecked::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.monaco-custom-checkbox.checked::before {
+  content: '✓';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border: 1px solid currentColor;
+  background-color: currentColor;
+  color: #0f172a;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: bold;
+}

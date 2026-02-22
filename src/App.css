@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@theme {
+  --color-nexus-dark: #0f172a;
+  --color-nexus-darker: #020617;
+  --color-nexus-neon: #38bdf8;
+  --color-nexus-accent: #818cf8;
+  --color-nexus-success: #34d399;
+  --color-nexus-danger: #fb7185;
+  --color-nexus-warn: #fbbf24;
+}
+
+:root {
+  color-scheme: dark;
+  --background: var(--color-nexus-darker);
+  --foreground: #f8fafc;
+  --scrollbar-track: #0f172a;
+  --scrollbar-thumb: #334155;
+  --scrollbar-thumb-hover: #475569;
+}
+
+/* Scrollbars compactos y modernos (global) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  margin: 0;
+  display: flex;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+}
+
+/* react-diff-view dark theme + layout fix */
+.react-diff-view-dark {
+  --diff-background-color: #0f172a;
+  --diff-text-color: #e2e8f0;
+  --diff-selection-background-color: rgba(56, 189, 248, 0.3);
+  --diff-gutter-insert-background-color: rgba(52, 211, 153, 0.2);
+  --diff-gutter-insert-text-color: #34d399;
+  --diff-gutter-delete-background-color: rgba(251, 113, 133, 0.2);
+  --diff-gutter-delete-text-color: #fb7185;
+  --diff-code-insert-background-color: rgba(52, 211, 153, 0.12);
+  --diff-code-insert-text-color: #a7f3d0;
+  --diff-code-delete-background-color: rgba(251, 113, 133, 0.12);
+  --diff-code-delete-text-color: #fda4af;
+  --diff-gutter-selected-background-color: rgba(129, 140, 248, 0.2);
+  --diff-code-selected-background-color: rgba(129, 140, 248, 0.15);
+}
+/* Diff: una línea de código por línea, sin partir letras. Scroll horizontal solo dentro del diff si hace falta */
+.react-diff-view-dark {
+  width: 100%;
+  max-width: 100%;
+}
+.react-diff-view-dark .diff {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 100%;
+}
+.react-diff-view-dark .diff-gutter-col {
+  width: 5ch;
+  min-width: 5ch;
+}
+/* Líneas de código normales: pre, sin word-break que parta caracteres */
+.react-diff-view-dark .diff-code {
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+.react-diff-view-dark .diff-line {
+  white-space: pre;
+  word-break: normal;
+}
+/* Celdas de código con ancho mínimo para que no colapsen; scroll horizontal dentro de la celda si la línea es larga */
+.react-diff-view-dark .diff td:nth-child(1),
+.react-diff-view-dark .diff td:nth-child(3) {
+  width: 5ch;
+  min-width: 5ch;
+}
+.react-diff-view-dark .diff td:nth-child(2),
+.react-diff-view-dark .diff td:nth-child(4) {
+  width: 50%;
+  min-width: 180px;
+  overflow-x: auto;
+  overflow-y: visible;
+}
