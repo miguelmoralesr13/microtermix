@@ -25,7 +25,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
 
     const runNpmCommand = async (script: string) => {
         const serviceId = `${projectPath}::${script} `;
-        const envVarsJson = Object.keys(activeVars).length > 0 ? JSON.stringify(activeVars) : '{}';
+        const envVarsJson = '{}'; // npm install commands should not use project envs
         try {
             updateProcessStatus(serviceId, 'running', script, envVarsJson);
             setTargetTerminalTab(serviceId);
@@ -91,10 +91,9 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         </span>
                         {status !== 'idle' && (
                             <div className="flex items-center text-[9px] mt-0.5">
-                                <span className={`w-1 h-1 rounded-full mr-1 ${
-                                    status === 'running' ? 'bg-nexus-success animate-pulse' :
-                                    status === 'stopped' ? 'bg-slate-500' : 'bg-nexus-danger'
-                                }`} />
+                                <span className={`w-1 h-1 rounded-full mr-1 ${status === 'running' ? 'bg-nexus-success animate-pulse' :
+                                        status === 'stopped' ? 'bg-slate-500' : 'bg-nexus-danger'
+                                    }`} />
                                 <span className="text-slate-400 capitalize">{status === 'stopped' ? 'parado' : status}</span>
                             </div>
                         )}

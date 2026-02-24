@@ -63,11 +63,14 @@ export const ServiceManager: React.FC = () => {
             } catch (err) { }
         });
         const arr = Array.from(envs);
-        return arr.length > 0 ? arr : ['dev'];
+        const list = arr.length > 0 ? arr : ['dev'];
+        if (!list.includes('none')) list.unshift('none');
+        return list;
     }, [state.projects]);
 
     const [multiScript, setMultiScript] = useState<string>(() => localStorage.getItem('nexus-multi-script') || '');
     const [globalEnvName, setGlobalEnvName] = useState<string>(() => localStorage.getItem('nexus-multi-env-name') || 'dev');
+    const [buildFirst, setBuildFirst] = useState<boolean>(() => localStorage.getItem('nexus-multi-build-first') === '1');
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const restoredSelectedRef = React.useRef(false);
     const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
@@ -95,6 +98,10 @@ export const ServiceManager: React.FC = () => {
     React.useEffect(() => {
         try { localStorage.setItem('nexus-vite-preview-open', vitePreviewOpen ? '1' : '0'); } catch (_) { }
     }, [vitePreviewOpen]);
+
+    React.useEffect(() => {
+        try { localStorage.setItem('nexus-multi-build-first', buildFirst ? '1' : '0'); } catch (_) { }
+    }, [buildFirst]);
 
     // Releer desde localStorage cuando se aplica una config cargada
     React.useEffect(() => {
@@ -150,7 +157,10 @@ export const ServiceManager: React.FC = () => {
         if (selectedProjects.length === 0 || !multiScript) return;
 
         const { command: scriptToRun } = parseInlineEnvs(multiScript);
-        const effectiveScript = scriptToRun || multiScript;
+        let effectiveScript = scriptToRun || multiScript;
+        if (buildFirst) {
+            effectiveScript = `npm run build && ${effectiveScript}`;
+        }
 
         await Promise.all(selectedProjects.map(async (projectPath) => {
             const compositeServiceId = `${projectPath}::${multiScript} `;
@@ -159,16 +169,18 @@ export const ServiceManager: React.FC = () => {
 
             try {
                 let configuredEnv: Record<string, string> = {};
-                try {
-                    const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
-                    if (rawStore) {
-                        const parsed = JSON.parse(rawStore);
-                        const envName = parsed.activeEnv || globalEnvName;
-                        if (parsed.envs && parsed.envs[envName]) {
-                            configuredEnv = parsed.envs[envName];
+                if (globalEnvName !== 'none') {
+                    try {
+                        const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
+                        if (rawStore) {
+                            const parsed = JSON.parse(rawStore);
+                            const envName = parsed.activeEnv || globalEnvName;
+                            if (parsed.envs && parsed.envs[envName]) {
+                                configuredEnv = parsed.envs[envName];
+                            }
                         }
-                    }
-                } catch (err) { }
+                    } catch (err) { }
+                }
 
                 const envVarsJson = JSON.stringify(configuredEnv);
                 const viteConfig = getViteWrapperConfig(projectPath);
@@ -210,19 +222,24 @@ export const ServiceManager: React.FC = () => {
         await new Promise(r => setTimeout(r, 400));
         // Re-ejecutar con la misma selección y script (ya guardados)
         const { command: scriptToRun } = parseInlineEnvs(scriptToRestart);
-        const effectiveScript = scriptToRun || scriptToRestart;
+        let effectiveScript = scriptToRun || scriptToRestart;
+        if (buildFirst) {
+            effectiveScript = `npm run build && ${effectiveScript}`;
+        }
         await Promise.all(projectsToRestart.map(async (projectPath) => {
             const compositeServiceId = `${projectPath}::${scriptToRestart} `;
             try {
                 let configuredEnv: Record<string, string> = {};
-                try {
-                    const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
-                    if (rawStore) {
-                        const parsed = JSON.parse(rawStore);
-                        const envName = parsed.activeEnv || globalEnvName;
-                        if (parsed.envs && parsed.envs[envName]) configuredEnv = parsed.envs[envName];
-                    }
-                } catch (err) { }
+                if (globalEnvName !== 'none') {
+                    try {
+                        const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
+                        if (rawStore) {
+                            const parsed = JSON.parse(rawStore);
+                            const envName = parsed.activeEnv || globalEnvName;
+                            if (parsed.envs && parsed.envs[envName]) configuredEnv = parsed.envs[envName];
+                        }
+                    } catch (err) { }
+                }
                 const envVarsJson = JSON.stringify(configuredEnv);
                 const viteConfig = getViteWrapperConfig(projectPath);
                 const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
@@ -548,8 +565,17 @@ export const ServiceManager: React.FC = () => {
                                             title={`Fallback env: ${globalEnvName}`}
                                             className="w-20 bg-slate-950 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 focus:border-nexus-neon focus:outline-none capitalize"
                                         >
-                                            {allEnvs.map(env => <option key={env} value={env}>{env}</option>)}
+                                            {allEnvs.map(env => <option key={env} value={env}>{env === 'none' ? 'None' : env}</option>)}
                                         </select>
+                                        <label className="flex items-center gap-1 cursor-pointer mx-1 shrink-0">
+                                            <input
+                                                type="checkbox"
+                                                checked={buildFirst}
+                                                onChange={e => setBuildFirst(e.target.checked)}
+                                                className="accent-nexus-neon shrink-0"
+                                            />
+                                            <span className="text-slate-500 text-[10px] uppercase tracking-wider">Build First</span>
+                                        </label>
                                         <div className="flex items-center gap-1 ml-1 border-l border-slate-700 pl-2">
                                             <button
                                                 onClick={handleBatchPlay}

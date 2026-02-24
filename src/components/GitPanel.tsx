@@ -34,7 +34,9 @@ export const GitPanel: React.FC = () => {
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
 
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-    const [refreshKey, setRefreshKey] = useState(0);
+    const [statusRefreshKey, setStatusRefreshKey] = useState(0);
+    const [branchRefreshKey, setBranchRefreshKey] = useState(0);
+    const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
     const [branchFilter, setBranchFilter] = useState<BranchFilter>('all');
     const [isGitRepo, setIsGitRepo] = useState<'not_initialized' | 'empty_repo' | 'initialized' | null>(null);
 
@@ -68,7 +70,7 @@ export const GitPanel: React.FC = () => {
             }
         };
         checkRepo();
-    }, [activeGitTab, refreshKey]);
+    }, [activeGitTab, statusRefreshKey, branchRefreshKey, timelineRefreshKey]);
 
     const handleTabChange = (path: string) => {
         setActiveGitTab(path);
@@ -77,7 +79,17 @@ export const GitPanel: React.FC = () => {
     };
 
     const handleStatusRefresh = () => {
-        setRefreshKey(prev => prev + 1); // Increment key to force re-render of children
+        setStatusRefreshKey(prev => prev + 1);
+    };
+
+    const handleTimelineRefresh = () => {
+        setTimelineRefreshKey(prev => prev + 1);
+    };
+
+    const handleBranchRefresh = () => {
+        setBranchRefreshKey(prev => prev + 1);
+        setStatusRefreshKey(prev => prev + 1); // Branch operations often affect working tree status
+        setTimelineRefreshKey(prev => prev + 1); // Branch operations affect the commit graph
     };
 
     const resizeSidebar = useCallback((delta: number) => {
@@ -184,8 +196,8 @@ export const GitPanel: React.FC = () => {
                                 <div style={{ width: sidebarWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
                                     <GitSidebar
                                         projectPath={activeGitTab}
-                                        refreshKey={refreshKey}
-                                        onRefreshRequest={handleStatusRefresh}
+                                        refreshKey={branchRefreshKey}
+                                        onRefreshRequest={handleBranchRefresh}
                                         branchFilter={branchFilter}
                                         onBranchFilterChange={setBranchFilter}
                                     />
@@ -215,8 +227,8 @@ export const GitPanel: React.FC = () => {
                                         )
                                     ) : (
                                         <GitTimeline
-                                            key={`timeline-${activeGitTab}-${refreshKey}`}
                                             projectPath={activeGitTab}
+                                            refreshKey={timelineRefreshKey}
                                             onCommitSelect={(hash, message, author, date) =>
                                                 setSelectedCommit({ hash, message, author, date })
                                             }
@@ -229,9 +241,10 @@ export const GitPanel: React.FC = () => {
                                 {/* Right: Staging & Commit (resizable) */}
                                 <div style={{ width: stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
                                     <GitStagingPanel
-                                        key={`staging-${activeGitTab}-${refreshKey}`}
                                         projectPath={activeGitTab}
+                                        refreshKey={statusRefreshKey}
                                         onStatusRefresh={handleStatusRefresh}
+                                        onTimelineRefresh={handleTimelineRefresh}
                                         onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode: mode as any, line })}
                                     />
                                 </div>

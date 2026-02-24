@@ -120,7 +120,9 @@ fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                     p_type = "node".to_string();
                     if let Ok(content) = fs::read_to_string(path.join("package.json")) {
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(scripts_obj) = json.get("scripts").and_then(|s| s.as_object()) {
+                            if let Some(scripts_obj) =
+                                json.get("scripts").and_then(|s| s.as_object())
+                            {
                                 for key in scripts_obj.keys() {
                                     scripts.push(format!("npm run {}", key));
                                 }
@@ -152,28 +154,32 @@ fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
 /// Reads all .env* files in a project directory.
 /// Returns { "dev": { "KEY": "VALUE", ... }, "qa": { ... }, ... }
 #[tauri::command]
-fn read_project_envs(project_path: String) -> Result<std::collections::HashMap<String, std::collections::HashMap<String, String>>, String> {
+fn read_project_envs(
+    project_path: String,
+) -> Result<std::collections::HashMap<String, std::collections::HashMap<String, String>>, String> {
     use std::collections::HashMap;
 
     // .env file name → env label
     let env_files: &[(&str, &str)] = &[
-        (".env",            "dev"),
-        (".env.local",      "local"),
-        (".env.dev",        "dev"),
-        (".env.development","dev"),
-        (".env.qa",         "qa"),
-        (".env.uat",        "uat"),
-        (".env.staging",    "staging"),
+        (".env", "dev"),
+        (".env.local", "local"),
+        (".env.dev", "dev"),
+        (".env.development", "dev"),
+        (".env.qa", "qa"),
+        (".env.uat", "uat"),
+        (".env.staging", "staging"),
         (".env.production", "production"),
-        (".env.prod",       "production"),
-        (".env.test",       "test"),
+        (".env.prod", "production"),
+        (".env.test", "test"),
     ];
 
     let mut result: HashMap<String, HashMap<String, String>> = HashMap::new();
 
     for (filename, label) in env_files {
         let file_path = Path::new(&project_path).join(filename);
-        if !file_path.exists() { continue; }
+        if !file_path.exists() {
+            continue;
+        }
         let content = match fs::read_to_string(&file_path) {
             Ok(c) => c,
             Err(_) => continue,
@@ -181,7 +187,9 @@ fn read_project_envs(project_path: String) -> Result<std::collections::HashMap<S
         let env_map = result.entry(label.to_string()).or_insert_with(HashMap::new);
         for line in content.lines() {
             let line = line.trim();
-            if line.is_empty() || line.starts_with('#') { continue; }
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
             if let Some((key, val)) = line.split_once('=') {
                 let key = key.trim().to_string();
                 // Strip surrounding quotes from value
@@ -281,12 +289,21 @@ fn get_listening_processes() -> Result<Vec<ListeningProcess>, String> {
         let mut rows = Vec::new();
         for line in stdout.lines() {
             let line = line.trim();
-            if line.is_empty() || line.starts_with("Proto") || line.starts_with("State") || line.starts_with("Netid") {
+            if line.is_empty()
+                || line.starts_with("Proto")
+                || line.starts_with("State")
+                || line.starts_with("Netid")
+            {
                 continue;
             }
             let parts: Vec<&str> = line.split_whitespace().collect();
             let pid_str = parts.last().unwrap_or(&"0");
-            let pid: u32 = pid_str.split('/').next().unwrap_or("0").parse().unwrap_or(0);
+            let pid: u32 = pid_str
+                .split('/')
+                .next()
+                .unwrap_or("0")
+                .parse()
+                .unwrap_or(0);
             if pid > 0 && parts.len() >= 5 {
                 let (local, foreign) = if parts.len() >= 6 {
                     (parts[4].to_string(), parts[5].to_string())
@@ -359,13 +376,19 @@ pub struct ProxyRoute {
 fn parse_vite_port(content: &str) -> (Option<u16>, Option<u16>) {
     let mut port = None;
     let mut preview_port = None;
-    for cap in regex::Regex::new(r"port:\s*(\d+)").unwrap().captures_iter(content) {
+    for cap in regex::Regex::new(r"port:\s*(\d+)")
+        .unwrap()
+        .captures_iter(content)
+    {
         let p: u16 = cap[1].parse().unwrap_or(0);
         if p != 0 {
             port = Some(p);
         }
     }
-    if let Some(cap) = regex::Regex::new(r"preview:\s*\{\s*port:\s*(\d+)").unwrap().captures(content) {
+    if let Some(cap) = regex::Regex::new(r"preview:\s*\{\s*port:\s*(\d+)")
+        .unwrap()
+        .captures(content)
+    {
         preview_port = cap[1].parse().ok();
     }
     (port, preview_port)
@@ -412,8 +435,10 @@ fn parse_vite_federation_from_content(content: &str) -> ViteFederationInfo {
         }
     }
 
-    let getpath_re = regex::Regex::new(r#"getPath\s*\(\s*["']([^"']+)["']\s*,\s*(\d+)\s*\)"#).unwrap();
-    let getpathbo_re = regex::Regex::new(r#"getPathBO\s*\(\s*["']([^"']+)["']\s*,\s*(\d+)\s*\)"#).unwrap();
+    let getpath_re =
+        regex::Regex::new(r#"getPath\s*\(\s*["']([^"']+)["']\s*,\s*(\d+)\s*\)"#).unwrap();
+    let getpathbo_re =
+        regex::Regex::new(r#"getPathBO\s*\(\s*["']([^"']+)["']\s*,\s*(\d+)\s*\)"#).unwrap();
 
     for cap in getpath_re.captures_iter(content) {
         let name = cap[1].to_string();
@@ -469,10 +494,7 @@ fn get_proxy_candidates(workspace_path: String) -> Result<Vec<ProxyCandidate>, S
         if !path.is_dir() {
             continue;
         }
-        let config_path = vite_names
-            .iter()
-            .map(|n| path.join(n))
-            .find(|p| p.exists());
+        let config_path = vite_names.iter().map(|n| path.join(n)).find(|p| p.exists());
         let config_path = match config_path {
             Some(p) => p,
             None => continue,
@@ -517,10 +539,7 @@ fn generate_vite_wrapper(
     let mut out = content.clone();
     for (name, url) in remotes {
         let escaped_name = regex::escape(name);
-        let getpath_pat = format!(
-            r#"getPath\s*\(\s*["']{}["']\s*,\s*[^)]+\)"#,
-            escaped_name
-        );
+        let getpath_pat = format!(r#"getPath\s*\(\s*["']{}["']\s*,\s*[^)]+\)"#, escaped_name);
         let getpathbo_pat = format!(
             r#"getPathBO\s*\(\s*["']{}["']\s*,\s*\d+\s*\)"#,
             escaped_name
@@ -547,13 +566,20 @@ fn generate_vite_wrapper(
     let header = if ext == "ts" || ext == "js" || ext == "mjs" {
         format!(
             "// Nexus: wrapper generado desde {} — remotes reemplazados: {}\n",
-            config_path.file_name().unwrap_or_default().to_string_lossy(),
+            config_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
             remotes.keys().cloned().collect::<Vec<_>>().join(", ")
         )
     } else {
         String::new()
     };
-    let final_content = if header.is_empty() { out } else { format!("{}{}", header, out) };
+    let final_content = if header.is_empty() {
+        out
+    } else {
+        format!("{}{}", header, out)
+    };
     fs::write(&wrapper_path, &final_content).map_err(|e| e.to_string())?;
     Ok(wrapper_name)
 }
@@ -570,7 +596,11 @@ async fn proxy_handler(
     // If intercept_prefix is set, only paths under that prefix use our routes; rest go to default (/) transparently
     let intercept_prefix_norm = intercept_prefix.as_ref().and_then(|p| {
         let s = p.trim();
-        if s.is_empty() { None } else { Some(s.trim_end_matches('/').to_string()) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s.trim_end_matches('/').to_string())
+        }
     });
     let path_under_intercept = intercept_prefix_norm.as_ref().map_or(true, |pre| {
         path == pre || path.starts_with(&format!("{}/", pre))
@@ -581,61 +611,64 @@ async fn proxy_handler(
             let p = r.path_prefix.trim_end_matches('/');
             p.is_empty() || p == "/"
         }) {
-                let base = r.target_url.trim_end_matches('/');
-                let target = if query.is_empty() {
-                    format!("{}{}", base, path)
-                } else {
-                    format!("{}{}?{}", base, path, query)
-                };
-                let _ = app.emit("proxy-logs", format!("{} {} -> {} (passthrough)", method, path, target));
-                let client = Client::builder().build().unwrap_or_default();
-                let (parts, body) = req.into_parts();
-                let body_bytes = to_bytes(body, 10 * 1024 * 1024).await.unwrap_or_default();
-                let target_host = base
-                    .trim_start_matches("http://")
-                    .trim_start_matches("https://")
-                    .split('/')
-                    .next()
-                    .unwrap_or("127.0.0.1");
-                let mut proxy_req = client
-                    .request(parts.method.clone(), &target)
-                    .header("Host", target_host)
-                    .body(body_bytes);
-                if let Some(h) = parts.headers.get("Accept") {
-                    proxy_req = proxy_req.header("Accept", h.clone());
-                }
-                if let Some(h) = parts.headers.get("Content-Type") {
-                    proxy_req = proxy_req.header("Content-Type", h.clone());
-                }
-                match proxy_req.send().await {
-                    Ok(resp) => {
-                        let status = resp.status();
-                        let headers = resp.headers().clone();
-                        let body = resp.bytes().await.unwrap_or_default();
-                        let mut builder = Response::builder().status(status);
-                        if let Some(v) = headers.get("Content-Type") {
-                            if let Ok(s) = v.to_str() {
-                                builder = builder.header("Content-Type", s);
-                            }
+            let base = r.target_url.trim_end_matches('/');
+            let target = if query.is_empty() {
+                format!("{}{}", base, path)
+            } else {
+                format!("{}{}?{}", base, path, query)
+            };
+            let _ = app.emit(
+                "proxy-logs",
+                format!("{} {} -> {} (passthrough)", method, path, target),
+            );
+            let client = Client::builder().build().unwrap_or_default();
+            let (parts, body) = req.into_parts();
+            let body_bytes = to_bytes(body, 10 * 1024 * 1024).await.unwrap_or_default();
+            let target_host = base
+                .trim_start_matches("http://")
+                .trim_start_matches("https://")
+                .split('/')
+                .next()
+                .unwrap_or("127.0.0.1");
+            let mut proxy_req = client
+                .request(parts.method.clone(), &target)
+                .header("Host", target_host)
+                .body(body_bytes);
+            if let Some(h) = parts.headers.get("Accept") {
+                proxy_req = proxy_req.header("Accept", h.clone());
+            }
+            if let Some(h) = parts.headers.get("Content-Type") {
+                proxy_req = proxy_req.header("Content-Type", h.clone());
+            }
+            match proxy_req.send().await {
+                Ok(resp) => {
+                    let status = resp.status();
+                    let headers = resp.headers().clone();
+                    let body = resp.bytes().await.unwrap_or_default();
+                    let mut builder = Response::builder().status(status);
+                    if let Some(v) = headers.get("Content-Type") {
+                        if let Ok(s) = v.to_str() {
+                            builder = builder.header("Content-Type", s);
                         }
-                        if let Some(v) = headers.get("Cache-Control") {
-                            if let Ok(s) = v.to_str() {
-                                builder = builder.header("Cache-Control", s);
-                            }
+                    }
+                    if let Some(v) = headers.get("Cache-Control") {
+                        if let Ok(s) = v.to_str() {
+                            builder = builder.header("Cache-Control", s);
                         }
-                        return builder.body(Body::from(body)).unwrap_or_else(|_| {
-                            Response::builder().status(500).body(Body::empty()).unwrap()
-                        });
                     }
-                    Err(e) => {
-                        let _ = app.emit("proxy-logs", format!("  -> passthrough error: {}", e));
-                        return Response::builder()
-                            .status(502)
-                            .body(Body::from(e.to_string()))
-                            .unwrap();
-                    }
+                    return builder.body(Body::from(body)).unwrap_or_else(|_| {
+                        Response::builder().status(500).body(Body::empty()).unwrap()
+                    });
+                }
+                Err(e) => {
+                    let _ = app.emit("proxy-logs", format!("  -> passthrough error: {}", e));
+                    return Response::builder()
+                        .status(502)
+                        .body(Body::from(e.to_string()))
+                        .unwrap();
                 }
             }
+        }
     }
     // Match longest prefix first so e.g. /mfe-x wins over /
     routes.sort_by(|a, b| {
@@ -646,7 +679,8 @@ async fn proxy_handler(
     for r in &routes {
         let prefix = r.path_prefix.trim_end_matches('/');
         let prefix_with_slash = format!("{}/", prefix);
-        let path_match = path == prefix || path == prefix_with_slash || path.starts_with(&prefix_with_slash);
+        let path_match =
+            path == prefix || path == prefix_with_slash || path.starts_with(&prefix_with_slash);
         if path_match {
             let base = r.target_url.trim_end_matches('/');
             // Strip path_prefix so the upstream (e.g. Vite) receives path from root: / or /foo
@@ -706,9 +740,9 @@ async fn proxy_handler(
                             builder = builder.header("Cache-Control", s);
                         }
                     }
-                    return builder
-                        .body(Body::from(body))
-                        .unwrap_or_else(|_| Response::builder().status(500).body(Body::empty()).unwrap());
+                    return builder.body(Body::from(body)).unwrap_or_else(|_| {
+                        Response::builder().status(500).body(Body::empty()).unwrap()
+                    });
                 }
                 Err(e) => {
                     let _ = app.emit("proxy-logs", format!("  -> error: {}", e));
@@ -751,7 +785,10 @@ async fn start_proxy(
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .map_err(|e| e.to_string())?;
-    let _ = app.emit("proxy-logs", format!("Proxy listening on http://{}", bind_addr));
+    let _ = app.emit(
+        "proxy-logs",
+        format!("Proxy listening on http://{}", bind_addr),
+    );
     let handle = tokio::spawn(async move {
         let app_emit = app_clone.clone();
         let router = Router::new().fallback(move |req: Request| {
@@ -808,7 +845,10 @@ struct RouteResponse {
     content_type: String,
 }
 
-async fn file_server_handler(routes: std::sync::Arc<HashMap<String, RouteResponse>>, req: Request) -> Response {
+async fn file_server_handler(
+    routes: std::sync::Arc<HashMap<String, RouteResponse>>,
+    req: Request,
+) -> Response {
     let path = normalize_url_path(req.uri().path());
     let resp = match routes.get(&path) {
         Some(r) => r.clone(),
@@ -866,7 +906,10 @@ async fn start_file_server(
         .await
         .map_err(|e| e.to_string())?;
     let routes_arc = std::sync::Arc::new(map);
-    let _ = app.emit("file-server-logs", format!("File server listening on http://{}", bind_addr));
+    let _ = app.emit(
+        "file-server-logs",
+        format!("File server listening on http://{}", bind_addr),
+    );
     let handle = tokio::spawn(async move {
         let r = routes_arc.clone();
         let router = Router::new().fallback(move |req: Request| {
@@ -916,7 +959,11 @@ fn sanitize_path(path: &str) -> String {
 }
 
 #[tauri::command]
-fn save_workspace_settings(app: AppHandle, workspace_path: String, settings: String) -> Result<(), String> {
+fn save_workspace_settings(
+    app: AppHandle,
+    workspace_path: String,
+    settings: String,
+) -> Result<(), String> {
     let app_dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&app_dir).map_err(|e| e.to_string())?;
     let safe_path = sanitize_path(&workspace_path);
@@ -968,12 +1015,7 @@ struct LogEvent {
 
 /// Escapa valor para cross-env (comillas si tiene espacios o caracteres especiales).
 fn escape_cross_env_value(v: &str) -> String {
-    if v.contains(' ')
-        || v.contains('"')
-        || v.contains('&')
-        || v.contains('|')
-        || v.is_empty()
-    {
+    if v.contains(' ') || v.contains('"') || v.contains('&') || v.contains('|') || v.is_empty() {
         format!("\"{}\"", v.replace('\\', "\\\\").replace('"', "\\\""))
     } else {
         v.to_string()
@@ -1012,53 +1054,68 @@ async fn execute_service_script(
             if !remotes.is_empty() && path.is_dir() && find_vite_config(path).is_some() {
                 if let Ok(wrapper_name) = generate_vite_wrapper(path, remotes) {
                     let wrapper_arg = format!("--config {}", wrapper_name);
-                    if script.contains("vite") {
-                        script_to_run = format!("{} {}", script.trim_end(), wrapper_arg);
-                    } else if script.trim() == "npm run dev" || script.trim().starts_with("npm run dev ") {
-                        script_to_run = format!("npx vite {}", wrapper_arg);
-                    } else if script.trim() == "npm run preview" || script.trim().starts_with("npm run preview ") {
-                        script_to_run = format!("npx vite preview {}", wrapper_arg);
-                    } else if script.trim() == "npm run build" || script.trim().starts_with("npm run build ") {
-                        script_to_run = format!("npx vite build {}", wrapper_arg);
+                    let mut new_parts = Vec::new();
+                    for part in script.split("&&") {
+                        let p = part.trim();
+                        let mut replaced = p.to_string();
+                        if p.contains("vite") {
+                            replaced = format!("{} {}", p, wrapper_arg);
+                        } else if p == "npm run dev" || p.starts_with("npm run dev ") {
+                            replaced = format!("npx vite {}", wrapper_arg);
+                        } else if p == "npm run preview" || p.starts_with("npm run preview ") {
+                            replaced = format!("npx vite preview {}", wrapper_arg);
+                        } else if p == "npm run build" || p.starts_with("npm run build ") {
+                            replaced = format!("npx vite build {}", wrapper_arg);
+                        }
+                        new_parts.push(replaced);
                     }
+                    script_to_run = new_parts.join(" && ");
                 }
             }
         }
     }
 
-    let mut envs: HashMap<String, String> = serde_json::from_str(&env_vars_json).unwrap_or_default();
-    envs.insert("FORCE_COLOR".to_string(), "1".to_string());
+    let envs: HashMap<String, String> = serde_json::from_str(&env_vars_json).unwrap_or_default();
 
-    // Envs solo por comando (cross-env + .envs en el proceso), sin escribir archivos en el proyecto
-    // Orden: npx cross-env <vars> <comando con --config vite si aplica>
-    script_to_run = wrap_with_cross_env(&script_to_run, &envs);
+    if !envs.is_empty() {
+        script_to_run = wrap_with_cross_env(&script_to_run, &envs);
+    }
 
     // Comando completo en orden: 1) variables de entorno, 2) comando (incl. env inline y config Vite si aplica)
     {
         if envs.is_empty() {
-            let _ = app.emit("service-logs", LogEvent {
-                service_id: service_id.clone(),
-                line: "[ENV] (sin variables de entorno)".to_string(),
-                is_error: false,
-            });
+            let _ = app.emit(
+                "service-logs",
+                LogEvent {
+                    service_id: service_id.clone(),
+                    line: "[ENV] (sin variables de entorno)".to_string(),
+                    is_error: false,
+                },
+            );
         } else {
             let env_line: String = envs
                 .iter()
                 .map(|(k, v)| format!("{}={}", k, v))
                 .collect::<Vec<_>>()
                 .join(" ");
-            let _ = app.emit("service-logs", LogEvent {
-                service_id: service_id.clone(),
-                line: format!("[ENV] {}", env_line),
-                is_error: false,
-            });
+            let _ = app.emit(
+                "service-logs",
+                LogEvent {
+                    service_id: service_id.clone(),
+                    line: format!("[ENV] {}", env_line),
+                    is_error: false,
+                },
+            );
         }
         // Emitir solo el comando real (multiplataforma); la ejecución usa el shell del SO internamente
-        let _ = app.emit("service-logs", LogEvent {
-            service_id: service_id.clone(),
-            line: format!("[CMD] {}", script_to_run),
-            is_error: false,
-        });
+        let _ = app.emit(
+            "service-logs",
+            LogEvent {
+                service_id: service_id.clone(),
+                line: format!("[CMD] {}", script_to_run),
+                is_error: false,
+            },
+        );
     }
 
     #[cfg(target_os = "windows")]
@@ -1208,7 +1265,11 @@ fn write_file_content(base: String, file: String, content: String) -> Result<(),
 /// Computes unified diff from original and modified content using imara-diff (Rust).
 /// Returns a string in git unified diff format (with ---/+++ header) so the frontend can parse hunks.
 #[tauri::command]
-fn compute_unified_diff(original: String, modified: String, file_path: String) -> Result<String, String> {
+fn compute_unified_diff(
+    original: String,
+    modified: String,
+    file_path: String,
+) -> Result<String, String> {
     let original_norm = original.replace("\r\n", "\n");
     let modified_norm = modified.replace("\r\n", "\n");
     let input = InternedInput::new(original_norm.as_str(), modified_norm.as_str());
@@ -1258,7 +1319,11 @@ fn parse_hunks_from_unified_body(body: &str) -> Vec<HunkInfo> {
 /// Calcula diff con imara-diff y devuelve unified_diff + hunks. Los hunks se extraen del propio texto
 /// del diff (líneas @@). Sin postprocesado para no fusionar hunks y que cada bloque de cambios sea un hunk.
 #[tauri::command]
-fn compute_diff_hunks(original: String, modified: String, file_path: String) -> Result<DiffHunksResult, String> {
+fn compute_diff_hunks(
+    original: String,
+    modified: String,
+    file_path: String,
+) -> Result<DiffHunksResult, String> {
     let original_norm = original.replace("\r\n", "\n");
     let modified_norm = modified.replace("\r\n", "\n");
     let input = InternedInput::new(original_norm.as_str(), modified_norm.as_str());
@@ -1272,7 +1337,10 @@ fn compute_diff_hunks(original: String, modified: String, file_path: String) -> 
 
     let hunks = parse_hunks_from_unified_body(&body);
 
-    Ok(DiffHunksResult { unified_diff, hunks })
+    Ok(DiffHunksResult {
+        unified_diff,
+        hunks,
+    })
 }
 
 /// Aplica rechazos: devuelve el contenido "modified" con los hunks indicados revertidos (usando original).
@@ -1343,7 +1411,11 @@ struct GitLogPayload {
 }
 
 #[tauri::command]
-async fn git_execute(app_handle: tauri::AppHandle, project_path: String, args: Vec<String>) -> Result<GitResult, String> {
+async fn git_execute(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    args: Vec<String>,
+) -> Result<GitResult, String> {
     let mut cmd = AsyncCommand::new("git");
     cmd.args(&args);
     cmd.current_dir(&project_path);
@@ -1358,12 +1430,15 @@ async fn git_execute(app_handle: tauri::AppHandle, project_path: String, args: V
     let stderr_str = String::from_utf8_lossy(&output.stderr).to_string();
     let command_str = format!("git {}", args.join(" "));
 
-    let _ = app_handle.emit("git-log", GitLogPayload {
-        project_path: project_path.clone(),
-        command: command_str,
-        stdout: stdout_str.clone(),
-        stderr: stderr_str.clone(),
-    });
+    let _ = app_handle.emit(
+        "git-log",
+        GitLogPayload {
+            project_path: project_path.clone(),
+            command: command_str,
+            stdout: stdout_str.clone(),
+            stderr: stderr_str.clone(),
+        },
+    );
 
     Ok(GitResult {
         stdout: stdout_str,
@@ -1463,12 +1538,19 @@ async fn git_reword_commit(
     let stdout_str = String::from_utf8_lossy(&result.stdout).to_string();
     let stderr_str = String::from_utf8_lossy(&result.stderr).to_string();
 
-    let _ = app_handle.emit("git-log", GitLogPayload {
-        project_path: project_path.clone(),
-        command: format!("git reword {} \"{}...\"", &commit_hash[..7.min(commit_hash.len())], &new_message[..new_message.len().min(40)]),
-        stdout: stdout_str.clone(),
-        stderr: stderr_str.clone(),
-    });
+    let _ = app_handle.emit(
+        "git-log",
+        GitLogPayload {
+            project_path: project_path.clone(),
+            command: format!(
+                "git reword {} \"{}...\"",
+                &commit_hash[..7.min(commit_hash.len())],
+                &new_message[..new_message.len().min(40)]
+            ),
+            stdout: stdout_str.clone(),
+            stderr: stderr_str.clone(),
+        },
+    );
 
     Ok(GitResult {
         stdout: stdout_str,
@@ -1478,36 +1560,47 @@ async fn git_reword_commit(
 }
 
 #[tauri::command]
-async fn git_apply_patch(app_handle: tauri::AppHandle, project_path: String, patch_content: String, reverse: bool, target: Option<String>) -> Result<GitResult, String> {
+async fn git_apply_patch(
+    app_handle: tauri::AppHandle,
+    project_path: String,
+    patch_content: String,
+    reverse: bool,
+    target: Option<String>,
+) -> Result<GitResult, String> {
     // Write patch to a temporary file
     let patch_path = format!("{}/.nexus_temp.patch", project_path);
     fs::write(&patch_path, &patch_content).map_err(|e| e.to_string())?;
 
     let mut args = vec!["apply".to_string()];
-    
+
     // Target can be "index" (--cached), "working" (no flag), or "both" (--index)
     match target.as_deref() {
-        Some("working") => { /* Applies only to working tree */ },
-        Some("both") => { args.push("--index".to_string()); },
-        _ => { args.push("--cached".to_string()); } // Default to index for backwards compatibility
+        Some("working") => { /* Applies only to working tree */ }
+        Some("both") => {
+            args.push("--index".to_string());
+        }
+        _ => {
+            args.push("--cached".to_string());
+        } // Default to index for backwards compatibility
     }
 
     if reverse {
-         args.push("--reverse".to_string());
+        args.push("--reverse".to_string());
     }
     args.push(".nexus_temp.patch".to_string());
 
     let result = git_execute(app_handle, project_path.clone(), args).await;
-    
+
     // Clean up temp patch file
     let _ = fs::remove_file(&patch_path);
-    
+
     result
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
@@ -1521,7 +1614,7 @@ pub fn run() {
                 let state = window.app_handle().state::<AppState>();
                 let proxy_abort = state.proxy_abort.clone();
                 let processes = state.processes.clone();
-                
+
                 tauri::async_runtime::spawn(async move {
                     {
                         let mut guard = proxy_abort.lock().await;

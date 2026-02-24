@@ -83,8 +83,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             }
 
             await invoke('git_execute', { projectPath, args: ['checkout', checkoutBranch] });
-            await loadSidebarData();
             if (onRefreshRequest) onRefreshRequest();
+            else await loadSidebarData();
         } finally {
             setLoading(false);
         }
@@ -94,8 +94,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         setLoading(true);
         try {
             await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Stashed via Nexus'] });
-            await loadSidebarData();
             if (onRefreshRequest) onRefreshRequest();
+            else await loadSidebarData();
         } finally {
             setLoading(false);
         }
@@ -107,8 +107,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             const idMatch = stashId.match(/stash@\{\d+\}/);
             if (idMatch) {
                 await invoke('git_execute', { projectPath, args: ['stash', 'pop', idMatch[0]] });
-                await loadSidebarData();
                 if (onRefreshRequest) onRefreshRequest();
+                else await loadSidebarData();
             }
         } finally {
             setLoading(false);
@@ -123,14 +123,14 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['branch', force ? '-D' : '-d', branchName] });
             if (result?.success !== false) {
-                await loadSidebarData();
                 if (onRefreshRequest) onRefreshRequest();
+                else await loadSidebarData();
             } else {
                 const msg = result?.stderr || 'Could not delete branch. Not fully merged? Try force delete.';
                 if (confirm(`${msg}\n\nForce delete anyway?`)) {
                     await invoke('git_execute', { projectPath, args: ['branch', '-D', branchName] });
-                    await loadSidebarData();
                     if (onRefreshRequest) onRefreshRequest();
+                    else await loadSidebarData();
                 }
             }
         } finally {
@@ -145,8 +145,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             if (!result.success) {
                 alert(`Pull Failed:\n\n${result.stderr || result.stdout}`);
             }
-            await loadSidebarData();
             if (onRefreshRequest) onRefreshRequest();
+            else await loadSidebarData();
         } finally {
             setLoading(false);
         }
@@ -171,8 +171,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                     alert(`Merge Failed:\n\n${result.stderr || result.stdout}`);
                 }
             }
-            await loadSidebarData();
             if (onRefreshRequest) onRefreshRequest();
+            else await loadSidebarData();
         } finally {
             setLoading(false);
         }

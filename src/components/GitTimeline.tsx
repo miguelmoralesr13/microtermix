@@ -50,6 +50,7 @@ interface ParsedRef {
 
 interface GitTimelineProps {
     projectPath: string;
+    refreshKey?: number;
     onCommitSelect?: (hash: string, message: string, author: string, date: string) => void;
 }
 
@@ -155,7 +156,7 @@ function computeGraph(commits: RawCommit[]): { nodes: GraphNode[], edges: GraphE
 
 type Filter = 'all' | 'mine' | 'merges' | 'tags';
 
-export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitSelect }) => {
+export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKey, onCommitSelect }) => {
     const { state } = useWorkspace();
     const [rawCommits, setRawCommits] = useState<RawCommit[]>([]);
     const [loading, setLoading] = useState(true);
@@ -259,7 +260,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
 
     }, [projectPath, state.gitConfig.token, state.gitConfig.provider]);
 
-    useEffect(() => { if (projectPath) loadTimeline(); }, [loadTimeline]);
+    useEffect(() => { if (projectPath) loadTimeline(); }, [loadTimeline, refreshKey]);
 
     const { nodes, edges } = useMemo(() => computeGraph(rawCommits), [rawCommits]);
     const totalCols = useMemo(() => Math.min(Math.max(...nodes.map(n => n.col), 0) + 1, MAX_COLS), [nodes]);

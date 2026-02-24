@@ -22,11 +22,13 @@ interface ArrayTreeNode {
 
 interface GitStagingPanelProps {
     projectPath: string;
+    refreshKey?: number;
     onDiffRequest?: (file: string, mode: 'staged' | 'unstaged', line?: number) => void;
     onStatusRefresh?: () => void;
+    onTimelineRefresh?: () => void;
 }
 
-export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onStatusRefresh }) => {
+export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, refreshKey, onDiffRequest, onStatusRefresh, onTimelineRefresh }) => {
     const [files, setFiles] = useState<GitStatusEntry[]>([]);
     const [loading, setLoading] = useState(false);
     const [commitMessage, setCommitMessage] = useState('');
@@ -86,7 +88,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
 
     useEffect(() => {
         if (projectPath) loadStatus();
-    }, [projectPath]);
+    }, [projectPath, refreshKey]);
 
     const handleStageToggleAll = async (stage: boolean) => {
         setLoading(true);
@@ -96,8 +98,8 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             } else {
                 await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
             }
-            await loadStatus();
             if (onStatusRefresh) onStatusRefresh();
+            else await loadStatus();
         } finally {
             setLoading(false);
         }
@@ -113,8 +115,8 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 // Partially or unstaged, so stage fully
                 await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
             }
-            await loadStatus();
             if (onStatusRefresh) onStatusRefresh();
+            else await loadStatus();
         } finally {
             setLoading(false);
         }
@@ -130,8 +132,8 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 next.delete(node.fullPath);
                 return next;
             });
-            await loadStatus();
             if (onStatusRefresh) onStatusRefresh();
+            else await loadStatus();
         } finally {
             setLoading(false);
         }
@@ -155,8 +157,8 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
             }
             setSelectedForRollback(new Set());
-            await loadStatus();
             if (onStatusRefresh) onStatusRefresh();
+            else await loadStatus();
         } finally {
             setLoading(false);
         }
@@ -172,8 +174,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 setError(result.stderr || 'Commit failed');
             } else {
                 setCommitMessage('');
-                await loadStatus();
+                if (onTimelineRefresh) onTimelineRefresh();
                 if (onStatusRefresh) onStatusRefresh();
+                if (!onTimelineRefresh && !onStatusRefresh) await loadStatus();
             }
         } finally {
             setIsCommitting(false);
@@ -188,8 +191,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             if (!res.success) {
                 setError(res.stderr || 'Failed to abort merge');
             }
-            await loadStatus();
+            if (onTimelineRefresh) onTimelineRefresh();
             if (onStatusRefresh) onStatusRefresh();
+            if (!onTimelineRefresh && !onStatusRefresh) await loadStatus();
         } finally {
             setLoading(false);
         }
