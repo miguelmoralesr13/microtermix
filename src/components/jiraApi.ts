@@ -293,16 +293,27 @@ export async function createSubTask(parentKey: string, summary: string, descript
     return createIssue(fields);
 }
 
-/** Finds the transition ID for the given status name and applies it */
+/** Finds the transition for the given target status name (or transition name) and applies it.
+ *  Matches against: transition action name, target status name (case-insensitive + trimmed). */
 export async function transitionIssue(issueKey: string, targetStatusName: string): Promise<void> {
-    const transitions = await jiraFetch(`/issue/${issueKey}/transitions`);
-    const transition = (transitions.transitions ?? []).find(
-        (t: any) => t.name?.toLowerCase() === targetStatusName.toLowerCase() ||
-            t.to?.name?.toLowerCase() === targetStatusName.toLowerCase()
+    const data = await jiraFetch(`/issue/${issueKey}/transitions`);
+    const all: any[] = data.transitions ?? [];
+    const needle = targetStatusName.toLowerCase().trim();
+
+    const transition = all.find((t: any) =>
+        t.name?.toLowerCase().trim() === needle ||
+        t.to?.name?.toLowerCase().trim() === needle ||
+        t.to?.id?.toLowerCase?.()?.trim() === needle
     );
+
     if (!transition) {
-        throw new Error(`Transición "${targetStatusName}" no encontrada en ${issueKey}. Verifica el nombre exacto del estado en Jira.`);
+        const available = all.map((t: any) => `"${t.name}" → "${t.to?.name}"`).join(' | ');
+        throw new Error(
+            `Transición "${targetStatusName}" no encontrada en ${issueKey}. ` +
+            `Disponibles: ${available || 'ninguna'}`
+        );
     }
+
     await jiraFetch(`/issue/${issueKey}/transitions`, {
         method: 'POST',
         body: JSON.stringify({ transition: { id: transition.id } }),
