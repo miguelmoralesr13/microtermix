@@ -157,15 +157,20 @@ export const ServiceManager: React.FC = () => {
         if (selectedProjects.length === 0 || !multiScript) return;
 
         const { command: scriptToRun } = parseInlineEnvs(multiScript);
-        let effectiveScript = scriptToRun || multiScript;
-        if (buildFirst) {
-            effectiveScript = `npm run build && ${effectiveScript}`;
-        }
+        const baseScript = scriptToRun || multiScript;
+        // Extract bare script name from "npm run <name>" to look it up in package.json
+        const bareScriptName = multiScript.replace(/^npm\s+run\s+/i, '').split(' ')[0].trim();
 
         await Promise.all(selectedProjects.map(async (projectPath) => {
             const compositeServiceId = `${projectPath}::${multiScript} `;
             const existing = state.activeProcesses[compositeServiceId];
             if (existing?.status === 'running') return;
+
+            // Build First: prepend npm run build unless this script IS a build
+            const alreadyBuilds = /\bbuild\b/i.test(bareScriptName);
+            const effectiveScript = (buildFirst && !alreadyBuilds)
+                ? `npm run build && ${baseScript}`
+                : baseScript;
 
             try {
                 let configuredEnv: Record<string, string> = {};
@@ -174,9 +179,9 @@ export const ServiceManager: React.FC = () => {
                         const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
                         if (rawStore) {
                             const parsed = JSON.parse(rawStore);
-                            const envName = parsed.activeEnv || globalEnvName;
-                            if (parsed.envs && parsed.envs[envName]) {
-                                configuredEnv = parsed.envs[envName];
+                            // Always use the global env selector — ignore per-project activeEnv tab
+                            if (parsed.envs && parsed.envs[globalEnvName]) {
+                                configuredEnv = parsed.envs[globalEnvName];
                             }
                         }
                     } catch (err) { }
@@ -220,14 +225,19 @@ export const ServiceManager: React.FC = () => {
         const scriptToRestart = multiScript;
         await handleBatchStop();
         await new Promise(r => setTimeout(r, 400));
-        // Re-ejecutar con la misma selección y script (ya guardados)
         const { command: scriptToRun } = parseInlineEnvs(scriptToRestart);
-        let effectiveScript = scriptToRun || scriptToRestart;
-        if (buildFirst) {
-            effectiveScript = `npm run build && ${effectiveScript}`;
-        }
+        const baseScript = scriptToRun || scriptToRestart;
+        const bareScriptName = scriptToRestart.replace(/^npm\s+run\s+/i, '').split(' ')[0].trim();
+
         await Promise.all(projectsToRestart.map(async (projectPath) => {
             const compositeServiceId = `${projectPath}::${scriptToRestart} `;
+
+            // Build First: prepend npm run build unless this script IS a build
+            const alreadyBuilds = /\bbuild\b/i.test(bareScriptName);
+            const effectiveScript = (buildFirst && !alreadyBuilds)
+                ? `npm run build && ${baseScript}`
+                : baseScript;
+
             try {
                 let configuredEnv: Record<string, string> = {};
                 if (globalEnvName !== 'none') {
@@ -235,8 +245,8 @@ export const ServiceManager: React.FC = () => {
                         const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
                         if (rawStore) {
                             const parsed = JSON.parse(rawStore);
-                            const envName = parsed.activeEnv || globalEnvName;
-                            if (parsed.envs && parsed.envs[envName]) configuredEnv = parsed.envs[envName];
+                            // Always use the global env selector — ignore per-project activeEnv tab
+                            if (parsed.envs && parsed.envs[globalEnvName]) configuredEnv = parsed.envs[globalEnvName];
                         }
                     } catch (err) { }
                 }
@@ -331,6 +341,37 @@ export const ServiceManager: React.FC = () => {
             console.error('Save workspace config failed', e);
         }
     };
+
+    // ─── Auto-save: escribe nexus-workspace.json automáticamente 1.5s después del último cambio ──
+    const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    React.useEffect(() => {
+        if (!state.currentPath) return;
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(async () => {
+            try {
+                const config = buildWorkspaceConfigFromCurrentState(
+                    state.currentPath!,
+                    selectedProjects,
+                    multiScript,
+                    globalEnvName,
+                    state.environments,
+                    state.activeEnvironment,
+                    state.gitConfig,
+                    vitePreviewOpen,
+                    activeTerminalTab,
+                    state.projects.map(p => p.path as string),
+                );
+                await invoke('write_workspace_config_in_folder', {
+                    workspacePath: state.currentPath,
+                    content: JSON.stringify(config, null, 2),
+                });
+            } catch (_) { /* silencioso — no interrumpir UX */ }
+        }, 1500);
+        return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+    }, [
+        selectedProjects, multiScript, globalEnvName, buildFirst, vitePreviewOpen,
+        activeTerminalTab, state.currentPath, state.environments, state.activeEnvironment, state.gitConfig,
+    ]);
 
     const handleLoadWorkspaceConfig = async () => {
         try {

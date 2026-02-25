@@ -57,7 +57,7 @@ function loadSaved(): { port: number; bindHost: string; routes: FileServerRouteE
                 routes: routes as FileServerRouteEntry[],
             };
         }
-    } catch (_) {}
+    } catch (_) { }
     return {
         port: DEFAULT_FILE_SERVER_PORT,
         bindHost: '127.0.0.1',
@@ -81,6 +81,13 @@ export const FileServerPanel: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [expandedRoute, setExpandedRoute] = useState<number | null>(null);
     const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+    // Sync with actual Rust state on mount (tab switch restores correct indicator)
+    useEffect(() => {
+        invoke<boolean>('is_file_server_running')
+            .then(isRunning => setRunning(isRunning))
+            .catch(() => { });
+    }, []);
 
     useEffect(() => {
         save(port, bindHost, routes);

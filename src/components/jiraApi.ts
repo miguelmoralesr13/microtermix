@@ -151,6 +151,26 @@ async function jiraFetch(path: string, opts?: RequestInit): Promise<any> {
     }
 }
 
+const mediaCache = new Map<string, string>();
+
+export async function getJiraMediaUrl(url: string): Promise<string> {
+    if (mediaCache.has(url)) return mediaCache.get(url)!;
+
+    const cfg = loadConfig();
+    if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) throw new Error('Jira not configured.');
+    const token = btoa(`${cfg.email}:${cfg.apiToken}`);
+    const res = await fetch(url, {
+        headers: { 'Authorization': `Basic ${token}` },
+    });
+    if (!res.ok) throw new Error(`Media fetch failed: ${res.status}`);
+    const buffer = await res.arrayBuffer();
+    const type = res.headers.get('content-type') || 'application/octet-stream';
+    const blob = new Blob([buffer], { type });
+    const objectUrl = URL.createObjectURL(blob);
+    mediaCache.set(url, objectUrl);
+    return objectUrl;
+}
+
 // ── API methods ───────────────────────────────────────────────────────────────
 
 export async function testConnection(): Promise<{ displayName: string; accountId: string; avatarUrls: Record<string, string> }> {
@@ -183,7 +203,7 @@ export interface JiraIssue {
         status: { name: string; statusCategory: { colorName: string } };
         issuetype: { name: string; iconUrl: string };
         priority: { name: string; iconUrl: string };
-        assignee: { displayName: string; avatarUrls: Record<string, string> } | null;
+        assignee: { accountId: string; displayName: string; avatarUrls: Record<string, string> } | null;
         labels: string[];
         updated: string;
         created: string;
@@ -278,7 +298,7 @@ export async function createSubTask(parentKey: string, summary: string, descript
         parent: { key: parentKey },
         summary,
     };
-    if (cfg.defaultAssigneeId) fields.assignee = { id: cfg.defaultAssigneeId };
+    if (cfg.defaultAssigneeId) fields.assignee = { accountId: cfg.defaultAssigneeId };
     if (cfg.activityFieldId && cfg.activityValue) {
         const activity: Record<string, string> = { value: cfg.activityValue };
         if (cfg.activityId) activity.id = cfg.activityId;
@@ -294,8 +314,13 @@ export async function createSubTask(parentKey: string, summary: string, descript
 }
 
 /** Finds the transition for the given target status name (or transition name) and applies it.
- *  Matches against: transition action name, target status name (case-insensitive + trimmed). */
-export async function transitionIssue(issueKey: string, targetStatusName: string): Promise<void> {
+ *  Optionally sends a comment and/or extra fields with the transition. */
+export async function transitionIssue(
+    issueKey: string,
+    targetStatusName: string,
+    comment?: string,
+    fields?: Record<string, any>
+): Promise<void> {
     const data = await jiraFetch(`/issue/${issueKey}/transitions`);
     const all: any[] = data.transitions ?? [];
     const needle = targetStatusName.toLowerCase().trim();
@@ -314,8 +339,140 @@ export async function transitionIssue(issueKey: string, targetStatusName: string
         );
     }
 
+    const body: Record<string, any> = { transition: { id: transition.id } };
+    if (comment?.trim()) {
+        body.update = {
+            comment: [{
+                add: {
+                    body: {
+                        type: 'doc', version: 1,
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: comment.trim() }] }],
+                    },
+                },
+            }],
+        };
+    }
+    if (fields && Object.keys(fields).length > 0) {
+        body.fields = fields;
+    }
+
     await jiraFetch(`/issue/${issueKey}/transitions`, {
         method: 'POST',
-        body: JSON.stringify({ transition: { id: transition.id } }),
+        body: JSON.stringify(body),
     });
 }
+
+export interface JiraTransition {
+    id: string;
+    name: string;
+    toName: string;
+    toColor: string;
+    /** Required fields for this transition (from expand=transitions.fields) */
+    fields?: Record<string, {
+        required: boolean;
+        name: string;
+        schema?: { type: string };
+        allowedValues?: { id: string; name: string }[];
+    }>;
+}
+
+/** Returns the available transitions for an issue (what you can move it to). */
+export async function getTransitions(issueKey: string): Promise<JiraTransition[]> {
+    const data = await jiraFetch(`/issue/${issueKey}/transitions?expand=transitions.fields`);
+    return (data.transitions ?? []).map((t: any) => ({
+        id: t.id,
+        name: t.name ?? '',
+        toName: t.to?.name ?? '',
+        toColor: t.to?.statusCategory?.colorName ?? 'default',
+        fields: t.fields ?? {},
+    }));
+}
+
+/** Assigns an issue to a user by accountId. Pass null to unassign. */
+export async function assignIssue(issueKey: string, accountId: string | null): Promise<void> {
+    await jiraFetch(`/issue/${issueKey}/assignee`, {
+        method: 'PUT',
+        body: JSON.stringify({ accountId }),
+    });
+}
+
+// ── Rich Issue Detail ─────────────────────────────────────────────────────────
+
+export interface JiraComment {
+    id: string;
+    author: { displayName: string; avatarUrls: Record<string, string> };
+    body: any; // ADF or string
+    created: string;
+    updated: string;
+}
+
+export interface JiraAttachment {
+    id: string;
+    filename: string;
+    mimeType: string;
+    content: string;  // URL
+    thumbnail?: string;
+    size: number;
+}
+
+export interface JiraIssueDetail extends JiraIssue {
+    comments: JiraComment[];
+    attachments: JiraAttachment[];
+}
+
+export async function getIssueDetail(issueKey: string): Promise<JiraIssueDetail> {
+    const data = await jiraFetch(
+        `/issue/${issueKey}?fields=summary,status,issuetype,priority,assignee,labels,description,comment,attachment,updated,created`
+    );
+    const fields = data.fields ?? {};
+    return {
+        ...data,
+        fields,
+        comments: (fields.comment?.comments ?? []).map((c: any) => ({
+            id: c.id,
+            author: c.author,
+            body: c.body,
+            created: c.created,
+            updated: c.updated,
+        })),
+        attachments: (fields.attachment ?? []).map((a: any) => ({
+            id: a.id,
+            filename: a.filename,
+            mimeType: a.mimeType,
+            content: a.content,
+            thumbnail: a.thumbnail,
+            size: a.size,
+        })),
+    };
+}
+
+/** Enhanced board search: supports assignee, issueType, and multi-status filters */
+export interface BoardFilter {
+    assignee?: 'me' | 'unassigned' | '';   // '' = any
+    issueType?: string;
+    statuses?: string[];                    // multi-select; empty = all
+    text?: string;
+}
+
+export async function getBoardIssues(projectKey: string, filter: BoardFilter = {}): Promise<JiraIssue[]> {
+    const parts: string[] = [`project = "${projectKey}"`];
+
+    if (filter.assignee === 'me') parts.push('assignee = currentUser()');
+    else if (filter.assignee === 'unassigned') parts.push('assignee is EMPTY');
+
+    if (filter.issueType) parts.push(`issuetype = "${filter.issueType}"`);
+
+    if (filter.statuses && filter.statuses.length > 0) {
+        const list = filter.statuses.map(s => `"${s}"`).join(', ');
+        parts.push(`status in (${list})`);
+    }
+
+    if (filter.text?.trim()) {
+        const t = filter.text.trim();
+        if (/^[A-Z]+-\d+$/i.test(t)) parts.push(`(summary ~ "${t}" OR key = "${t.toUpperCase()}")`);
+        else parts.push(`summary ~ "${t}"`);
+    }
+
+    return searchIssues(parts.join(' AND ') + ' ORDER BY updated DESC', 100);
+}
+

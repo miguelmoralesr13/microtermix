@@ -953,6 +953,13 @@ async fn stop_file_server(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+/// Returns true if the file server task is currently running.
+#[tauri::command]
+async fn is_file_server_running(state: State<'_, AppState>) -> Result<bool, String> {
+    let guard = state.file_server_abort.lock().await;
+    Ok(guard.is_some())
+}
+
 // 3. Persistence
 fn sanitize_path(path: &str) -> String {
     path.replace('/', "_").replace('\\', "_").replace(':', "_")
@@ -1022,8 +1029,8 @@ fn escape_cross_env_value(v: &str) -> String {
     }
 }
 
-/// Orden: npx cross-env <variables> <comando> [--config ... ya va en script_to_run]
-/// Así las vars van primero, después el comando (preview/dev/build) y después la config de Vite.
+/// Envuelve cada segmento del comando (separados por &&) con cross-env, para que
+/// las variables de entorno se apliquen explícitamente a CADA parte de la cadena.
 fn wrap_with_cross_env(script: &str, envs: &HashMap<String, String>) -> String {
     if envs.is_empty() {
         return script.to_string();
@@ -1033,7 +1040,12 @@ fn wrap_with_cross_env(script: &str, envs: &HashMap<String, String>) -> String {
         .map(|(k, v)| format!("{}={}", k, escape_cross_env_value(v)))
         .collect::<Vec<_>>()
         .join(" ");
-    format!("npx cross-env {} {}", env_part, script)
+    // Apply cross-env to every && segment so each command receives the env vars
+    script
+        .split("&&")
+        .map(|segment| format!("npx cross-env {} {}", env_part, segment.trim()))
+        .collect::<Vec<_>>()
+        .join(" && ")
 }
 
 #[tauri::command]
@@ -1613,11 +1625,18 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 let state = window.app_handle().state::<AppState>();
                 let proxy_abort = state.proxy_abort.clone();
+                let file_server_abort = state.file_server_abort.clone();
                 let processes = state.processes.clone();
 
                 tauri::async_runtime::spawn(async move {
                     {
                         let mut guard = proxy_abort.lock().await;
+                        if let Some(handle) = guard.take() {
+                            handle.abort();
+                        }
+                    }
+                    {
+                        let mut guard = file_server_abort.lock().await;
                         if let Some(handle) = guard.take() {
                             handle.abort();
                         }
@@ -1662,7 +1681,8 @@ pub fn run() {
             start_proxy,
             stop_proxy,
             start_file_server,
-            stop_file_server
+            stop_file_server,
+            is_file_server_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

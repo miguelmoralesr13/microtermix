@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Settings, Plus, RefreshCw, Search, X, CheckCircle,
-    AlertCircle, Layers, ExternalLink, Star, ChevronRight, Pin
+    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, Pin, UserCheck
 } from 'lucide-react';
 import {
-    JiraConfig, JiraIssue, JiraApiLogEntry, jiraApiLog,
+    JiraConfig, JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
     loadConfig, saveConfig, testConnection,
-    getMyIssues, getProjectIssues, statusColor,
+    statusColor,
     getProjects, getIssueTypes, getUsers, createIssue,
-    getEpics, getStoriesByEpic, getTasksByStory, createSubTask, transitionIssue
+    getEpics, getStoriesByEpic, getTasksByStory, createSubTask, transitionIssue,
+    getTransitions, assignIssue, getBoardIssues, getIssueDetail, JiraIssueDetail, BoardFilter, getJiraMediaUrl
 } from './jiraApi';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Tab = 'board' | 'stories' | 'create' | 'settings';
-type BoardFilter = 'mine' | 'project' | 'search';
+// type BoardFilter = 'mine' | 'project' | 'search'; (moved to jiraApi.ts with a richer signature)
 
 // ── Escape key hook ─────────────────────────────────────────────────────────
 
@@ -90,73 +91,282 @@ function IssueCard({ issue, onClick }: { issue: JiraIssue; onClick: () => void }
     );
 }
 
-// ── Issue Detail Modal ────────────────────────────────────────────────────────
+// ── Issue Detail Modal (Rich) ──────────────────────────────────────────────────
+
+function AuthenticatedMedia({ url, mimeType, className }: { url: string; mimeType: string; className?: string }) {
+    const [blobUrl, setBlobUrl] = useState<string | null>(null);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        getJiraMediaUrl(url).then(blob => {
+            if (active) setBlobUrl(blob);
+        }).catch(() => {
+            if (active) setError(true);
+        });
+        return () => {
+            active = false;
+        };
+    }, [url]);
+
+    if (error) return <div className="text-red-400 p-4 text-sm text-center">Error al cargar el medio.</div>;
+    if (!blobUrl) return <div className="p-8 text-slate-500 flex justify-center"><RefreshCw size={24} className="animate-spin" /></div>;
+
+    if (mimeType.startsWith('image/')) {
+        return <img src={blobUrl} alt="Adjunto" className={className} />;
+    }
+    if (mimeType.startsWith('video/')) {
+        return <video src={blobUrl} controls autoPlay className={className} />;
+    }
+    return null;
+}
+
+function AttachmentViewer({ attachments, initialIndex, onClose }: { attachments: any[]; initialIndex: number; onClose: () => void }) {
+    const [currentIndex, setCurrentIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
+    useEscape(onClose);
+
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowRight') setCurrentIndex(i => (i + 1) % attachments.length);
+            if (e.key === 'ArrowLeft') setCurrentIndex(i => (i - 1 + attachments.length) % attachments.length);
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [attachments.length]);
+
+    const attachment = attachments[currentIndex];
+    if (!attachment) return null;
+
+    const isImage = attachment.mimeType.startsWith('image/');
+    const isVideo = attachment.mimeType.startsWith('video/');
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md p-4" onClick={e => { e.stopPropagation(); onClose(); }}>
+            <button onClick={e => { e.stopPropagation(); onClose(); }} className="absolute top-4 right-4 text-white/70 hover:text-white p-2 bg-black/50 rounded-full z-10 transition-colors">
+                <X size={24} />
+            </button>
+
+            {attachments.length > 1 && (
+                <>
+                    <button onClick={(e) => { e.stopPropagation(); setCurrentIndex(i => (i - 1 + attachments.length) % attachments.length); }} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-3 bg-black/50 hover:bg-black/80 rounded-full transition-all z-10">
+                        <ChevronLeft size={32} />
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setCurrentIndex(i => (i + 1) % attachments.length); }} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/50 hover:text-white p-3 bg-black/50 hover:bg-black/80 rounded-full transition-all z-10">
+                        <ChevronRight size={32} />
+                    </button>
+                </>
+            )}
+
+            <div className="relative max-w-full max-h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+                {isImage || isVideo ? (
+                    <AuthenticatedMedia key={attachment.id} url={attachment.content} mimeType={attachment.mimeType} className="max-w-full max-h-[90vh] object-contain rounded" />
+                ) : (
+                    <div className="bg-slate-800 p-8 rounded-xl text-center">
+                        <p className="text-slate-300 font-medium mb-4">{attachment.filename}</p>
+                        <a href={attachment.content} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-nexus-accent hover:bg-opacity-80 rounded text-white font-bold text-sm transition-colors decoration-none">
+                            Descargar Archivo
+                        </a>
+                    </div>
+                )}
+            </div>
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-2 rounded-full text-white/80 text-xs font-mono flex items-center gap-3 z-10">
+                <span>{attachment.filename}</span>
+                {attachments.length > 1 && <span className="text-white/40 font-bold">{currentIndex + 1} / {attachments.length}</span>}
+            </div>
+        </div>
+    );
+}
 
 function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () => void }) {
     const cfg = loadConfig();
-    const { fields } = issue;
+    const { fields: initialFields } = issue;
+
+    const [detail, setDetail] = useState<JiraIssueDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [viewingAttachment, setViewingAttachment] = useState<any | null>(null);
+
+    const handleClose = useCallback(() => {
+        if (!viewingAttachment) onClose();
+    }, [viewingAttachment, onClose]);
+    useEscape(handleClose);
+
+    useEffect(() => {
+        setLoading(true);
+        getIssueDetail(issue.key)
+            .then(setDetail)
+            .catch(e => setError(e?.message ?? 'Error cargando detalles'))
+            .finally(() => setLoading(false));
+    }, [issue.key]);
+
+    const fields = detail?.fields ?? initialFields;
+    const descText = !fields.description ? null
+        : typeof fields.description === 'string' ? fields.description
+            : fields.description?.content?.[0]?.content?.[0]?.text ?? null;
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div
-                className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[80vh] overflow-y-auto shadow-2xl"
-                onClick={e => e.stopPropagation()}
-            >
-                <div className="flex items-start gap-3 p-5 border-b border-slate-800">
-                    {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-5 h-5 mt-0.5 shrink-0" />}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6" onClick={onClose}>
+            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl max-h-full overflow-hidden shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-start gap-4 p-5 sm:p-6 border-b border-slate-800 shrink-0 bg-slate-900/50">
+                    {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-6 h-6 mt-1 shrink-0" />}
                     <div className="flex-1 min-w-0">
-                        <a href={`${cfg.baseUrl}/browse/${issue.key}`} target="_blank" rel="noopener noreferrer"
-                            className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1">
-                            {issue.key} <ExternalLink size={11} />
-                        </a>
-                        <h2 className="text-base font-bold text-white mt-0.5">{fields.summary}</h2>
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <a href={`${cfg.baseUrl}/browse/${issue.key}`} target="_blank" rel="noopener noreferrer"
+                                className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1">
+                                {issue.key} <ExternalLink size={11} />
+                            </a>
+                            <StatusBadge status={fields.status} />
+                            {loading && <RefreshCw size={12} className="animate-spin text-slate-500 ml-2" />}
+                        </div>
+                        <h2 className="text-lg sm:text-xl font-bold text-slate-100 leading-snug">{fields.summary}</h2>
                     </div>
-                    <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded hover:bg-slate-700">
-                        <X size={18} />
+                    <button onClick={onClose} className="text-slate-500 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors shrink-0">
+                        <X size={20} />
                     </button>
                 </div>
-                <div className="p-5 space-y-4">
-                    <div className="flex flex-wrap gap-3 text-xs">
-                        <div className="flex items-center gap-1.5">
-                            <span className="text-slate-500">Status:</span>
-                            <StatusBadge status={fields.status} />
-                        </div>
-                        {fields.priority && (
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-slate-500">Priority:</span>
-                                <span className="text-slate-300 flex items-center gap-1">
-                                    {fields.priority.iconUrl && <img src={fields.priority.iconUrl} alt="" className="w-3.5 h-3.5" />}
-                                    {fields.priority.name}
-                                </span>
-                            </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto w-full flex flex-col md:flex-row">
+                    {/* Left Column (Main content) */}
+                    <div className="flex-1 p-5 sm:p-6 space-y-8 md:border-r border-slate-800 shrink-0 md:w-2/3">
+                        {error && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-sm">{error}</div>}
+
+                        <section>
+                            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Descripción</h3>
+                            {descText ? (
+                                <div className="text-sm text-slate-300 bg-slate-800/30 border border-slate-800/50 rounded-xl p-4 whitespace-pre-wrap leading-relaxed shadow-inner">
+                                    {descText}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-600 italic px-2">Sin descripción proporcionada.</p>
+                            )}
+                        </section>
+
+                        {detail?.attachments && detail.attachments.length > 0 && (
+                            <section>
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    Adjuntos <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded text-[10px]">{detail.attachments.length}</span>
+                                </h3>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {detail.attachments.map(att => {
+                                        const isMedia = att.mimeType.startsWith('image/') || att.mimeType.startsWith('video/');
+                                        return (
+                                            <div key={att.id} onClick={() => isMedia && setViewingAttachment(att)}
+                                                className={`group relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 flex flex-col ${isMedia ? 'cursor-pointer hover:border-nexus-neon/50' : ''}`}>
+                                                <div className="h-24 bg-slate-900 border-b border-slate-800 flex flex-col items-center justify-center p-2">
+                                                    {att.thumbnail ? (
+                                                        <AuthenticatedMedia url={att.thumbnail} mimeType="image/png" className="max-w-full max-h-full object-contain" />
+                                                    ) : isMedia ? (
+                                                        <span className="text-xs text-slate-500 uppercase font-bold tracking-widest px-2 text-center break-all">{att.mimeType.split('/')[1]}</span>
+                                                    ) : (
+                                                        <Layers size={20} className="text-slate-600 mb-2" />
+                                                    )}
+                                                </div>
+                                                <div className="p-2 min-w-0">
+                                                    <p className="text-[10px] text-slate-300 truncate font-mono" title={att.filename}>{att.filename}</p>
+                                                    <p className="text-[9px] text-slate-500 mt-0.5">{Math.round(att.size / 1024)} KB</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </section>
                         )}
-                        {fields.assignee && (
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-slate-500">Assignee:</span>
-                                <span className="text-slate-300 flex items-center gap-1">
-                                    <img src={fields.assignee.avatarUrls['16x16']} alt="" className="w-4 h-4 rounded-full" />
-                                    {fields.assignee.displayName}
-                                </span>
-                            </div>
+
+                        {detail?.comments && detail.comments.length > 0 && (
+                            <section>
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                    Comentarios <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded text-[10px]">{detail.comments.length}</span>
+                                </h3>
+                                <div className="space-y-4">
+                                    {detail.comments.map(comment => {
+                                        const bodyText = typeof comment.body === 'string' ? comment.body : comment.body?.content?.[0]?.content?.[0]?.text ?? '(contenido no soportado)';
+                                        return (
+                                            <div key={comment.id} className="flex gap-3">
+                                                <img src={comment.author.avatarUrls['32x32']} alt="" className="w-8 h-8 rounded-full shrink-0 border border-slate-700" />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                                                        <span className="text-xs font-bold text-slate-200">{comment.author.displayName}</span>
+                                                        <span className="text-[10px] text-slate-500">{new Date(comment.created).toLocaleString()}</span>
+                                                    </div>
+                                                    <div className="text-sm text-slate-300 bg-slate-900 rounded-b-xl rounded-tr-xl p-3 border border-slate-800 whitespace-pre-wrap leading-relaxed shadow-sm block">
+                                                        {bodyText}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        )}
+
+                        {!loading && !detail?.comments?.length && !error && (
+                            <section>
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Comentarios</h3>
+                                <p className="text-sm text-slate-600 italic px-2">Sin comentarios en este issue.</p>
+                            </section>
                         )}
                     </div>
-                    {fields.labels.length > 0 && (
-                        <div className="flex gap-1.5 flex-wrap">
-                            {fields.labels.map(l => (
-                                <span key={l} className="px-2 py-0.5 text-[10px] rounded bg-slate-700 text-slate-300 font-mono">{l}</span>
-                            ))}
+
+                    {/* Right Column (Metadata) */}
+                    <div className="w-full md:w-1/3 bg-slate-900/30 p-5 sm:p-6 space-y-6 shrink-0">
+                        <div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1.5">Asignado a</p>
+                            <div className="flex items-center gap-2.5">
+                                {fields.assignee ? (
+                                    <>
+                                        <img src={fields.assignee.avatarUrls['24x24']} alt="" className="w-6 h-6 rounded-full" />
+                                        <span className="text-sm text-slate-200 font-medium">{fields.assignee.displayName}</span>
+                                    </>
+                                ) : (
+                                    <span className="text-sm text-slate-500 italic">Sin asignar</span>
+                                )}
+                            </div>
                         </div>
-                    )}
-                    {fields.description && (
-                        <div className="text-sm text-slate-300 bg-slate-800/40 rounded-lg p-3 whitespace-pre-wrap leading-relaxed">
-                            {typeof fields.description === 'string'
-                                ? fields.description
-                                : fields.description?.content?.[0]?.content?.[0]?.text ?? '(sin descripción)'
-                            }
+
+                        {fields.priority && (
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1.5">Prioridad</p>
+                                <div className="flex items-center gap-1.5 text-sm text-slate-300">
+                                    {fields.priority.iconUrl && <img src={fields.priority.iconUrl} alt="" className="w-4 h-4" />}
+                                    <span>{fields.priority.name}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {fields.labels?.length > 0 && (
+                            <div>
+                                <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">Labels</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {fields.labels.map((l: string) => (
+                                        <span key={l} className="px-2 py-0.5 text-xs rounded border border-slate-700 bg-slate-800 text-slate-300 font-mono">{l}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-4 border-t border-slate-800 space-y-1">
+                            <p className="text-[10px] text-slate-500">
+                                <span className="inline-block w-20 font-medium">Creado:</span>
+                                <span className="text-slate-400">{new Date(fields.created).toLocaleString()}</span>
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                                <span className="inline-block w-20 font-medium">Actualizado:</span>
+                                <span className="text-slate-400">{new Date(fields.updated).toLocaleString()}</span>
+                            </p>
                         </div>
-                    )}
-                    <p className="text-[10px] text-slate-600">Creado: {new Date(fields.created).toLocaleString()} · Actualizado: {new Date(fields.updated).toLocaleString()}</p>
+                    </div>
                 </div>
             </div>
+
+            {detail && viewingAttachment && (
+                <AttachmentViewer
+                    attachments={detail.attachments.filter(a => a.mimeType.startsWith('image/') || a.mimeType.startsWith('video/'))}
+                    initialIndex={detail.attachments.filter(a => a.mimeType.startsWith('image/') || a.mimeType.startsWith('video/')).findIndex(a => a.id === viewingAttachment.id)}
+                    onClose={() => setViewingAttachment(null)}
+                />
+            )}
         </div>
     );
 }
@@ -194,11 +404,12 @@ function isReleased(issue: JiraIssue): boolean {
 }
 
 function HierarchyCard({
-    issue, selected, pinned, onSelect, onPin, onDetail, showPin = true
+    issue, selected, pinned, onSelect, onPin, onDetail, onAssign, showPin = true
 }: {
     issue: JiraIssue; selected: boolean; pinned: boolean;
     onSelect: () => void; onPin: () => void;
     onDetail?: () => void;
+    onAssign?: () => void;
     showPin?: boolean;
 }) {
     const released = isReleased(issue);
@@ -237,6 +448,15 @@ function HierarchyCard({
                                 border: `1px solid ${statusColor(issue.fields.status.statusCategory.colorName)}44`,
                             }}
                         >{issue.fields.status.name}</span>
+                    )}
+                    {onAssign && (
+                        <button
+                            onClick={e => { e.stopPropagation(); onAssign(); }}
+                            className="p-0.5 rounded hover:bg-nexus-neon/10 text-slate-500 hover:text-nexus-neon shrink-0 transition-colors"
+                            title="Asignarme esta tarea"
+                        >
+                            <UserCheck size={11} />
+                        </button>
                     )}
                     {onDetail && (
                         <button
@@ -338,6 +558,255 @@ function EpicDetailModal({ epic, onClose }: { epic: JiraIssue; onClose: () => vo
     );
 }
 
+// ── Generic Transition Fields Modal ──────────────────────────────────────────
+
+interface TransitionTarget { task: JiraIssue; transition: JiraTransition; }
+
+function TransitionFieldsModal({ target, onConfirm, onClose }: {
+    target: TransitionTarget;
+    onConfirm: (comment: string, fields: Record<string, any>) => void;
+    onClose: () => void;
+}) {
+    const cfg = loadConfig();
+    const isDiscard = /discard/i.test(target.transition.toName) || /discard/i.test(target.transition.name);
+    const reqFields = Object.entries(target.transition.fields ?? {}).filter(([, f]) => f.required);
+    const hasCommentField = reqFields.some(([k]) => k === 'comment');
+    const needsComment = isDiscard || hasCommentField;
+    const otherFields = reqFields.filter(([k]) => k !== 'comment');
+
+    const [comment, setComment] = useState('');
+    const [values, setValues] = useState<Record<string, string>>({});
+    const [submitting, setSubmitting] = useState(false);
+    const firstRef = useRef<HTMLTextAreaElement | HTMLInputElement | HTMLSelectElement | null>(null);
+    useEscape(onClose);
+    useEffect(() => { (firstRef.current as HTMLElement | null)?.focus(); }, []);
+
+    const allFilled =
+        (!needsComment || comment.trim().length > 0) &&
+        otherFields.every(([k]) => (values[k] ?? '').trim().length > 0);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!allFilled || submitting) return;
+        setSubmitting(true);
+        const fieldPayload: Record<string, any> = {};
+        otherFields.forEach(([key, field]) => {
+            const v = (values[key] ?? '').trim();
+            if (!v) return;
+            if (field.allowedValues?.length) {
+                const av = field.allowedValues.find(a => a.name === v || a.id === v);
+                fieldPayload[key] = av ? { id: av.id, name: av.name } : { name: v };
+            } else {
+                fieldPayload[key] = v;
+            }
+        });
+        onConfirm(comment.trim(), fieldPayload);
+    };
+
+    const borderColor = isDiscard ? 'border-red-500/30' : 'border-slate-700';
+    const accentColor = isDiscard ? 'text-red-400' : 'text-nexus-neon';
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+            <div className={`bg-slate-900 border ${borderColor} rounded-xl w-full max-w-md shadow-2xl max-h-[85vh] flex flex-col`} onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
+                    <h3 className={`text-sm font-bold ${accentColor} flex items-center gap-2`}>
+                        <AlertCircle size={14} />
+                        {target.transition.name}
+                        <span className="text-[10px] font-normal text-slate-400">→ {target.transition.toName}</span>
+                    </h3>
+                    <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={16} /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-4 space-y-3 overflow-y-auto">
+                    <p className="text-xs text-slate-300 font-semibold">{target.task.key} · {target.task.fields.summary}</p>
+
+                    {/* Comment / Motivo */}
+                    {needsComment && (
+                        <div>
+                            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
+                                {isDiscard ? 'Motivo del descarte' : 'Comentario'} <span className="text-red-400">*</span>
+                            </label>
+                            <textarea
+                                ref={firstRef as React.RefObject<HTMLTextAreaElement>}
+                                value={comment}
+                                onChange={e => setComment(e.target.value)}
+                                placeholder={isDiscard ? 'Explica por qué se descarta...' : 'Escribe un comentario...'}
+                                rows={3}
+                                className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 resize-none focus:border-slate-400 focus:outline-none"
+                            />
+                        </div>
+                    )}
+
+                    {/* Other required fields */}
+                    {otherFields.map(([key, field], i) => (
+                        <div key={key}>
+                            <label className="text-[10px] text-slate-500 uppercase tracking-wider font-bold block mb-1">
+                                {field.name} <span className="text-red-400">*</span>
+                            </label>
+                            {field.allowedValues?.length ? (
+                                <select
+                                    ref={i === 0 && !needsComment ? firstRef as React.RefObject<HTMLSelectElement> : undefined}
+                                    value={values[key] ?? ''}
+                                    onChange={e => setValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-slate-400 focus:outline-none"
+                                >
+                                    <option value="">Seleccionar...</option>
+                                    {field.allowedValues.map(av => (
+                                        <option key={av.id} value={av.name}>{av.name}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    ref={i === 0 && !needsComment ? firstRef as React.RefObject<HTMLInputElement> : undefined}
+                                    type="text"
+                                    value={values[key] ?? ''}
+                                    onChange={e => setValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-slate-400 focus:outline-none"
+                                />
+                            )}
+                        </div>
+                    ))}
+
+                    <div className="flex gap-2 pt-1">
+                        <button type="button" onClick={onClose}
+                            className="flex-1 px-3 py-2 rounded-lg text-xs font-medium border border-slate-600 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors">
+                            Cancelar
+                        </button>
+                        <button type="submit" disabled={!allFilled || submitting}
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${isDiscard ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30' : 'bg-nexus-neon/10 border-nexus-neon/30 text-nexus-neon hover:bg-nexus-neon/20'}`}>
+                            {submitting ? <RefreshCw size={11} className="animate-spin mx-auto" /> : 'Confirmar'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+// ── Task Detail Modal ─────────────────────────────────────────────────────────
+
+function TaskDetailModal({ task, onClose, onTransition, onAssign }: {
+    task: JiraIssue;
+    onClose: () => void;
+    onTransition: (tr: JiraTransition) => void;
+    onAssign: (() => void) | undefined;
+}) {
+    const cfg = loadConfig();
+    const { fields } = task;
+    useEscape(onClose);
+
+    // Load transitions internally — works for any issue type
+    const [transitions, setTransitions] = useState<JiraTransition[]>([]);
+    const [loadingTr, setLoadingTr] = useState(true);
+    const [transitioningTask, setTransitioningTask] = useState<string | null>(null);
+
+    useEffect(() => {
+        setLoadingTr(true);
+        getTransitions(task.key)
+            .then(setTransitions)
+            .catch(() => setTransitions([]))
+            .finally(() => setLoadingTr(false));
+    }, [task.key]);
+
+    const descText = !fields.description ? null
+        : typeof fields.description === 'string' ? fields.description
+            : fields.description?.content?.[0]?.content?.[0]?.text ?? null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg max-h-[85vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-start gap-3 p-4 border-b border-slate-800 shrink-0">
+                    {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-5 h-5 mt-0.5 shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                        <a href={`${cfg.baseUrl}/browse/${task.key}`} target="_blank" rel="noopener noreferrer"
+                            className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1">
+                            {task.key} <ExternalLink size={10} />
+                        </a>
+                        <p className="text-sm font-semibold text-slate-100 mt-0.5 leading-snug">{fields.summary}</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-500 hover:text-white shrink-0"><X size={16} /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {/* Status + type */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <span className="px-2 py-0.5 text-[9px] rounded-full font-bold uppercase"
+                            style={{
+                                background: statusColor(fields.status.statusCategory.colorName) + '22',
+                                color: statusColor(fields.status.statusCategory.colorName),
+                                border: `1px solid ${statusColor(fields.status.statusCategory.colorName)}44`,
+                            }}>{fields.status.name}</span>
+                        {fields.issuetype?.name && (
+                            <span className="text-[10px] text-slate-500">{fields.issuetype.name}</span>
+                        )}
+                        {fields.priority?.name && (
+                            <span className="text-[10px] text-slate-500">{fields.priority.name}</span>
+                        )}
+                    </div>
+
+                    {/* Assignee */}
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                            {fields.assignee ? (
+                                <>
+                                    <img src={fields.assignee.avatarUrls['24x24']} alt="" className="w-5 h-5 rounded-full" />
+                                    <span className="text-xs text-slate-300">{fields.assignee.displayName}</span>
+                                </>
+                            ) : (
+                                <span className="text-xs text-slate-500 italic">Sin asignar</span>
+                            )}
+                        </div>
+                        {onAssign && (
+                            <button onClick={onAssign}
+                                className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold rounded-lg bg-nexus-neon/10 border border-nexus-neon/30 text-nexus-neon hover:bg-nexus-neon/20 transition-colors">
+                                <UserCheck size={11} /> Asignarme
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Description */}
+                    {descText && (
+                        <div>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-1">Descripción</p>
+                            <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{descText}</p>
+                        </div>
+                    )}
+
+                    {/* Transitions */}
+                    <div>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2 flex items-center gap-1.5">
+                            Transiciones
+                            {loadingTr && <RefreshCw size={9} className="animate-spin text-slate-600" />}
+                        </p>
+                        {!loadingTr && transitions.length === 0 && (
+                            <p className="text-[10px] text-slate-600 italic">Sin transiciones disponibles</p>
+                        )}
+                        <div className="flex flex-wrap gap-1.5">
+                            {transitions.map(tr => {
+                                const isCurrent = fields.status.name.toLowerCase() === tr.toName.toLowerCase();
+                                const color = /discard/i.test(tr.toName) ? '#ef4444' : statusColor(tr.toColor);
+                                return (
+                                    <button key={tr.id}
+                                        onClick={() => { setTransitioningTask(task.key); onTransition(tr); }}
+                                        disabled={transitioningTask === task.key || isCurrent}
+                                        className="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all disabled:opacity-40 flex items-center gap-1"
+                                        style={{ background: color + '18', borderColor: color + '44', color }}
+                                        title={`${tr.name} → ${tr.toName}`}>
+                                        {transitioningTask === task.key ? <RefreshCw size={10} className="animate-spin" /> : null}
+                                        {tr.toName}
+                                        {isCurrent && <span className="text-[9px] opacity-60">(actual)</span>}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function CreateSubTaskModal({ parentKey, onCreated, onClose }: {
     parentKey: string; onCreated: (key: string) => void; onClose: () => void;
 }) {
@@ -356,9 +825,14 @@ function CreateSubTaskModal({ parentKey, onCreated, onClose }: {
         setSubmitting(true);
         setError(null);
         try {
+            const cfg = loadConfig();
             const res = await createSubTask(parentKey, summary.trim(), description);
-            // Auto-transition to Working after creation
+            // Auto-transition to Working
             try { await transitionIssue(res.key, 'Working'); } catch { }
+            // Auto-assign — propagate error so user can see if assignment fails
+            if (cfg.defaultAssigneeId) {
+                await assignIssue(res.key, cfg.defaultAssigneeId);
+            }
             onCreated(res.key);
         } catch (err: any) {
             setError(err?.message ?? 'Error al crear la tarea');
@@ -422,6 +896,24 @@ function StoriesView() {
     const cfg = loadConfig();
     const project = cfg.storiesProject || cfg.defaultProject;
 
+    // Current user's accountId — auto-fetched from /myself
+    const [myAccountId, setMyAccountId] = useState<string>(() => cfg.defaultAssigneeId ?? '');
+
+    // Auto-fetch and persist accountId from /myself if not yet configured
+    useEffect(() => {
+        if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) return;
+        if (cfg.defaultAssigneeId) { setMyAccountId(cfg.defaultAssigneeId); return; }
+        testConnection()
+            .then(me => {
+                if (me.accountId) {
+                    const updated = { ...loadConfig(), defaultAssigneeId: me.accountId };
+                    saveConfig(updated);
+                    setMyAccountId(me.accountId);
+                }
+            })
+            .catch(() => { }); // silent — don't block the UI
+    }, []);
+
     // ── Persistent issues cache ──
     const [epics, setEpics] = useState<JiraIssue[]>(() => loadLS<JiraIssue[]>(PERSIST_EPICS_KEY, []));
     const [stories, setStories] = useState<JiraIssue[]>(() => loadLS<JiraIssue[]>(PERSIST_STORIES_KEY, []));
@@ -452,7 +944,13 @@ function StoriesView() {
     const [createForStory, setCreateForStory] = useState<JiraIssue | null>(null);
     const [detailEpic, setDetailEpic] = useState<JiraIssue | null>(null);
 
+    const [epicSearchInput, setEpicSearchInput] = useState('');
     const [epicSearch, setEpicSearch] = useState('');
+    const [storySearch, setStorySearch] = useState('');
+    const [storyFilterAssignee, setStoryFilterAssignee] = useState('');
+    const [storyFilterStatus, setStoryFilterStatus] = useState('');
+    const [showStoryFilters, setShowStoryFilters] = useState(false);
+    const availableStatuses = ['Open', 'In Progress', 'Done', 'Released', 'Discarded', 'Blocked', 'To Do', 'Review'];
     const [pinnedEpics, setPinnedEpics] = useState<string[]>(() => loadPinned(PINNED_EPICS_KEY));
     const [pinnedStories, setPinnedStories] = useState<string[]>(() => loadPinned(PINNED_STORIES_KEY));
 
@@ -464,6 +962,8 @@ function StoriesView() {
     const [taskError, setTaskError] = useState<string | null>(null);
 
     const [selectedTask, setSelectedTask] = useState<JiraIssue | null>(null);
+    const [taskTransitions, setTaskTransitions] = useState<JiraTransition[]>([]);
+    const [loadingTransitions, setLoadingTransitions] = useState(false);
     const [transitioningTask, setTransitioningTask] = useState<string | null>(null);
     const [apiLog, setApiLog] = useState<JiraApiLogEntry[]>([]);
     const [expandedLog, setExpandedLog] = useState<number | null>(null);
@@ -502,11 +1002,8 @@ function StoriesView() {
 
     useEffect(() => { loadEpics(); }, [loadEpics]);
 
-    // Search debounce
-    useEffect(() => {
-        const t = setTimeout(() => loadEpics(epicSearch || undefined), 400);
-        return () => clearTimeout(t);
-    }, [epicSearch, loadEpics]);
+    // Only reload when epicSearch (committed on Enter) changes
+    useEffect(() => { loadEpics(epicSearch || undefined); }, [epicSearch, loadEpics]);
 
     // Load stories when epic selected
     useEffect(() => {
@@ -542,19 +1039,42 @@ function StoriesView() {
         ...items.filter(i => !pinned.includes(i.key)),
     ];
 
-    const [transitionError, setTransitionError] = useState<string | null>(null);
+    // Load available transitions when a task is selected
+    useEffect(() => {
+        if (!selectedTask) { setTaskTransitions([]); return; }
+        setLoadingTransitions(true);
+        getTransitions(selectedTask.key)
+            .then(setTaskTransitions)
+            .catch(() => setTaskTransitions([]))
+            .finally(() => setLoadingTransitions(false));
+    }, [selectedTask?.key]);
 
-    const handleTransition = async (task: JiraIssue, status: string) => {
+    const [transitionError, setTransitionError] = useState<string | null>(null);
+    const [transitionTarget, setTransitionTarget] = useState<TransitionTarget | null>(null);
+    const [taskDetailTarget, setTaskDetailTarget] = useState<JiraIssue | null>(null);
+
+    // Intercept transition clicks — show modal when required fields exist or it's Discard
+    const handleTransitionClick = (task: JiraIssue, tr: JiraTransition) => {
+        const hasRequired = Object.values(tr.fields ?? {}).some(f => f.required);
+        const isDiscard = /discard/i.test(tr.toName) || /discard/i.test(tr.name);
+        if (hasRequired || isDiscard) {
+            setTransitionTarget({ task, transition: tr });
+        } else {
+            handleTransition(task, tr.toName);
+        }
+    };
+
+    const handleTransition = async (task: JiraIssue, status: string, comment?: string, fields?: Record<string, any>) => {
         setTransitioningTask(task.key);
         setTransitionError(null);
         try {
-            await transitionIssue(task.key, status);
+            await transitionIssue(task.key, status, comment, fields);
             if (selectedStory) {
                 const updated = await getTasksByStory(selectedStory.key);
                 setTasks(updated);
                 saveLS(PERSIST_TASKS_KEY, updated);
                 const refreshed = updated.find(t => t.key === task.key);
-                if (refreshed) setSelectedTask(refreshed);
+                if (refreshed) { setSelectedTask(refreshed); setTaskDetailTarget(refreshed); }
             }
         } catch (e: any) {
             setTransitionError(e?.message ?? 'Error al cambiar estado');
@@ -576,10 +1096,26 @@ function StoriesView() {
         );
     }
 
-    const releasedStatuses = cfg.releasedStatuses ?? ['Released', 'Discarded'];
 
     const sortedEpics = sortWithPins(epics, pinnedEpics);
-    const sortedStories = sortWithPins(stories, pinnedStories);
+    const sortedStories = sortWithPins(
+        stories.filter(s => {
+            const matchText = !storySearch.trim() || (
+                s.key.toLowerCase().includes(storySearch.toLowerCase()) ||
+                s.fields.summary.toLowerCase().includes(storySearch.toLowerCase())
+            );
+            const matchAssignee = !storyFilterAssignee || (
+                storyFilterAssignee === 'me'
+                    ? s.fields.assignee?.accountId === myAccountId
+                    : !s.fields.assignee
+            );
+            const matchStatus = !storyFilterStatus ||
+                s.fields.status.name.toLowerCase() === storyFilterStatus.toLowerCase();
+            return matchText && matchAssignee && matchStatus;
+        }),
+        pinnedStories
+    );
+    const hasStoryFilters = !!(storySearch || storyFilterAssignee || storyFilterStatus);
 
     return (
         <div className="flex flex-col h-full min-h-0">
@@ -592,12 +1128,16 @@ function StoriesView() {
                         <div className="relative">
                             <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
                             <input
-                                value={epicSearch}
-                                onChange={e => setEpicSearch(e.target.value)}
-                                placeholder="Título o clave..."
-                                className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                                value={epicSearchInput}
+                                onChange={e => setEpicSearchInput(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') setEpicSearch(epicSearchInput);
+                                    if (e.key === 'Escape') { setEpicSearchInput(''); setEpicSearch(''); }
+                                }}
+                                placeholder="Título o clave... ↵"
+                                className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-6 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
                             />
-                            {epicSearch && <button onClick={() => setEpicSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"><X size={10} /></button>}
+                            {epicSearchInput && <button onClick={() => { setEpicSearchInput(''); setEpicSearch(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"><X size={10} /></button>}
                         </div>
                     </div>
                     <div className={colBodyCls}>
@@ -614,7 +1154,20 @@ function StoriesView() {
                                 pinned={pinnedEpics.includes(epic.key)}
                                 onSelect={() => setSelectedEpic(epic)}
                                 onPin={() => togglePin(epic.key, pinnedEpics, setPinnedEpics, PINNED_EPICS_KEY)}
-                                onDetail={() => setDetailEpic(epic)}
+                                onDetail={() => setTaskDetailTarget(epic)}
+                                onAssign={epic.fields.assignee?.accountId === myAccountId ? undefined : async () => {
+                                    const accountId = myAccountId || loadConfig().defaultAssigneeId;
+                                    if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
+                                    try {
+                                        await assignIssue(epic.key, accountId);
+                                        // Refresh epics
+                                        const updated = await getEpics(project);
+                                        setEpics(updated);
+                                        saveLS(PERSIST_EPICS_KEY, updated);
+                                    } catch (e: any) {
+                                        setTransitionError(e?.message ?? 'Error al asignar');
+                                    }
+                                }}
                             />
                         ))}
                     </div>
@@ -623,10 +1176,62 @@ function StoriesView() {
                 {/* Column 2: Stories */}
                 <div className={`${colCls} w-1/4`}>
                     <div className={colHeaderCls}>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            Technical {selectedEpic ? `(${stories.length})` : ''}
-                        </p>
-                        {selectedEpic && <p className="text-[10px] text-nexus-neon/60 mt-0.5 truncate">{selectedEpic.key}</p>}
+                        {/* title + filter toggle */}
+                        <div className="flex items-center gap-1 mb-0.5">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex-1">
+                                Technical {selectedEpic ? `(${sortedStories.length})` : ''}
+                            </p>
+                            {selectedEpic && (
+                                <>
+                                    {hasStoryFilters && (
+                                        <button onClick={() => { setStorySearch(''); setStoryFilterAssignee(''); setStoryFilterStatus(''); }}
+                                            className="text-[9px] text-nexus-neon/70 hover:text-nexus-neon flex items-center gap-0.5" title="Limpiar filtros">
+                                            <X size={9} /> {[storySearch, storyFilterAssignee, storyFilterStatus].filter(Boolean).length}
+                                        </button>
+                                    )}
+                                    <button onClick={() => setShowStoryFilters(v => !v)}
+                                        className={`p-0.5 rounded transition-colors ${showStoryFilters ? 'text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
+                                        title="Filtros">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
+                                        </svg>
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        {selectedEpic && <p className="text-[10px] text-nexus-neon/60 mb-1 truncate">{selectedEpic.key}</p>}
+                        {/* Collapsible filter panel */}
+                        {selectedEpic && showStoryFilters && (
+                            <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-2 space-y-1.5 mt-1">
+                                {/* Text search */}
+                                <div className="relative">
+                                    <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+                                    <input value={storySearch} onChange={e => setStorySearch(e.target.value)}
+                                        placeholder="Título o clave..."
+                                        className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-6 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon" />
+                                    {storySearch && <button onClick={() => setStorySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"><X size={10} /></button>}
+                                </div>
+                                {/* Assignee */}
+                                <div>
+                                    <label className="text-[9px] text-slate-600 uppercase tracking-wider font-bold block mb-0.5">Asignado</label>
+                                    <select value={storyFilterAssignee} onChange={e => setStoryFilterAssignee(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-nexus-neon">
+                                        <option value="">Todos</option>
+                                        <option value="me">👤 Yo</option>
+                                        <option value="unassigned">Sin asignar</option>
+                                    </select>
+                                </div>
+                                {/* Status */}
+                                <div>
+                                    <label className="text-[9px] text-slate-600 uppercase tracking-wider font-bold block mb-0.5">Estado</label>
+                                    <select value={storyFilterStatus} onChange={e => setStoryFilterStatus(e.target.value)}
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-nexus-neon">
+                                        <option value="">Todos</option>
+                                        {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className={colBodyCls}>
                         {!selectedEpic && <p className="text-xs text-slate-600 text-center py-8">← Selecciona un Epic</p>}
@@ -641,6 +1246,24 @@ function StoriesView() {
                                     pinned={pinnedStories.includes(story.key)}
                                     onSelect={() => setSelectedStory(story)}
                                     onPin={() => togglePin(story.key, pinnedStories, setPinnedStories, PINNED_STORIES_KEY)}
+                                    onDetail={() => {
+                                        setSelectedTask(null);
+                                        setTaskDetailTarget(story);
+                                    }}
+                                    onAssign={story.fields.assignee?.accountId === myAccountId ? undefined : async () => {
+                                        const accountId = myAccountId || loadConfig().defaultAssigneeId;
+                                        if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
+                                        try {
+                                            await assignIssue(story.key, accountId);
+                                            if (selectedEpic) {
+                                                const updated = await getStoriesByEpic(selectedEpic.key);
+                                                setStories(updated);
+                                                saveLS(PERSIST_STORIES_KEY, updated);
+                                            }
+                                        } catch (e: any) {
+                                            setTransitionError(e?.message ?? 'Error al asignar');
+                                        }
+                                    }}
                                 />
                                 <button
                                     onClick={e => { e.stopPropagation(); setCreateForStory(story); }}
@@ -678,6 +1301,27 @@ function StoriesView() {
                                 onSelect={() => setSelectedTask(prev => prev?.key === task.key ? null : task)}
                                 onPin={() => { }}
                                 showPin={false}
+                                onAssign={task.fields.assignee?.accountId === myAccountId ? undefined : async () => {
+                                    try {
+                                        const accountId = myAccountId || loadConfig().defaultAssigneeId;
+                                        if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
+                                        await assignIssue(task.key, accountId);
+                                        if (selectedStory) {
+                                            const updated = await getTasksByStory(selectedStory.key);
+                                            setTasks(updated);
+                                            saveLS(PERSIST_TASKS_KEY, updated);
+                                            const refreshed = updated.find(t => t.key === task.key);
+                                            if (refreshed) setSelectedTask(refreshed);
+                                        }
+                                    } catch (e: any) {
+                                        setTransitionError(e?.message ?? 'Error al asignar');
+                                    }
+                                }}
+                                onDetail={() => {
+                                    // Select task so transitions load, then open detail modal
+                                    setSelectedTask(task);
+                                    setTaskDetailTarget(task);
+                                }}
                             />
                         ))}
                     </div>
@@ -709,7 +1353,10 @@ function StoriesView() {
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">Transiciones</p>
+                                    <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold flex items-center gap-1.5">
+                                        Transiciones
+                                        {loadingTransitions && <RefreshCw size={9} className="animate-spin text-slate-600" />}
+                                    </p>
                                     {transitionError && (
                                         <div className="flex items-start gap-1.5 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
                                             <AlertCircle size={11} className="text-red-400 shrink-0 mt-0.5" />
@@ -717,36 +1364,87 @@ function StoriesView() {
                                             <button onClick={() => setTransitionError(null)} className="text-red-500/60 hover:text-red-400 shrink-0"><X size={10} /></button>
                                         </div>
                                     )}
-                                    {releasedStatuses.map(status => (
-                                        <button
-                                            key={status}
-                                            onClick={() => handleTransition(selectedTask, status)}
-                                            disabled={transitioningTask === selectedTask.key || selectedTask.fields.status.name === status}
-                                            className="w-full px-3 py-2 rounded-lg text-xs font-medium border transition-all disabled:opacity-40 flex items-center justify-center gap-1.5
-                                                bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50"
-                                        >
-                                            {transitioningTask === selectedTask.key
-                                                ? <RefreshCw size={11} className="animate-spin" />
-                                                : null
-                                            }
-                                            {status}
-                                        </button>
-                                    ))}
-                                    <button
-                                        onClick={() => handleTransition(selectedTask, 'Working')}
-                                        disabled={transitioningTask === selectedTask.key || selectedTask.fields.status.name === 'Working'}
-                                        className="w-full px-3 py-2 rounded-lg text-xs font-medium border transition-all disabled:opacity-40 flex items-center justify-center gap-1.5
-                                            bg-nexus-neon/10 border-nexus-neon/30 text-nexus-neon hover:bg-nexus-neon/20"
-                                    >
-                                        {transitioningTask === selectedTask.key ? <RefreshCw size={11} className="animate-spin" /> : null}
-                                        Working
-                                    </button>
+                                    {taskTransitions.length === 0 && !loadingTransitions && (
+                                        <p className="text-[10px] text-slate-600 italic">Sin transiciones disponibles</p>
+                                    )}
+                                    {taskTransitions.map(tr => {
+                                        const isCurrent = selectedTask.fields.status.name.toLowerCase() === tr.toName.toLowerCase();
+                                        const isDiscard = /discard/i.test(tr.toName) || /discard/i.test(tr.name);
+                                        const color = isDiscard ? '#ef4444' : statusColor(tr.toColor);
+                                        return (
+                                            <button
+                                                key={tr.id}
+                                                onClick={() => handleTransitionClick(selectedTask, tr)}
+                                                disabled={transitioningTask === selectedTask.key || isCurrent}
+                                                className="w-full px-3 py-2 rounded-lg text-xs font-medium border transition-all disabled:opacity-40 flex items-center justify-center gap-1.5"
+                                                style={{
+                                                    background: color + '18',
+                                                    borderColor: color + '44',
+                                                    color,
+                                                }}
+                                                title={`${tr.name} → ${tr.toName}`}
+                                            >
+                                                {transitioningTask === selectedTask.key
+                                                    ? <RefreshCw size={11} className="animate-spin" />
+                                                    : null
+                                                }
+                                                {tr.toName}
+                                                {isCurrent && <span className="text-[9px] opacity-60 ml-1">(actual)</span>}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
+
+            {/* Generic transition fields modal (required fields / Discard) */}
+            {transitionTarget && (
+                <TransitionFieldsModal
+                    target={transitionTarget}
+                    onClose={() => setTransitionTarget(null)}
+                    onConfirm={async (comment, fields) => {
+                        const { task, transition } = transitionTarget;
+                        setTransitionTarget(null);
+                        await handleTransition(task, transition.toName, comment, fields);
+                    }}
+                />
+            )}
+
+            {/* Task / Story / Epic detail modal */}
+            {taskDetailTarget && (
+                <TaskDetailModal
+                    task={taskDetailTarget}
+                    onClose={() => setTaskDetailTarget(null)}
+                    onTransition={(tr) => handleTransitionClick(taskDetailTarget, tr)}
+                    onAssign={taskDetailTarget.fields.assignee?.accountId === myAccountId ? undefined : async () => {
+                        const accountId = myAccountId || loadConfig().defaultAssigneeId;
+                        if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
+                        try {
+                            await assignIssue(taskDetailTarget.key, accountId);
+                            // Refresh the right column depending on issue type
+                            const type = taskDetailTarget.fields.issuetype?.name?.toLowerCase() ?? '';
+                            if (type === (cfg.taskType || 'task').toLowerCase() && selectedStory) {
+                                const updated = await getTasksByStory(selectedStory.key);
+                                setTasks(updated);
+                                saveLS(PERSIST_TASKS_KEY, updated);
+                                const r = updated.find(t => t.key === taskDetailTarget.key);
+                                if (r) { setTaskDetailTarget(r); setSelectedTask(r); }
+                            } else if (selectedEpic) {
+                                const updated = await getStoriesByEpic(selectedEpic.key);
+                                setStories(updated);
+                                saveLS(PERSIST_STORIES_KEY, updated);
+                                const r = updated.find(s => s.key === taskDetailTarget.key);
+                                if (r) setTaskDetailTarget(r);
+                            }
+                        } catch (e: any) {
+                            setTransitionError(e?.message ?? 'Error al asignar');
+                        }
+                    }}
+                />
+            )}
 
             {/* API Request Log */}
             <div className="shrink-0 border-t border-slate-800 bg-slate-950">
@@ -1153,43 +1851,84 @@ function CreateIssueForm({ onCreated }: { onCreated: (key: string) => void }) {
     );
 }
 
-// ── Board View ─────────────────────────────────────────────────────────────────
-
 function BoardView() {
     const cfg = loadConfig();
     const [issues, setIssues] = useState<JiraIssue[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState<BoardFilter>('mine');
     const [selected, setSelected] = useState<JiraIssue | null>(null);
 
+    // Multi-filters
+    const [filter, setFilter] = useState<BoardFilter>(() => {
+        try {
+            const saved = localStorage.getItem('nexus_jira_board_filter');
+            return saved ? JSON.parse(saved) : { assignee: 'me' };
+        } catch { return { assignee: 'me' }; }
+    });
+    const [availableStatuses] = useState<string[]>([
+        'Open', 'In Progress', 'Done', 'Released', 'Discarded', 'Blocked', 'To Do', 'Review'
+    ]);
+    const [projectKey, setProjectKey] = useState<string>(() => {
+        return localStorage.getItem('nexus_jira_board_proj') || cfg.defaultProject;
+    });
+    const [projects, setProjects] = useState<{ key: string; name: string }[]>([]);
+    const [projectIssueTypes, setProjectIssueTypes] = useState<{ id: string; name: string }[]>([]);
+
+    useEffect(() => {
+        localStorage.setItem('nexus_jira_board_filter', JSON.stringify(filter));
+    }, [filter]);
+
+    useEffect(() => {
+        if (projectKey) localStorage.setItem('nexus_jira_board_proj', projectKey);
+        else localStorage.removeItem('nexus_jira_board_proj');
+    }, [projectKey]);
+
+    useEffect(() => {
+        getProjects().then(setProjects).catch(() => { });
+    }, []);
+
+    useEffect(() => {
+        const fetchMeta = async () => {
+            try {
+                if (projectKey) {
+                    const types = await getIssueTypes(projectKey);
+                    setProjectIssueTypes(types);
+                }
+            } catch (e) {
+                console.error('Failed to load board meta', e);
+            }
+        };
+        fetchMeta();
+    }, [projectKey]);
+
     const load = useCallback(async () => {
+        if (!projectKey) {
+            setError('Falta seleccionar un proyecto');
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
-            let data: JiraIssue[];
-            if (filter === 'mine') data = await getMyIssues();
-            else data = await getProjectIssues(cfg.defaultProject || 'defaultProject');
+            const data = await getBoardIssues(projectKey, filter);
             setIssues(data);
         } catch (e: any) {
             setError(e.message);
         } finally {
             setLoading(false);
         }
-    }, [filter, cfg.defaultProject]);
+    }, [filter, projectKey]);
 
-    useEffect(() => { load(); }, [load]);
+    // Apply text search on Enter only, other dropdown filters fetch instantly
+    useEffect(() => { load(); }, [load, filter.assignee, filter.issueType, filter.statuses, filter.text, projectKey]);
 
-    const filtered = issues.filter(i =>
-        !search || i.key.toLowerCase().includes(search.toLowerCase()) ||
-        i.fields.summary.toLowerCase().includes(search.toLowerCase())
-    );
+    // Handle pressing enter on search
+    const [searchInput, setSearchInput] = useState(filter.text || '');
 
-    const filterBtns: { id: BoardFilter; label: string }[] = [
-        { id: 'mine', label: 'Mis Issues' },
-        { id: 'project', label: `Proyecto (${cfg.defaultProject || '—'})` },
-    ];
+    const hasFilters = filter.assignee !== 'me' || filter.issueType || filter.statuses?.length || filter.text;
+    const resetFilters = () => {
+        setSearchInput('');
+        setFilter({ assignee: 'me' });
+    };
 
     if (!cfg.baseUrl) {
         return (
@@ -1202,31 +1941,109 @@ function BoardView() {
 
     return (
         <div className="flex flex-col h-full min-h-0">
-            {/* Toolbar */}
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 bg-slate-900/50 shrink-0 flex-wrap">
-                <div className="relative flex-1 min-w-40">
-                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                        value={search} onChange={e => setSearch(e.target.value)}
-                        placeholder="Buscar issues..."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-7 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
-                    />
-                    {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"><X size={11} /></button>}
-                </div>
-                {filterBtns.map(f => (
-                    <button key={f.id} onClick={() => setFilter(f.id)}
-                        className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition-colors ${filter === f.id ? 'bg-nexus-neon text-nexus-darker border-transparent' : 'text-slate-400 border-slate-700 hover:border-slate-500'}`}>
-                        {f.label}
+            {/* Toolbar — Multi-filter */}
+            <div className="flex flex-col gap-2 px-4 py-3 border-b border-slate-800 bg-slate-900/50 shrink-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                    {/* Project */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Proyecto:</span>
+                        <select
+                            value={projectKey || ''}
+                            onChange={e => {
+                                setProjectKey(e.target.value);
+                                setFilter(prev => ({ ...prev, issueType: undefined })); // Reset type filter on project change
+                            }}
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon font-bold text-nexus-neon"
+                        >
+                            <option value="">Seleccionar Proyecto...</option>
+                            {projects.map(p => <option key={p.key} value={p.key}>{p.key} ({p.name})</option>)}
+                        </select>
+                    </div>
+
+                    {/* Text search */}
+                    <div className="relative flex-1 min-w-[150px] ml-1">
+                        <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input
+                            value={searchInput}
+                            onChange={e => setSearchInput(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') setFilter(prev => ({ ...prev, text: searchInput }));
+                                if (e.key === 'Escape') { setSearchInput(''); setFilter(prev => ({ ...prev, text: undefined })); }
+                            }}
+                            placeholder="Buscar título o clave... ↵"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-7 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                        />
+                        {searchInput && (
+                            <button onClick={() => { setSearchInput(''); setFilter(prev => ({ ...prev, text: undefined })); }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded">
+                                <X size={11} />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Assignee */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider ml-1">Asignado:</span>
+                        <select
+                            value={filter.assignee ?? ''}
+                            onChange={e => setFilter(prev => ({ ...prev, assignee: e.target.value as any }))}
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon"
+                        >
+                            <option value="">Cualquier asignado</option>
+                            <option value="me">👤 Asignados a mí</option>
+                            <option value="unassigned">Sin asignar</option>
+                        </select>
+                    </div>
+
+                    {/* Issue Type */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider ml-1">Tipo:</span>
+                        <select
+                            value={filter.issueType ?? ''}
+                            onChange={e => setFilter(prev => ({ ...prev, issueType: e.target.value || undefined }))}
+                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon"
+                        >
+                            <option value="">Todos los tipos</option>
+                            {projectIssueTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Status Toggle */}
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider ml-1">Estado:</span>
+                        <div className="relative group">
+                            <select
+                                value={(filter.statuses ?? [])[0] ?? ''}
+                                onChange={e => setFilter(prev => ({ ...prev, statuses: e.target.value ? [e.target.value] : undefined }))}
+                                className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon min-w-[120px]"
+                            >
+                                <option value="">Todos los estados</option>
+                                {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex-1"></div> {/* Spacer */}
+
+                    {hasFilters && (
+                        <button onClick={resetFilters}
+                            className="text-[10px] text-nexus-neon hover:text-nexus-neon flex items-center gap-1 border border-nexus-neon/30 bg-nexus-neon/10 px-2 py-1.5 rounded" title="Restaurar a 'Asignados a mí'">
+                            <X size={10} /> Reset
+                        </button>
+                    )}
+
+                    <button onClick={load} disabled={loading} className="p-1.5 ml-2 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors border border-slate-700 bg-slate-950">
+                        <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                     </button>
-                ))}
-                <button onClick={load} disabled={loading} className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors">
-                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-                </button>
-                <span className="text-[10px] text-slate-600">{filtered.length} issues</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{issues.length} resultados en {projectKey || '—'}</span>
+                </div>
             </div>
 
-            {/* Issues */}
-            <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-2">
+            {/* Issues container... */}
+            <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-2 bg-slate-950">
                 {error && (
                     <div className="p-3 bg-nexus-danger/10 border border-nexus-danger/30 rounded-lg text-nexus-danger text-xs flex items-start gap-2">
                         <AlertCircle size={14} className="shrink-0 mt-0.5" /> {error}
@@ -1234,14 +2051,15 @@ function BoardView() {
                 )}
                 {loading && !issues.length ? (
                     <div className="flex items-center justify-center py-16 text-slate-500 gap-2">
-                        <RefreshCw size={16} className="animate-spin" /> Cargando issues...
+                        <RefreshCw size={16} className="animate-spin" /> Cargando tablero...
                     </div>
-                ) : filtered.length === 0 ? (
-                    <div className="text-center text-slate-600 py-16 text-sm">No se encontraron issues.</div>
+                ) : issues.length === 0 ? (
+                    <div className="text-center text-slate-500 py-16 text-[13px] border border-dashed border-slate-800 rounded-xl m-4 bg-slate-900/40">
+                        No se encontraron issues con los filtros actuales en el proyecto {projectKey}.
+                        {hasFilters && <p className="mt-2"><button onClick={resetFilters} className="text-nexus-neon underline decoration-nexus-neon/30 hover:decoration-nexus-neon">Restablecer filtros</button></p>}
+                    </div>
                 ) : (
-                    filtered.map(issue => (
-                        <IssueCard key={issue.id} issue={issue} onClick={() => setSelected(issue)} />
-                    ))
+                    issues.map(issue => <IssueCard key={issue.id} issue={issue} onClick={() => setSelected(issue)} />)
                 )}
             </div>
 
