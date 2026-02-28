@@ -21,6 +21,7 @@ export interface ViteFederationInfo {
 export interface ViteWrapperConfig {
     enabled: boolean;
     remotes: Record<string, string>;
+    disabledRemotes?: string[];
 }
 
 export interface ProxyCandidateItem {
@@ -46,15 +47,16 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
     const [remotes, setRemotes] = useState<Record<string, string>>({});
     const [federationName, setFederationName] = useState('');
     const [remoteList, setRemoteList] = useState<ViteRemoteEntry[]>([]);
+    const [disabledRemotes, setDisabledRemotes] = useState<Set<string>>(new Set());
     const [loading, setLoading] = useState(false);
     const [newRemoteName, setNewRemoteName] = useState('');
     const [newRemoteUrl, setNewRemoteUrl] = useState('');
 
     const persistCurrentProject = useCallback(() => {
         if (!selectedPath) return;
-        const config: ViteWrapperConfig = { enabled, remotes };
+        const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes] };
         localStorage.setItem(storageKey(selectedPath), JSON.stringify(config));
-    }, [selectedPath, enabled, remotes]);
+    }, [selectedPath, enabled, remotes, disabledRemotes]);
 
     const loadFederation = useCallback(async (projectPath: string) => {
         if (!projectPath) return;
@@ -72,6 +74,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                 if (savedRaw) saved = JSON.parse(savedRaw);
             } catch (_) { }
             setEnabled(!!saved.enabled);
+            setDisabledRemotes(new Set(saved.disabledRemotes ?? []));
             const merged: Record<string, string> = {};
             onlyInWorkspace.forEach(r => {
                 merged[r.name] = saved.remotes?.[r.name] ?? r.default_url;
@@ -105,9 +108,18 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
     };
 
     const handleSave = () => {
-        const config: ViteWrapperConfig = { enabled, remotes };
+        const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes] };
         localStorage.setItem(storageKey(selectedPath), JSON.stringify(config));
         onClose();
+    };
+
+    const toggleRemote = (name: string) => {
+        setDisabledRemotes(prev => {
+            const next = new Set(prev);
+            if (next.has(name)) next.delete(name);
+            else next.add(name);
+            return next;
+        });
     };
 
     const setRemoteUrl = (name: string, url: string) => {
@@ -189,52 +201,74 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                     <div>
                                         <p className="text-xs text-slate-400 mb-2">Remotes (URL local por MFE)</p>
                                         <div className="space-y-2 max-h-48 overflow-y-auto">
-                                            {remoteList.map(r => (
-                                                <div key={r.name} className="flex items-center gap-2">
-                                                    <span className="w-40 shrink-0 text-xs font-mono text-slate-400 truncate" title={r.name}>
-                                                        {r.name}
-                                                    </span>
-                                                    <input
-                                                        type="text"
-                                                        value={remotes[r.name] ?? r.default_url}
-                                                        onChange={e => setRemoteUrl(r.name, e.target.value)}
-                                                        className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none"
-                                                        placeholder={r.default_url || 'http://localhost:PORT/.../remoteEntry.js'}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => removeRemote(r.name)}
-                                                        className="p-1 text-slate-500 hover:text-nexus-danger rounded transition-colors shrink-0"
-                                                        title="Quitar"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                            {Object.entries(remotes)
-                                                .filter(([name]) => !remoteList.some(r => r.name === name))
-                                                .map(([name, url]) => (
-                                                    <div key={name} className="flex items-center gap-2">
-                                                        <span className="w-40 shrink-0 text-xs font-mono text-slate-400 truncate" title={name}>
-                                                            {name}
+                                            {remoteList.map(r => {
+                                                const isEnabled = !disabledRemotes.has(r.name);
+                                                return (
+                                                    <div key={r.name} className={`flex items-center gap-2 ${!isEnabled ? 'opacity-50' : ''}`}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isEnabled}
+                                                            onChange={() => toggleRemote(r.name)}
+                                                            className="accent-nexus-neon shrink-0"
+                                                            title={isEnabled ? 'Deshabilitar remote' : 'Habilitar remote'}
+                                                        />
+                                                        <span className="w-36 shrink-0 text-xs font-mono text-slate-400 truncate" title={r.name}>
+                                                            {r.name}
                                                         </span>
                                                         <input
                                                             type="text"
-                                                            value={url}
-                                                            onChange={e => setRemoteUrl(name, e.target.value)}
-                                                            className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none"
-                                                            placeholder="http://localhost:PORT/.../remoteEntry.js"
+                                                            value={remotes[r.name] ?? r.default_url}
+                                                            onChange={e => setRemoteUrl(r.name, e.target.value)}
+                                                            disabled={!isEnabled}
+                                                            className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none disabled:cursor-not-allowed"
+                                                            placeholder={r.default_url || 'http://localhost:PORT/.../remoteEntry.js'}
                                                         />
                                                         <button
                                                             type="button"
-                                                            onClick={() => removeRemote(name)}
+                                                            onClick={() => removeRemote(r.name)}
                                                             className="p-1 text-slate-500 hover:text-nexus-danger rounded transition-colors shrink-0"
                                                             title="Quitar"
                                                         >
                                                             <Trash2 size={14} />
                                                         </button>
                                                     </div>
-                                                ))}
+                                                );
+                                            })}
+                                            {Object.entries(remotes)
+                                                .filter(([name]) => !remoteList.some(r => r.name === name))
+                                                .map(([name, url]) => {
+                                                    const isEnabled = !disabledRemotes.has(name);
+                                                    return (
+                                                        <div key={name} className={`flex items-center gap-2 ${!isEnabled ? 'opacity-50' : ''}`}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isEnabled}
+                                                                onChange={() => toggleRemote(name)}
+                                                                className="accent-nexus-neon shrink-0"
+                                                                title={isEnabled ? 'Deshabilitar remote' : 'Habilitar remote'}
+                                                            />
+                                                            <span className="w-36 shrink-0 text-xs font-mono text-slate-400 truncate" title={name}>
+                                                                {name}
+                                                            </span>
+                                                            <input
+                                                                type="text"
+                                                                value={url}
+                                                                onChange={e => setRemoteUrl(name, e.target.value)}
+                                                                disabled={!isEnabled}
+                                                                className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none disabled:cursor-not-allowed"
+                                                                placeholder="http://localhost:PORT/.../remoteEntry.js"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => removeRemote(name)}
+                                                                className="p-1 text-slate-500 hover:text-nexus-danger rounded transition-colors shrink-0"
+                                                                title="Quitar"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
                                         </div>
                                         <div className="mt-2 flex gap-2 flex-wrap items-center">
                                             <input
@@ -290,7 +324,16 @@ export function getViteWrapperConfig(projectPath: string): ViteWrapperConfig | n
         const raw = localStorage.getItem(storageKey(projectPath));
         if (!raw) return null;
         const parsed = JSON.parse(raw) as ViteWrapperConfig;
-        return parsed.enabled ? parsed : null;
+        if (!parsed.enabled) return null;
+        // Filter out disabled remotes so generate_vite_wrapper leaves their original URLs
+        const disabled = new Set(parsed.disabledRemotes ?? []);
+        if (disabled.size > 0) {
+            const filteredRemotes = Object.fromEntries(
+                Object.entries(parsed.remotes).filter(([name]) => !disabled.has(name))
+            );
+            return { ...parsed, remotes: filteredRemotes };
+        }
+        return parsed;
     } catch {
         return null;
     }

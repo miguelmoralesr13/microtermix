@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import type { CommandStep } from '../types/commands';
 
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import type { NexusWorkspaceConfig } from '../types/workspaceConfig';
 import { applyWorkspaceConfigToStorage } from '../types/workspaceConfig';
+import { parseInlineEnvs } from '../utils/parseInlineEnvs';
+import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 
 export interface Project {
     name: String;
@@ -13,7 +16,7 @@ export interface Project {
     scripts?: string[];
 }
 
-export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer';
+export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests';
 export type ProcessStatus = 'idle' | 'running' | 'error' | 'stopped';
 
 export interface ProcessState {
@@ -22,11 +25,6 @@ export interface ProcessState {
     envJson?: string;
     logs?: string[];
     restarts?: number;
-}
-
-export interface Environment {
-    name: string;
-    variables: Record<string, string>;
 }
 
 export interface GitConfig {
@@ -41,11 +39,11 @@ export interface WorkspaceState {
     activeProcesses: Record<string, ProcessState>;
     activeView: AppView;
     targetTerminalTab: string | null;
-    environments: Environment[];
-    activeEnvironment: string;
     gitConfig: GitConfig;
     /** Se incrementa al aplicar una config cargada; ServiceManager relee localStorage cuando cambia */
     configAppliedTrigger: number;
+    savedCommands: Record<string, string>;
+    savedCommandSteps: Record<string, CommandStep[]>;
 }
 
 interface WorkspaceContextType {
@@ -61,9 +59,22 @@ interface WorkspaceContextType {
     appendProcessLog: (serviceId: string, logLine: string) => void;
     setActiveView: (view: AppView) => void;
     setTargetTerminalTab: (tabId: string | null) => void;
-    addEnvironment: (env: Environment) => void;
-    setActiveEnvironment: (name: string) => void;
     setGitConfig: (config: GitConfig) => void;
+    addSavedCommand: (name: string, command: string, steps?: CommandStep[]) => void;
+    removeSavedCommand: (name: string) => void;
+    /**
+     * Centralized execution logic for a project script.
+     * Takes care of checking multi-execution "buildFirst", fetching envs from localStorage,
+     * applying vite wrapper logic, and invoking Tauri.
+     */
+    executeProjectScript: (
+        projectPath: string,
+        rawScript: string,
+        options?: {
+            globalEnvName?: string;
+            incrementRestart?: boolean;
+        }
+    ) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -72,8 +83,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const [state, setState] = useState<WorkspaceState>(() => {
         const savedSettings = localStorage.getItem('nexus-workspace-settings');
         let currentPath = '';
-        let environments = [{ name: 'local', variables: { 'NODE_ENV': 'development', 'PORT': '3000' } }];
-        let activeEnvironment = 'local';
 
         let gitConfig: GitConfig = { provider: 'none', url: '', token: '' };
         const savedGitSettings = localStorage.getItem('nexus-git-settings');
@@ -84,12 +93,15 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             } catch (e) { }
         }
 
+        let savedCommands: Record<string, string> = {};
+        let savedCommandSteps: Record<string, CommandStep[]> = {};
+
         if (savedSettings) {
             try {
                 const parsed = JSON.parse(savedSettings);
                 if (parsed.currentPath) currentPath = parsed.currentPath;
-                if (parsed.environments) environments = parsed.environments;
-                if (parsed.activeEnvironment) activeEnvironment = parsed.activeEnvironment;
+                if (parsed.savedCommands) savedCommands = parsed.savedCommands;
+                if (parsed.savedCommandSteps) savedCommandSteps = parsed.savedCommandSteps;
             } catch (e) { }
         }
 
@@ -99,9 +111,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             activeProcesses: {},
             activeView: 'services',
             targetTerminalTab: null,
-            environments,
-            activeEnvironment,
             gitConfig,
+            savedCommands,
+            savedCommandSteps,
             configAppliedTrigger: 0
         };
     });
@@ -110,14 +122,21 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         localStorage.setItem('nexus-git-settings', JSON.stringify(state.gitConfig));
     }, [state.gitConfig]);
 
+    // Persist savedCommands and savedCommandSteps whenever they change
     React.useEffect(() => {
-        const settings = {
-            currentPath: state.currentPath,
-            environments: state.environments,
-            activeEnvironment: state.activeEnvironment
-        };
+        try {
+            const current = localStorage.getItem('nexus-workspace-settings');
+            const parsed = current ? JSON.parse(current) : {};
+            parsed.savedCommands = state.savedCommands;
+            parsed.savedCommandSteps = state.savedCommandSteps;
+            localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
+        } catch (_) { }
+    }, [state.savedCommands, state.savedCommandSteps]);
+
+    React.useEffect(() => {
+        const settings = { currentPath: state.currentPath, savedCommands: state.savedCommands };
         localStorage.setItem('nexus-workspace-settings', JSON.stringify(settings));
-    }, [state.currentPath, state.environments, state.activeEnvironment]);
+    }, [state.currentPath]);
 
     const activeProcessesRef = React.useRef(state.activeProcesses);
     React.useEffect(() => {
@@ -135,9 +154,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setState(prev => ({
             ...prev,
             configAppliedTrigger: prev.configAppliedTrigger + 1,
-            ...(config.environments?.length && { environments: config.environments }),
-            ...(config.activeEnvironment != null && { activeEnvironment: config.activeEnvironment }),
             ...(config.gitConfig != null && { gitConfig: config.gitConfig as GitConfig }),
+            ...(config.savedCommands != null && { savedCommands: config.savedCommands }),
+            ...(config.savedCommandSteps != null && { savedCommandSteps: config.savedCommandSteps }),
         }));
     }, []);
 
@@ -174,7 +193,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     }, []);
 
-    const updateProcessStatus = (serviceId: string, status: ProcessStatus, script?: string, envJson?: string, incrementRestart?: boolean) => {
+    const updateProcessStatus = useCallback((serviceId: string, status: ProcessStatus, script?: string, envJson?: string, incrementRestart?: boolean) => {
         setState(prev => {
             const existing = prev.activeProcesses[serviceId] || {};
 
@@ -207,7 +226,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 }
             };
         });
-    };
+    }, []);
 
     const appendProcessLog = useCallback((serviceId: string, logLine: string) => {
         setState(prev => {
@@ -227,6 +246,22 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             };
         });
     }, []);
+
+    // Listener: proceso terminó de forma natural (el proceso hijo salió solo)
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        let cancelled = false;
+        listen<string>('service-stopped', (event) => {
+            updateProcessStatus(event.payload, 'stopped');
+        }).then(fn => {
+            if (cancelled) fn();
+            else unlisten = fn;
+        });
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, [updateProcessStatus]);
 
     // Listener global: una sola inscripción; si el cleanup corre antes de .then(), desregistramos al resolver
     useEffect(() => {
@@ -255,25 +290,106 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setState(prev => ({ ...prev, targetTerminalTab: tabId }));
     };
 
-    const addEnvironment = (env: Environment) => {
-        setState(prev => ({
-            ...prev,
-            environments: [...prev.environments.filter(e => e.name !== env.name), env]
-        }));
-    };
-
-    const setActiveEnvironment = (name: string) => {
-        setState(prev => ({ ...prev, activeEnvironment: name }));
-    };
-
     const setGitConfig = (config: GitConfig) => {
         setState(prev => ({ ...prev, gitConfig: config }));
     };
 
+    const addSavedCommand = (name: string, command: string, steps?: CommandStep[]) => {
+        setState(prev => ({
+            ...prev,
+            savedCommands: { ...prev.savedCommands, [name]: command },
+            savedCommandSteps: steps
+                ? { ...prev.savedCommandSteps, [name]: steps }
+                : prev.savedCommandSteps,
+        }));
+    };
+
+    const removeSavedCommand = (name: string) => {
+        setState(prev => {
+            const nextCmds = { ...prev.savedCommands };
+            delete nextCmds[name];
+            const nextSteps = { ...prev.savedCommandSteps };
+            delete nextSteps[name];
+            return { ...prev, savedCommands: nextCmds, savedCommandSteps: nextSteps };
+        });
+    };
+
+    const executeProjectScript = useCallback(async (
+        projectPath: string,
+        rawScript: string,
+        options?: {
+            globalEnvName?: string;
+            buildFirst?: boolean;
+            incrementRestart?: boolean;
+        }
+    ) => {
+        const { globalEnvName = 'none', buildFirst = false, incrementRestart = false } = options || {};
+        const compositeServiceId = `${projectPath}::${rawScript} `;
+
+        // Check if rawScript is actually a saved named command
+        let actualScript = rawScript;
+        if (state.savedCommands && state.savedCommands[rawScript]) {
+            actualScript = state.savedCommands[rawScript];
+        }
+
+        // Load envs FIRST so we can build a display string showing them at {{ENVS}} position
+        let configuredEnv: Record<string, string> = {};
+        try {
+            const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
+            if (rawStore) {
+                const parsed = JSON.parse(rawStore);
+                let targetEnv = globalEnvName;
+                if (targetEnv === 'none' && parsed.activeEnv && parsed.activeEnv !== 'none') {
+                    targetEnv = parsed.activeEnv;
+                }
+                if (targetEnv !== 'none' && parsed.envs && parsed.envs[targetEnv]) {
+                    configuredEnv = parsed.envs[targetEnv];
+                } else if (targetEnv !== 'none' && parsed.activeEnv && parsed.envs && parsed.envs[parsed.activeEnv]) {
+                    // El env solicitado no existe en este proyecto → fallback al env activo del proyecto
+                    configuredEnv = parsed.envs[parsed.activeEnv];
+                }
+            }
+        } catch (err) { }
+
+        // Reemplazar {{ENVS}} con los valores reales para cross-env inline.
+        // Si no hay envs, eliminar "cross-env {{ENVS}}" del comando.
+        const envString = Object.entries(configuredEnv).map(([k, v]) => `${k}=${v}`).join(' ');
+        const builtScript = envString
+            ? actualScript.replace(/\{\{ENVS\}\}/g, envString).trim()
+            : actualScript.replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/\{\{ENVS\}\}\s*/g, '').trim();
+
+        // parseInlineEnvs extrae vars KEY=VAL que estén al inicio del comando (compat. con comandos sin cross-env)
+        const { command: scriptToRun, env: inlineEnvs } = parseInlineEnvs(builtScript);
+        const baseScript = scriptToRun || builtScript;
+
+        const effectiveScript = buildFirst ? `npm run build && ${baseScript}` : baseScript;
+
+        try {
+            const envVarsJson = JSON.stringify({ ...configuredEnv, ...inlineEnvs });
+            const viteConfig = getViteWrapperConfig(projectPath);
+            const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
+            const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
+
+            updateProcessStatus(compositeServiceId, 'running', rawScript, envVarsJson, incrementRestart);
+            await invoke('execute_service_script', {
+                serviceId: compositeServiceId,
+                projectPath,
+                script: effectiveScript,
+                envVarsJson,
+                useViteWrapper: useViteWrapper || undefined,
+                viteWrapperRemotes,
+            });
+        } catch (e) {
+            console.error(`Execution failed for ${compositeServiceId}`, e);
+            updateProcessStatus(compositeServiceId, 'error');
+        }
+    }, [updateProcessStatus]);
+
     return (
         <WorkspaceContext.Provider value={{
             state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow,
-            updateProcessStatus, appendProcessLog, setActiveView, setTargetTerminalTab, addEnvironment, setActiveEnvironment, setGitConfig
+            updateProcessStatus, appendProcessLog, setActiveView, setTargetTerminalTab, setGitConfig,
+            executeProjectScript, addSavedCommand, removeSavedCommand
         }}>
             {children}
         </WorkspaceContext.Provider>

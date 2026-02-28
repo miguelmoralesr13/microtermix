@@ -567,7 +567,7 @@ function TransitionFieldsModal({ target, onConfirm, onClose }: {
     onConfirm: (comment: string, fields: Record<string, any>) => void;
     onClose: () => void;
 }) {
-    const cfg = loadConfig();
+    loadConfig();
     const isDiscard = /discard/i.test(target.transition.toName) || /discard/i.test(target.transition.name);
     const reqFields = Object.entries(target.transition.fields ?? {}).filter(([, f]) => f.required);
     const hasCommentField = reqFields.some(([k]) => k === 'comment');

@@ -1,3 +1,5 @@
+import type { CommandStep } from './commands';
+
 /**
  * Configuración del workspace que se guarda en nexus-workspace.json en la carpeta del workspace.
  * Los proyectos se identifican solo por nombre de carpeta (no rutas) para evitar conflictos entre máquinas/rutas.
@@ -9,10 +11,10 @@ export interface NexusWorkspaceConfig {
     selectedProjects?: string[];
     multiScript?: string;
     globalEnvName?: string;
-    environments?: { name: string; variables: Record<string, string> }[];
-    activeEnvironment?: string;
     gitConfig?: { provider: string; url: string; token: string };
     vitePreviewOpen?: boolean;
+    savedCommands?: Record<string, string>;
+    savedCommandSteps?: Record<string, CommandStep[]>;
     /** Nombre de carpeta del tab de terminal activo. */
     activeTerminalTabId?: string | null;
     /** Por proyecto: key = nombre de carpeta del proyecto */
@@ -54,22 +56,22 @@ export function applyWorkspaceConfigToStorage(
             if (resolved.length) {
                 localStorage.setItem(`nexus-selected-projects-${pathKey}`, JSON.stringify(resolved));
             }
-        } catch (_) {}
+        } catch (_) { }
     }
     if (config.multiScript != null) {
         try {
             localStorage.setItem('nexus-multi-script', config.multiScript);
-        } catch (_) {}
+        } catch (_) { }
     }
     if (config.globalEnvName != null) {
         try {
             localStorage.setItem('nexus-multi-env-name', config.globalEnvName);
-        } catch (_) {}
+        } catch (_) { }
     }
     if (config.vitePreviewOpen != null) {
         try {
             localStorage.setItem('nexus-vite-preview-open', config.vitePreviewOpen ? '1' : '0');
-        } catch (_) {}
+        } catch (_) { }
     }
     if (config.activeTerminalTabId != null) {
         try {
@@ -79,7 +81,7 @@ export function applyWorkspaceConfigToStorage(
                     localStorage.setItem(`nexus-active-terminal-tab-${pathKey}`, resolved);
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
     }
     if (config.projectEnvs) {
         for (const [folderName, value] of Object.entries(config.projectEnvs)) {
@@ -88,7 +90,7 @@ export function applyWorkspaceConfigToStorage(
                 if (resolved) {
                     localStorage.setItem(`nexus-envs-${pathKeyFor(resolved)}`, JSON.stringify(value));
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
     }
     if (config.projectViteWrapper) {
@@ -98,8 +100,17 @@ export function applyWorkspaceConfigToStorage(
                 if (resolved) {
                     localStorage.setItem(`nexus-vite-wrapper-${pathKeyFor(resolved)}`, JSON.stringify(value));
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
+    }
+    if (config.savedCommands || config.savedCommandSteps) {
+        try {
+            const current = localStorage.getItem('nexus-workspace-settings');
+            const parsed = current ? JSON.parse(current) : {};
+            if (config.savedCommands) parsed.savedCommands = config.savedCommands;
+            if (config.savedCommandSteps) parsed.savedCommandSteps = config.savedCommandSteps;
+            localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
+        } catch (_) { }
     }
 }
 
@@ -108,12 +119,12 @@ export function buildWorkspaceConfigFromCurrentState(
     selectedProjects: string[],
     multiScript: string,
     globalEnvName: string,
-    environments: { name: string; variables: Record<string, string> }[],
-    activeEnvironment: string,
     gitConfig: { provider: string; url: string; token: string },
     vitePreviewOpen: boolean,
     activeTerminalTabId: string | null,
     projectPaths: string[],
+    savedCommands: Record<string, string> = {},
+    savedCommandSteps: Record<string, CommandStep[]> = {},
 ): NexusWorkspaceConfig {
     const pathKey = (p: string) => p.replace(/[/\\:]/g, '_');
     const projectEnvs: Record<string, { activeEnv: string; envs: Record<string, Record<string, string>> }> = {};
@@ -127,14 +138,14 @@ export function buildWorkspaceConfigFromCurrentState(
                 const parsed = JSON.parse(raw);
                 projectEnvs[folderName] = parsed;
             }
-        } catch (_) {}
+        } catch (_) { }
         try {
             const raw = localStorage.getItem(`nexus-vite-wrapper-${pathKey(p)}`);
             if (raw) {
                 const parsed = JSON.parse(raw);
                 projectViteWrapper[folderName] = parsed;
             }
-        } catch (_) {}
+        } catch (_) { }
     }
 
     return {
@@ -143,10 +154,10 @@ export function buildWorkspaceConfigFromCurrentState(
         selectedProjects: selectedProjects.map(getFolderName),
         multiScript,
         globalEnvName,
-        environments,
-        activeEnvironment,
         gitConfig,
         vitePreviewOpen,
+        savedCommands,
+        savedCommandSteps: Object.keys(savedCommandSteps).length ? savedCommandSteps : undefined,
         activeTerminalTabId: activeTerminalTabId ? getFolderName(activeTerminalTabId) : undefined,
         projectEnvs: Object.keys(projectEnvs).length ? projectEnvs : undefined,
         projectViteWrapper: Object.keys(projectViteWrapper).length ? projectViteWrapper : undefined,

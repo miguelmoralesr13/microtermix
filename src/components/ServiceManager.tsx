@@ -1,17 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { ProjectRow } from './ProjectRow';
-import { TerminalView } from './TerminalView';
+import { Sidebar } from './layout/Sidebar';
+import { Header } from './layout/Header';
+import { ProjectListPane } from './services/ProjectListPane';
+import { MultiExecutionBar } from './services/MultiExecutionBar';
+import { TerminalTabsBar } from './services/TerminalTabsBar';
+import { TerminalArea } from './services/TerminalArea';
 import { GitPanel } from './GitPanel';
 import { JiraPanel } from './JiraPanel';
 import { ProcessesPanel } from './ProcessesPanel';
 import { ProxyPanel } from './ProxyPanel';
 import { FileServerPanel } from './FileServerPanel';
+import { CommandsPanel } from './CommandsPanel';
+import { TestsPanel } from './TestsPanel';
 import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
-import { GitBranch, Trello, Server, RotateCcw, X, Play, Square, Activity, Globe, FileCode, FolderOpen, FolderPlus, SquareStack, ChevronDown, ChevronRight, Save, Upload } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 
 const ACTIVE_TERMINAL_STORAGE_KEY = 'nexus-active-terminal-tab';
@@ -27,7 +32,7 @@ function selectedProjectsKey(workspacePath: string): string {
 }
 
 export const ServiceManager: React.FC = () => {
-    const { state, setActiveView, setTargetTerminalTab, updateProcessStatus, applyWorkspaceConfig, setWorkspacePath, scanWorkspace, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
+    const { state, setTargetTerminalTab, updateProcessStatus, applyWorkspaceConfig, setWorkspacePath, scanWorkspace, executeProjectScript } = useWorkspace();
     const [activeTerminalTab, setActiveTerminalTabState] = useState<string | null>(null);
     const processIds = Object.keys(state.activeProcesses);
 
@@ -70,7 +75,6 @@ export const ServiceManager: React.FC = () => {
 
     const [multiScript, setMultiScript] = useState<string>(() => localStorage.getItem('nexus-multi-script') || '');
     const [globalEnvName, setGlobalEnvName] = useState<string>(() => localStorage.getItem('nexus-multi-env-name') || 'dev');
-    const [buildFirst, setBuildFirst] = useState<boolean>(() => localStorage.getItem('nexus-multi-build-first') === '1');
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const restoredSelectedRef = React.useRef(false);
     const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
@@ -98,10 +102,6 @@ export const ServiceManager: React.FC = () => {
     React.useEffect(() => {
         try { localStorage.setItem('nexus-vite-preview-open', vitePreviewOpen ? '1' : '0'); } catch (_) { }
     }, [vitePreviewOpen]);
-
-    React.useEffect(() => {
-        try { localStorage.setItem('nexus-multi-build-first', buildFirst ? '1' : '0'); } catch (_) { }
-    }, [buildFirst]);
 
     // Releer desde localStorage cuando se aplica una config cargada
     React.useEffect(() => {
@@ -156,56 +156,20 @@ export const ServiceManager: React.FC = () => {
     const handleBatchPlay = async () => {
         if (selectedProjects.length === 0 || !multiScript) return;
 
-        const { command: scriptToRun } = parseInlineEnvs(multiScript);
-        const baseScript = scriptToRun || multiScript;
-        // Extract bare script name from "npm run <name>" to look it up in package.json
-        const bareScriptName = multiScript.replace(/^npm\s+run\s+/i, '').split(' ')[0].trim();
-
         await Promise.all(selectedProjects.map(async (projectPath) => {
-            const compositeServiceId = `${projectPath}::${multiScript} `;
-            const existing = state.activeProcesses[compositeServiceId];
-            if (existing?.status === 'running') return;
-
-            // Build First: prepend npm run build unless this script IS a build
-            const alreadyBuilds = /\bbuild\b/i.test(bareScriptName);
-            const effectiveScript = (buildFirst && !alreadyBuilds)
-                ? `npm run build && ${baseScript}`
-                : baseScript;
-
-            try {
-                let configuredEnv: Record<string, string> = {};
-                if (globalEnvName !== 'none') {
-                    try {
-                        const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
-                        if (rawStore) {
-                            const parsed = JSON.parse(rawStore);
-                            // Always use the global env selector — ignore per-project activeEnv tab
-                            if (parsed.envs && parsed.envs[globalEnvName]) {
-                                configuredEnv = parsed.envs[globalEnvName];
-                            }
-                        }
-                    } catch (err) { }
-                }
-
-                const envVarsJson = JSON.stringify(configuredEnv);
-                const viteConfig = getViteWrapperConfig(projectPath);
-                const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
-                const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
-
-                updateProcessStatus(compositeServiceId, 'running', multiScript, envVarsJson);
-                await invoke('execute_service_script', {
-                    serviceId: compositeServiceId,
-                    projectPath,
-                    script: effectiveScript,
-                    envVarsJson,
-                    useViteWrapper: useViteWrapper || undefined,
-                    viteWrapperRemotes,
-                });
-            } catch (e) {
-                console.error(`Execution failed for ${compositeServiceId}`, e);
-                updateProcessStatus(compositeServiceId, 'error');
-            }
+            await handlePlayScript(projectPath, multiScript);
         }));
+    };
+
+    const handlePlayScript = async (projectPath: string, script: string) => {
+        if (!script) return;
+        const compositeServiceId = `${projectPath}::${script} `;
+        const existing = state.activeProcesses[compositeServiceId];
+        if (existing?.status === 'running') return;
+
+        await executeProjectScript(projectPath, script, {
+            globalEnvName
+        });
     };
 
     const handleBatchStop = async () => {
@@ -223,50 +187,14 @@ export const ServiceManager: React.FC = () => {
         if (selectedProjects.length === 0 || !multiScript) return;
         const projectsToRestart = [...selectedProjects];
         const scriptToRestart = multiScript;
+
         await handleBatchStop();
         await new Promise(r => setTimeout(r, 400));
-        const { command: scriptToRun } = parseInlineEnvs(scriptToRestart);
-        const baseScript = scriptToRun || scriptToRestart;
-        const bareScriptName = scriptToRestart.replace(/^npm\s+run\s+/i, '').split(' ')[0].trim();
 
         await Promise.all(projectsToRestart.map(async (projectPath) => {
-            const compositeServiceId = `${projectPath}::${scriptToRestart} `;
-
-            // Build First: prepend npm run build unless this script IS a build
-            const alreadyBuilds = /\bbuild\b/i.test(bareScriptName);
-            const effectiveScript = (buildFirst && !alreadyBuilds)
-                ? `npm run build && ${baseScript}`
-                : baseScript;
-
-            try {
-                let configuredEnv: Record<string, string> = {};
-                if (globalEnvName !== 'none') {
-                    try {
-                        const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
-                        if (rawStore) {
-                            const parsed = JSON.parse(rawStore);
-                            // Always use the global env selector — ignore per-project activeEnv tab
-                            if (parsed.envs && parsed.envs[globalEnvName]) configuredEnv = parsed.envs[globalEnvName];
-                        }
-                    } catch (err) { }
-                }
-                const envVarsJson = JSON.stringify(configuredEnv);
-                const viteConfig = getViteWrapperConfig(projectPath);
-                const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
-                const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
-                updateProcessStatus(compositeServiceId, 'running', scriptToRestart, envVarsJson);
-                await invoke('execute_service_script', {
-                    serviceId: compositeServiceId,
-                    projectPath,
-                    script: effectiveScript,
-                    envVarsJson,
-                    useViteWrapper: useViteWrapper || undefined,
-                    viteWrapperRemotes,
-                });
-            } catch (e) {
-                console.error(`Restart failed for ${compositeServiceId}`, e);
-                updateProcessStatus(compositeServiceId, 'error');
-            }
+            await executeProjectScript(projectPath, scriptToRestart, {
+                globalEnvName
+            });
         }));
     };
 
@@ -275,24 +203,13 @@ export const ServiceManager: React.FC = () => {
         e.preventDefault(); e.stopPropagation();
         const pState = state.activeProcesses[serviceId];
         if (!pState?.script) return;
-
-        const { command: scriptToRun } = parseInlineEnvs(pState.script);
-        const effectiveScript = scriptToRun || pState.script;
-        const envVarsJson = pState.envJson || '{}';
+        const projectPath = serviceId.split('::')[0];
 
         await invoke('kill_service', { serviceId });
-        updateProcessStatus(serviceId, 'running', pState.script, envVarsJson, true);
         setTimeout(async () => {
-            const projectPath = serviceId.split('::')[0];
-            const viteConfig = getViteWrapperConfig(projectPath);
-            const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
-            const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
-            await invoke('execute_service_script', {
-                serviceId, projectPath,
-                script: effectiveScript,
-                envVarsJson,
-                useViteWrapper: useViteWrapper || undefined,
-                viteWrapperRemotes,
+            await executeProjectScript(projectPath, pState.script as string, {
+                globalEnvName,
+                incrementRestart: true
             });
         }, 500);
     };
@@ -326,12 +243,12 @@ export const ServiceManager: React.FC = () => {
                 selectedProjects,
                 multiScript,
                 globalEnvName,
-                state.environments,
-                state.activeEnvironment,
                 state.gitConfig,
                 vitePreviewOpen,
                 activeTerminalTab,
                 state.projects.map(p => p.path as string),
+                state.savedCommands,
+                state.savedCommandSteps,
             );
             await invoke('write_workspace_config_in_folder', {
                 workspacePath: state.currentPath,
@@ -354,12 +271,12 @@ export const ServiceManager: React.FC = () => {
                     selectedProjects,
                     multiScript,
                     globalEnvName,
-                    state.environments,
-                    state.activeEnvironment,
                     state.gitConfig,
                     vitePreviewOpen,
                     activeTerminalTab,
                     state.projects.map(p => p.path as string),
+                    state.savedCommands,
+                    state.savedCommandSteps,
                 );
                 await invoke('write_workspace_config_in_folder', {
                     workspacePath: state.currentPath,
@@ -369,8 +286,8 @@ export const ServiceManager: React.FC = () => {
         }, 1500);
         return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
     }, [
-        selectedProjects, multiScript, globalEnvName, buildFirst, vitePreviewOpen,
-        activeTerminalTab, state.currentPath, state.environments, state.activeEnvironment, state.gitConfig,
+        selectedProjects, multiScript, globalEnvName, vitePreviewOpen,
+        activeTerminalTab, state.currentPath, state.gitConfig, state.savedCommands, state.savedCommandSteps
     ]);
 
     const handleLoadWorkspaceConfig = async () => {
@@ -430,238 +347,52 @@ export const ServiceManager: React.FC = () => {
     // ─── Layout ─────────────────────────────────────────────────────────────
     return (
         <div className="flex w-full h-full bg-nexus-dark text-slate-200 overflow-hidden">
-            {/* Nav Sidebar (Icons) — compacto */}
-            <div className="w-12 h-full bg-slate-950 flex flex-col items-center py-2 border-r border-slate-800 shrink-0 gap-1 relative z-20">
-                <div
-                    onClick={() => setActiveView('services')}
-                    className={`p-2 rounded-md cursor-pointer transition-colors ${state.activeView === 'services' ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
-                    title="Services & Terminals"
-                >
-                    <Server size={20} />
-                </div>
-                <div
-                    onClick={() => setActiveView('git')}
-                    className={`p-2 rounded-md cursor-pointer transition-colors ${state.activeView === 'git' ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
-                    title="Git"
-                >
-                    <GitBranch size={20} />
-                </div>
-                <div
-                    onClick={() => setActiveView('jira')}
-                    className={`p-2 rounded-md cursor-pointer transition-colors ${state.activeView === 'jira' ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
-                    title="Jira"
-                >
-                    <Trello size={20} />
-                </div>
-                <div
-                    onClick={() => setActiveView('processes')}
-                    className={`p-2 rounded-md cursor-pointer transition-colors ${state.activeView === 'processes' ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
-                    title="Procesos en escucha"
-                >
-                    <Activity size={20} />
-                </div>
-                <div
-                    onClick={() => setActiveView('proxy')}
-                    className={`p-2 rounded-md cursor-pointer transition-colors ${state.activeView === 'proxy' ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
-                    title="Proxy reverso"
-                >
-                    <Globe size={20} />
-                </div>
-                <div
-                    onClick={() => setActiveView('fileServer')}
-                    className={`p-2 rounded-md cursor-pointer transition-colors ${state.activeView === 'fileServer' ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
-                    title="Servidor de archivos"
-                >
-                    <FolderOpen size={20} />
-                </div>
-            </div>
+            <Sidebar />
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col  h-full overflow-hidden">
-                <header className="h-14 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 bg-slate-950/50 relative z-10 w-full gap-4">
-                    {/* Izquierda: Path del Workspace + Refresh */}
-                    <div className="flex-1 flex justify-start items-center min-w-0 gap-2">
-                        <span className="text-xs text-slate-500 font-mono truncate max-w-sm lg:max-w-md bg-slate-900/50 px-3 py-1.5 rounded-md border border-slate-800" title={state.currentPath}>
-                            {state.currentPath || 'No Workspace Loaded'}
-                        </span>
-                        {state.currentPath && (
-                            <button
-                                type="button"
-                                onClick={() => scanWorkspace(state.currentPath!)}
-                                className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors hover:rotate-[-90deg] active:rotate-[-180deg]"
-                                title="Refrescar proyectos del workspace"
-                            >
-                                <RotateCcw size={14} />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Centro: Título */}
-                    <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-nexus-neon to-nexus-accent capitalize shrink-0 text-center flex-none">
-                        Microtermix {state.activeView === 'services' ? '- Services & Terminals' : state.activeView === 'processes' ? '- Procesos en escucha' : state.activeView === 'proxy' ? '- Proxy reverso' : state.activeView === 'fileServer' ? '- Servidor de archivos' : `- ${state.activeView}`}
-                    </h1>
-
-                    {/* Derecha: Botones de Configuración */}
-                    <div className="flex-1 flex items-center justify-end gap-2">
-                        <button
-                            type="button"
-                            onClick={openFolderInThisWindow}
-                            className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors"
-                            title="Abrir otra carpeta en esta ventana"
-                        >
-                            <FolderPlus size={14} />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={openFolderInNewWindow}
-                            className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors"
-                            title="Abrir carpeta en nueva ventana"
-                        >
-                            <SquareStack size={14} />
-                        </button>
-                        {state.currentPath && (
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveWorkspaceConfig}
-                                    className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors"
-                                    title="Guardar config en carpeta del workspace (nexus-workspace.json)"
-                                >
-                                    <Save size={14} />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleLoadConfigApplyCurrent}
-                                    className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors"
-                                    title="Cargar config y aplicar al workspace actual"
-                                >
-                                    <Upload size={14} />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleLoadWorkspaceConfig}
-                                    className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors"
-                                    title="Cargar config y elegir carpeta (sobrescribe y abre ese workspace)"
-                                >
-                                    <FolderOpen size={14} />
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </header>
+                <Header
+                    onSaveConfig={handleSaveWorkspaceConfig}
+                    onLoadConfigApplyCurrent={handleLoadConfigApplyCurrent}
+                    onLoadWorkspaceConfig={handleLoadWorkspaceConfig}
+                />
 
                 <div className="flex-1 min-h-0 flex bg-slate-900 overflow-hidden w-full relative">
                     {state.activeView === 'services' && (
                         <>
-                            {/* Left Pane: Projects List */}
-                            <div className="w-[22rem] flex flex-col border-r border-slate-800 bg-slate-950/30 overflow-hidden shrink-0">
-                                <div className="px-3 py-2 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0 gap-2">
-                                    <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">Proyectos ({state.projects.length})</h2>
-                                    {selectedProjects.length > 0 ? (
-                                        <button onClick={() => setSelectedProjects([])} className="text-[10px] text-slate-400 hover:text-slate-200 whitespace-nowrap">
-                                            Deseleccionar
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => setSelectedProjects(state.projects.map(p => p.path as string))}
-                                            className="text-[10px] text-nexus-neon hover:text-nexus-neon/80 whitespace-nowrap"
-                                        >
-                                            Seleccionar todos
-                                        </button>
-                                    )}
-                                </div>
-                                <div className="flex-1 overflow-y-auto scrollbar-hide">
-                                    {state.projects.length === 0 ? (
-                                        <div className="p-6 text-center text-slate-500 text-sm">No projects found.</div>
-                                    ) : (
-                                        state.projects.map(project => (
-                                            <ProjectRow
-                                                key={project.path as string}
-                                                project={project}
-                                                isSelected={selectedProjects.includes(project.path as string)}
-                                                onToggleSelect={() => toggleProjectSelect(project.path as string)}
-                                            />
-                                        ))
-                                    )}
-                                </div>
-                            </div>
+                            <ProjectListPane
+                                projects={state.projects}
+                                selectedProjects={selectedProjects}
+                                onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path as string))}
+                                onDeselectAll={() => setSelectedProjects([])}
+                                onToggleSelect={toggleProjectSelect}
+                                onPlayScript={handlePlayScript}
+                            />
 
-                            {/* Right Pane: Multi-Execution & Terminals */}
                             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                                {/* Multi-Execution: una línea compacta */}
-                                <div className="bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider shrink-0">Comando</span>
-                                        <select
-                                            value={multiScript}
-                                            onChange={e => setMultiScript(e.target.value)}
-                                            className="w-40 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:border-nexus-neon focus:outline-none"
-                                        >
-                                            {allScripts.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                        <span className="text-slate-500 text-[10px] uppercase tracking-wider shrink-0">ENV</span>
-                                        <select
-                                            value={globalEnvName}
-                                            onChange={e => setGlobalEnvName(e.target.value)}
-                                            title={`Fallback env: ${globalEnvName}`}
-                                            className="w-20 bg-slate-950 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 focus:border-nexus-neon focus:outline-none capitalize"
-                                        >
-                                            {allEnvs.map(env => <option key={env} value={env}>{env === 'none' ? 'None' : env}</option>)}
-                                        </select>
-                                        <label className="flex items-center gap-1 cursor-pointer mx-1 shrink-0">
-                                            <input
-                                                type="checkbox"
-                                                checked={buildFirst}
-                                                onChange={e => setBuildFirst(e.target.checked)}
-                                                className="accent-nexus-neon shrink-0"
-                                            />
-                                            <span className="text-slate-500 text-[10px] uppercase tracking-wider">Build First</span>
-                                        </label>
-                                        <div className="flex items-center gap-1 ml-1 border-l border-slate-700 pl-2">
-                                            <button
-                                                onClick={handleBatchPlay}
-                                                disabled={selectedProjects.length === 0}
-                                                className="flex items-center gap-1 px-2 py-1 bg-nexus-success text-slate-900 rounded text-[11px] font-bold hover:bg-opacity-80 transition-colors disabled:opacity-50"
-                                                title="Ejecutar en proyectos seleccionados"
-                                            >
-                                                <Play size={12} /><span>Run ({selectedProjects.length})</span>
-                                            </button>
-                                            <button
-                                                onClick={handleBatchStop}
-                                                disabled={selectedProjects.length === 0}
-                                                className="flex items-center gap-1 px-2 py-1 bg-nexus-danger/20 border border-nexus-danger/50 text-nexus-danger rounded text-[11px] font-bold hover:bg-nexus-danger hover:text-white transition-colors disabled:opacity-50"
-                                                title="Parar"
-                                            >
-                                                <Square size={12} />
-                                            </button>
-                                            <button
-                                                onClick={handleBatchRestart}
-                                                disabled={selectedProjects.length === 0}
-                                                className="flex items-center gap-1 px-2 py-1 bg-slate-700 text-slate-100 rounded text-[11px] font-bold hover:bg-slate-600 transition-colors disabled:opacity-50"
-                                                title="Reiniciar"
-                                            >
-                                                <RotateCcw size={12} />
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    if (!state.currentPath) return;
-                                                    try {
-                                                        const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
-                                                        setViteWrapperCandidates(list.map(p => ({ project_path: p.project_path, display_name: p.display_name })));
-                                                        setViteWrapperModalOpen(true);
-                                                    } catch (_) {
-                                                        setViteWrapperCandidates([]);
-                                                        setViteWrapperModalOpen(true);
-                                                    }
-                                                }}
-                                                className="flex items-center gap-1 px-2 py-1 text-slate-400 hover:text-nexus-neon border border-slate-600 hover:border-nexus-neon/50 rounded text-[11px] transition-colors"
-                                                title="Vite wrapper (remotes MFE)"
-                                            >
-                                                <FileCode size={12} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                <MultiExecutionBar
+                                    allScripts={allScripts}
+                                    multiScript={multiScript}
+                                    onScriptChange={setMultiScript}
+                                    allEnvs={allEnvs}
+                                    globalEnvName={globalEnvName}
+                                    onEnvChange={setGlobalEnvName}
+                                    onPlay={handleBatchPlay}
+                                    onStop={handleBatchStop}
+                                    onRestart={handleBatchRestart}
+                                    onOpenViteWrapper={async () => {
+                                        if (!state.currentPath) return;
+                                        try {
+                                            const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
+                                            setViteWrapperCandidates(list.map(p => ({ project_path: p.project_path, display_name: p.display_name })));
+                                            setViteWrapperModalOpen(true);
+                                        } catch (_) {
+                                            setViteWrapperCandidates([]);
+                                            setViteWrapperModalOpen(true);
+                                        }
+                                    }}
+                                    selectedCount={selectedProjects.length}
+                                />
 
                                 {viteWrapperModalOpen && (
                                     <ViteWrapperModal
@@ -671,94 +402,33 @@ export const ServiceManager: React.FC = () => {
                                     />
                                 )}
 
-                                {/* Terminals Section */}
                                 {processIds.length === 0 ? (
                                     <div className="flex-1 flex items-center justify-center text-slate-500 text-sm bg-slate-900/50">
                                         <p>No active terminals. Start a service from the left panel.</p>
                                     </div>
                                 ) : (
                                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950/50 relative">
-                                        {/* Terminal Tabs Header — compacto, tamaño fijo, scroll solo al rebasar */}
-                                        <div className="flex bg-slate-900/95 border-b border-slate-800 shrink-0 min-h-[40px] overflow-x-auto overflow-y-hidden">
-                                            <div className="flex shrink-0 items-center gap-0.5 py-1 px-1">
-                                                {processIds.map(serviceId => {
-                                                    const procStatus = state.activeProcesses[serviceId]?.status;
-                                                    const isRunning = procStatus === 'running';
-                                                    const isError = procStatus === 'error';
-                                                    const isStopped = procStatus === 'stopped';
-                                                    const isActive = activeTerminalTab === serviceId;
-                                                    const tabLabel = serviceId.split('::')[0].split(/[/\\]/).pop() ?? 'term';
-                                                    const scriptLabel = serviceId.includes('::') ? serviceId.split('::')[1]?.trim() : '';
-
-                                                    const tabStyle = isActive
-                                                        ? isError
-                                                            ? 'border-nexus-danger/50 bg-nexus-danger/10 text-nexus-danger shadow-sm'
-                                                            : isStopped
-                                                                ? 'border-slate-600 bg-slate-800/80 text-slate-400 shadow-sm'
-                                                                : 'border-nexus-neon/50 bg-nexus-darker text-slate-100 shadow-sm'
-                                                        : isError
-                                                            ? 'border-slate-700/80 text-slate-400 hover:bg-nexus-danger/10 hover:text-nexus-danger hover:border-nexus-danger/30'
-                                                            : isStopped
-                                                                ? 'border-slate-700/80 text-slate-500 hover:bg-slate-800 hover:text-slate-400 hover:border-slate-600'
-                                                                : 'border-slate-700/80 text-slate-500 hover:bg-slate-800 hover:text-slate-300 hover:border-slate-600';
-
-                                                    return (
-                                                        <div
-                                                            key={serviceId}
-                                                            onClick={() => setActiveTerminalTab(serviceId)}
-                                                            className={`group flex shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-3 py-1.5 min-w-[100px] max-w-[180px] cursor-pointer transition-all duration-150 ${tabStyle}`}
-                                                        >
-                                                            <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                                                                <span className="truncate text-xs font-semibold" title={tabLabel}>{tabLabel}</span>
-                                                                {scriptLabel && (
-                                                                    <span className="truncate text-[10px] opacity-80" title={scriptLabel}>{scriptLabel}</span>
-                                                                )}
-                                                                {isRunning && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-nexus-success animate-pulse" />}
-                                                                {isError && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-nexus-danger" />}
-                                                                {isStopped && <span className="w-1.5 h-1.5 shrink-0 rounded-full bg-slate-500" title="Parado" />}
-                                                            </div>
-                                                            <div className="flex shrink-0 items-center gap-0.5 border-l border-slate-600/50 pl-2">
-                                                                {isRunning && (
-                                                                    <button
-                                                                        onClick={async (e) => {
-                                                                            e.stopPropagation();
-                                                                            await invoke('kill_service', { serviceId });
-                                                                            updateProcessStatus(serviceId, 'stopped');
-                                                                        }}
-                                                                        className="rounded p-0.5 text-slate-500 hover:text-amber-400 hover:bg-slate-700 transition-colors"
-                                                                        title="Parar proceso (mantener pestaña)"
-                                                                    >
-                                                                        <Square size={12} />
-                                                                    </button>
-                                                                )}
-                                                                <button
-                                                                    onClick={(e) => { e.stopPropagation(); handleTabRestart(e, serviceId); }}
-                                                                    className={`rounded p-0.5 transition-colors ${isError ? 'text-nexus-danger hover:bg-nexus-danger/20' : 'text-slate-500 hover:text-nexus-success hover:bg-slate-700'}`}
-                                                                    title="Reiniciar"
-                                                                >
-                                                                    <RotateCcw size={12} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={async (e) => {
-                                                                        e.stopPropagation();
-                                                                        await invoke('kill_service', { serviceId });
-                                                                        updateProcessStatus(serviceId, 'idle');
-                                                                        if (activeTerminalTab === serviceId) {
-                                                                            const remaining = processIds.filter(id => id !== serviceId);
-                                                                            setActiveTerminalTab(remaining.length > 0 ? remaining[0] : null);
-                                                                        }
-                                                                    }}
-                                                                    className="rounded p-0.5 text-slate-500 hover:text-nexus-danger hover:bg-slate-700 transition-colors"
-                                                                    title="Cerrar pestaña"
-                                                                >
-                                                                    <X size={12} />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
+                                        <TerminalTabsBar
+                                            processIds={processIds}
+                                            activeProcesses={state.activeProcesses}
+                                            activeTerminalTab={activeTerminalTab}
+                                            onTabSelect={setActiveTerminalTab}
+                                            onTabStop={async (e, serviceId) => {
+                                                e.stopPropagation();
+                                                await invoke('kill_service', { serviceId });
+                                                updateProcessStatus(serviceId, 'stopped');
+                                            }}
+                                            onTabRestart={(e, serviceId) => { e.stopPropagation(); handleTabRestart(e, serviceId); }}
+                                            onTabClose={async (e, serviceId) => {
+                                                e.stopPropagation();
+                                                await invoke('kill_service', { serviceId });
+                                                updateProcessStatus(serviceId, 'idle');
+                                                if (activeTerminalTab === serviceId) {
+                                                    const remaining = processIds.filter(id => id !== serviceId);
+                                                    setActiveTerminalTab(remaining.length > 0 ? remaining[0] : null);
+                                                }
+                                            }}
+                                        />
 
                                         {/* Vite wrapper preview (proyecto del tab activo) */}
                                         {activeTerminalTab && (() => {
@@ -788,17 +458,11 @@ export const ServiceManager: React.FC = () => {
                                             );
                                         })()}
 
-                                        {/* Terminal Viewports */}
-                                        <div className="flex-1 flex flex-col p-2 overflow-hidden bg-nexus-darker relative">
-                                            {processIds.map(serviceId => (
-                                                <div
-                                                    key={`${serviceId}-${state.activeProcesses[serviceId]?.restarts || 0}`}
-                                                    className={`absolute inset-2 ${activeTerminalTab === serviceId ? 'visible opacity-100 z-10' : 'invisible opacity-0 z-0'}`}
-                                                >
-                                                    <TerminalView serviceId={serviceId} />
-                                                </div>
-                                            ))}
-                                        </div>
+                                        <TerminalArea
+                                            processIds={processIds}
+                                            activeProcesses={state.activeProcesses}
+                                            activeTerminalTab={activeTerminalTab}
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -832,6 +496,18 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'fileServer' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <FileServerPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'commands' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <CommandsPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'tests' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <TestsPanel />
                         </div>
                     )}
                 </div>
