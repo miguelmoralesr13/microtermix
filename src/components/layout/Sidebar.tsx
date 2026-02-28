@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical } from 'lucide-react';
+import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();
@@ -23,6 +23,7 @@ export const Sidebar: React.FC = () => {
             {renderNavIcon('services', Server, "Services & Terminals")}
             {renderNavIcon('commands', TerminalSquare, "Commands")}
             {renderNavIcon('tests', FlaskConical, "Tests & Coverage")}
+            {renderNavIcon('sonar', BarChart3, "Sonar Analysis")}
             {renderNavIcon('git', GitBranch, "Git")}
             {renderNavIcon('jira', Trello, "Jira")}
             {renderNavIcon('processes', Activity, "Procesos en escucha")}

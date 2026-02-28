@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitBranch, GitMerge, FileArchive, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud } from 'lucide-react';
 import { PushPreviewModal } from './PushPreviewModal';
@@ -26,12 +26,14 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const [showPushModal, setShowPushModal] = useState(false);
 
     const searchLower = branchSearch.trim().toLowerCase();
-    const filteredLocal = searchLower
-        ? localBranches.filter(b => b.name.toLowerCase().includes(searchLower))
-        : localBranches;
-    const filteredRemote = searchLower
-        ? remoteBranches.filter(r => r.toLowerCase().includes(searchLower))
-        : remoteBranches;
+    const filteredLocal = useMemo(() =>
+        searchLower ? localBranches.filter(b => b.name.toLowerCase().includes(searchLower)) : localBranches,
+        [localBranches, searchLower]
+    );
+    const filteredRemote = useMemo(() =>
+        searchLower ? remoteBranches.filter(r => r.toLowerCase().includes(searchLower)) : remoteBranches,
+        [remoteBranches, searchLower]
+    );
 
     const loadSidebarData = async () => {
         setLoading(true);

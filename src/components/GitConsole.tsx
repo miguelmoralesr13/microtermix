@@ -32,7 +32,7 @@ export const GitConsole: React.FC = () => {
                 id: Date.now() + Math.random(),
                 timestamp: new Date(),
                 payload: event.payload
-            }]);
+            }].slice(-500));
         });
 
         return () => {

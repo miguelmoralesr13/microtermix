@@ -16,7 +16,7 @@ export interface Project {
     scripts?: string[];
 }
 
-export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests';
+export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests' | 'sonar';
 export type ProcessStatus = 'idle' | 'running' | 'error' | 'stopped';
 
 export interface ProcessState {

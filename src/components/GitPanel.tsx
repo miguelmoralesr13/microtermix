@@ -70,7 +70,7 @@ export const GitPanel: React.FC = () => {
             }
         };
         checkRepo();
-    }, [activeGitTab, statusRefreshKey, branchRefreshKey, timelineRefreshKey]);
+    }, [activeGitTab]);
 
     const handleTabChange = (path: string) => {
         setActiveGitTab(path);
