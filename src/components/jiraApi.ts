@@ -48,6 +48,7 @@ export interface JiraConfig {
     activityId: string;          // option ID of the activity value (e.g. "10301")
     activityValue: string;       // label of the activity value (e.g. "Development")
     releasedStatuses: string[];  // statuses that trigger special color (e.g. ["Released", "Discarded"])
+    tempoToken: string;
 }
 
 export const emptyConfig = (): JiraConfig => ({
@@ -68,6 +69,7 @@ export const emptyConfig = (): JiraConfig => ({
     activityId: '',
     activityValue: 'Development',
     releasedStatuses: ['Released', 'Discarded'],
+    tempoToken: '',
 });
 
 export function loadConfig(): JiraConfig {
@@ -175,6 +177,56 @@ export async function getJiraMediaUrl(url: string): Promise<string> {
 
 export async function testConnection(): Promise<{ displayName: string; accountId: string; avatarUrls: Record<string, string> }> {
     return jiraFetch('/myself');
+}
+
+// ── Tempo REST API v4 helper ──────────────────────────────────────────────
+
+async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
+    const cfg = loadConfig();
+    if (!cfg.tempoToken) throw new Error('Tempo token not configured. Go to Jira Settings.');
+
+    const method = (opts?.method ?? 'GET').toUpperCase();
+    const fullUrl = `https://api.tempo.io/4${path}`;
+    const bodyStr = opts?.body ? String(opts.body) : undefined;
+
+    const curlParts = [
+        `curl -s -X ${method}`,
+        `'${fullUrl}'`,
+        `-H 'Authorization: Bearer <TOKEN>'`,
+        `-H 'Content-Type: application/json'`,
+    ];
+    if (bodyStr) curlParts.push(`-d '${bodyStr}'`);
+    const curl = curlParts.join(' \\');
+
+    const t0 = Date.now();
+    const time = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const id = ++_logSeq;
+
+    try {
+        const res = await fetch(fullUrl, {
+            ...opts,
+            headers: {
+                'Authorization': `Bearer ${cfg.tempoToken}`,
+                'Content-Type': 'application/json',
+                ...(opts?.headers ?? {}),
+            },
+        });
+        const durationMs = Date.now() - t0;
+        const text = await res.text();
+        if (!res.ok) {
+            jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, status: res.status, durationMs, ok: false, curl, error: text });
+            throw new Error(`Tempo ${res.status}: ${text}`);
+        }
+        jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, status: res.status, durationMs, ok: true, curl });
+        if (!text) return {};
+        try { return JSON.parse(text); } catch { return {}; }
+    } catch (e: any) {
+        const durationMs = Date.now() - t0;
+        if (!String(e?.message).startsWith('Tempo ')) {
+            jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, durationMs, ok: false, curl, error: e?.message });
+        }
+        throw new Error(e?.message || 'Error de conexión con Tempo.');
+    }
 }
 
 export async function getProjects(): Promise<{ key: string; name: string; id: string }[]> {
@@ -420,6 +472,18 @@ export interface JiraIssueDetail extends JiraIssue {
     attachments: JiraAttachment[];
 }
 
+// ── Tempo types ────────────────────────────────────────────────────────────
+
+export interface TempoWorklogEntry {
+    tempoWorklogId: number;
+    issue: { id: number; key?: string };
+    timeSpentSeconds: number;
+    startDate: string;   // "YYYY-MM-DD"
+    startTime: string;   // "HH:MM:SS"
+    description?: string;
+    author: { accountId: string };
+}
+
 export async function getIssueDetail(issueKey: string): Promise<JiraIssueDetail> {
     const data = await jiraFetch(
         `/issue/${issueKey}?fields=summary,status,issuetype,priority,assignee,labels,description,comment,attachment,updated,created`
@@ -476,3 +540,53 @@ export async function getBoardIssues(projectKey: string, filter: BoardFilter = {
     return searchIssues(parts.join(' AND ') + ' ORDER BY updated DESC', 100);
 }
 
+// ── Tempo API methods ─────────────────────────────────────────────────────
+
+/**
+ * Fetch all worklogs for a given date range and author.
+ * from/to format: "YYYY-MM-DD"
+ */
+export async function getTempoWorklogs(
+    from: string,
+    to: string,
+    authorAccountId: string,
+): Promise<TempoWorklogEntry[]> {
+    const params = new URLSearchParams({ from, to, limit: '200' });
+    if (authorAccountId) params.set('authorAccountId', authorAccountId);
+    const data = await tempoFetch(`/worklogs?${params.toString()}`);
+    return (data.results ?? []).map((r: any): TempoWorklogEntry => ({
+        tempoWorklogId: r.tempoWorklogId,
+        issue: { id: r.issue?.id ?? 0, key: r.issue?.key },
+        timeSpentSeconds: r.timeSpentSeconds ?? 0,
+        startDate: r.startDate ?? '',
+        startTime: r.startTime ?? '00:00:00',
+        description: r.description,
+        author: { accountId: r.author?.accountId ?? '' },
+    }));
+}
+
+/**
+ * Create a new Tempo worklog.
+ * startDate: "YYYY-MM-DD", startTime: "HH:MM:SS"
+ */
+export async function logTempoWorklog(
+    issueId: number,
+    authorAccountId: string,
+    timeSpentSeconds: number,
+    startDate: string,
+    startTime: string,
+    description?: string,
+): Promise<void> {
+    const body: Record<string, any> = {
+        issueId,
+        authorAccountId,
+        timeSpentSeconds,
+        startDate,
+        startTime,
+    };
+    if (description?.trim()) body.description = description.trim();
+    await tempoFetch('/worklogs', {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+}
