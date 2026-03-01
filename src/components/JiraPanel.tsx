@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Settings, Plus, RefreshCw, Search, X, CheckCircle,
     AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, ChevronDown, Pin, UserCheck, Timer, Paperclip, Send
@@ -2205,22 +2205,16 @@ function BoardView() {
     const [projectIssueTypes, setProjectIssueTypes] = useState<{ id: string; name: string }[]>([]);
     const [projectStatuses, setProjectStatuses] = useState<string[]>([]);
     const [projectEpics, setProjectEpics] = useState<JiraIssue[]>([]);
+    const [projectAssignees, setProjectAssignees] = useState<{ value: string; label: string }[]>([]);
 
-    // Derived from loaded issues
-    const assigneeOptions = useMemo(() => {
-        const map = new Map<string, string>();
-        for (const issue of issues) {
-            const a = issue.fields.assignee;
-            if (a?.accountId) map.set(a.accountId, a.displayName ?? a.accountId);
-        }
-        return [...map.entries()].map(([value, label]) => ({ value, label }));
+    // Accumulate labels across loads so options don't disappear when filter changes
+    const [allLabels, setAllLabels] = useState<string[]>([]);
+    useEffect(() => {
+        const newLabels = issues.flatMap(i => (i.fields as any).labels ?? []) as string[];
+        if (newLabels.length === 0) return;
+        setAllLabels(prev => [...new Set([...prev, ...newLabels])].sort());
     }, [issues]);
-
-    const labelOptions = useMemo(() =>
-        [...new Set(issues.flatMap(i => (i.fields as any).labels ?? []))].sort()
-            .map((l: string) => ({ value: l, label: l })),
-        [issues]
-    );
+    const labelOptions = allLabels.map(l => ({ value: l, label: l }));
 
     const PRIORITIES = [
         { value: 'Highest', label: '🔴 Highest' },
@@ -2243,14 +2237,18 @@ function BoardView() {
     // Load project metadata when project changes
     useEffect(() => {
         if (!projectKey) return;
+        setProjectAssignees([]);
+        setAllLabels([]);
         Promise.all([
             getIssueTypes(projectKey).catch(() => [] as { id: string; name: string }[]),
             getProjectStatuses(projectKey).catch(() => [] as string[]),
             getEpics(projectKey).catch(() => [] as JiraIssue[]),
-        ]).then(([types, statuses, epics]) => {
+            getUsers(projectKey).catch(() => [] as { accountId: string; displayName: string }[]),
+        ]).then(([types, statuses, epics, users]) => {
             setProjectIssueTypes(types);
             setProjectStatuses(statuses);
             setProjectEpics(epics);
+            setProjectAssignees(users.map(u => ({ value: u.accountId, label: u.displayName })));
         });
     }, [projectKey]);
 
@@ -2332,7 +2330,7 @@ function BoardView() {
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <MultiSelect
                         label="Asignado"
-                        options={[{ value: 'me', label: '👤 Yo' }, { value: 'unassigned', label: '— Sin asignar' }, ...assigneeOptions]}
+                        options={[{ value: 'me', label: '👤 Yo' }, { value: 'unassigned', label: '— Sin asignar' }, ...projectAssignees]}
                         selected={filter.assignees ?? []}
                         onChange={v => setFilter(prev => ({ ...prev, assignees: v }))}
                     />
