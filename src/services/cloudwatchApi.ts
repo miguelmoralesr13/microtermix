@@ -79,7 +79,7 @@ export function cwGetLogGroups(cfg: CwCredentials, prefix?: string): Promise<CwL
 }
 
 export function cwGetLogStreams(cfg: CwCredentials, logGroup: string, prefix?: string): Promise<CwLogStream[]> {
-    return invoke('cw_get_log_streams', { credentials: toRust(cfg), logGroup, prefix: prefix ?? null });
+    return invoke('cw_get_log_streams', { credentials: toRust(cfg), log_group: logGroup, prefix: prefix ?? null });
 }
 
 export function cwGetLogEvents(
@@ -91,10 +91,10 @@ export function cwGetLogEvents(
 ): Promise<CwLogEventsResult> {
     return invoke('cw_get_log_events', {
         credentials: toRust(cfg),
-        logGroup,
+        log_group: logGroup,
         stream,
-        nextToken: nextToken ?? null,
-        startMs: startMs ?? null,
+        next_token: nextToken ?? null,
+        start_ms: startMs ?? null,
     });
 }
 
@@ -102,7 +102,7 @@ export function cwListMetrics(cfg: CwCredentials, namespace?: string, metricName
     return invoke('cw_list_metrics', {
         credentials: toRust(cfg),
         namespace: namespace ?? null,
-        metricName: metricName ?? null,
+        metric_name: metricName ?? null,
     });
 }
 
@@ -119,11 +119,11 @@ export function cwGetMetricData(
     return invoke('cw_get_metric_data', {
         credentials: toRust(cfg),
         namespace,
-        metricName,
+        metric_name: metricName,
         dimensions,
         stat,
-        periodSecs,
-        startMs,
-        endMs,
+        period_secs: periodSecs,
+        start_ms: startMs,
+        end_ms: endMs,
     });
 }

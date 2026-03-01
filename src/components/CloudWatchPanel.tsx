@@ -132,6 +132,10 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
     const [loadingEvents, setLoadingEvents] = useState(false);
     const tailRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
+    const nextTokenRef = useRef<string | null>(null);
+
+    // Keep ref in sync with state for use inside interval
+    useEffect(() => { nextTokenRef.current = nextToken; }, [nextToken]);
 
     // Load groups on mount
     useEffect(() => {
@@ -187,19 +191,19 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
             return;
         }
         tailRef.current = setInterval(async () => {
-            if (!nextToken) return;
+            if (!nextTokenRef.current) return;
             try {
-                const res = await cwGetLogEvents(cfg, selectedGroup, selectedStream, nextToken);
+                const res = await cwGetLogEvents(cfg, selectedGroup, selectedStream, nextTokenRef.current);
                 if (res.events.length > 0) {
                     setEvents(prev => [...prev.slice(-1000), ...res.events]);
                 }
-                if (res.next_forward_token && res.next_forward_token !== nextToken) {
+                if (res.next_forward_token && res.next_forward_token !== nextTokenRef.current) {
                     setNextToken(res.next_forward_token);
                 }
             } catch { /* ignore tail errors silently */ }
         }, 5000);
         return () => { if (tailRef.current) clearInterval(tailRef.current); };
-    }, [tailing, selectedGroup, selectedStream, nextToken]);
+    }, [tailing, selectedGroup, selectedStream]);
 
     const filteredGroups = groupSearch
         ? groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
