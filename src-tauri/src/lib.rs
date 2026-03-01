@@ -5,6 +5,7 @@ mod processes;
 mod proxy;
 mod file_server;
 mod workspace;
+mod cloudwatch;
 
 use std::fs;
 use std::path::Path;
@@ -28,6 +29,7 @@ pub use crate::file_server::{
     stop_file_server, FileServerRoute,
 };
 pub use crate::workspace::{get_initial_workspace_for_window, open_new_workspace};
+pub use crate::cloudwatch::cw_ping;
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -200,7 +202,8 @@ pub fn run() {
             stop_file_server,
             is_file_server_running,
             start_coverage_server,
-            stop_coverage_server
+            stop_coverage_server,
+            cw_ping
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

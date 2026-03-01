@@ -27,6 +27,10 @@ tokio = { version = "1", features = ["full"] }
 tauri-plugin-dialog = "2.6.0"
 axum = { version = "0.7", features = ["json"] }
 reqwest = { version = "0.12", features = ["stream"] }
+aws-sdk-cloudwatchlogs = "1"
+aws-sdk-cloudwatch = "1"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = "1"
 tower = "0.4"
 regex = "1"
 tauri-plugin-http = "2"
