@@ -26,8 +26,14 @@ export interface GithubIssue {
     pull_request?: any; // If it has this, it's actually a PR, but GitHub API returns both
 }
 
+// Cache owner/repo per projectPath so git remote get-url origin is only called once per project
+const ownerRepoCache = new Map<string, { owner: string; repo: string }>();
+
 // Extract Owner and Repo from remote URL
 async function getOwnerRepo(projectPath: string): Promise<{ owner: string; repo: string } | null> {
+    if (ownerRepoCache.has(projectPath)) {
+        return ownerRepoCache.get(projectPath)!;
+    }
     try {
         const result: any = await invoke('git_execute', { projectPath, args: ['remote', 'get-url', 'origin'] });
         if (!result.success) return null;
@@ -36,7 +42,9 @@ async function getOwnerRepo(projectPath: string): Promise<{ owner: string; repo:
         // matches git@github.com:owner/repo.git or https://github.com/owner/repo.git
         const match = url.match(/github\.com[:/](.+?)\/(.+?)(\.git)?$/);
         if (match && match.length >= 3) {
-            return { owner: match[1], repo: match[2] };
+            const info = { owner: match[1], repo: match[2] };
+            ownerRepoCache.set(projectPath, info);
+            return info;
         }
         return null;
     } catch (e) {

@@ -245,7 +245,7 @@ export const GitPanel: React.FC = () => {
                                         refreshKey={statusRefreshKey}
                                         onStatusRefresh={handleStatusRefresh}
                                         onTimelineRefresh={handleTimelineRefresh}
-                                        onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode: mode as any, line })}
+                                        onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode, line })}
                                     />
                                 </div>
                             </div>

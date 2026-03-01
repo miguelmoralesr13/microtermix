@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
 
@@ -23,7 +24,7 @@ interface ArrayTreeNode {
 interface GitStagingPanelProps {
     projectPath: string;
     refreshKey?: number;
-    onDiffRequest?: (file: string, mode: 'staged' | 'unstaged', line?: number) => void;
+    onDiffRequest?: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
     onStatusRefresh?: () => void;
     onTimelineRefresh?: () => void;
 }
@@ -36,7 +37,7 @@ interface FileTreeNodeItemProps {
     selectedForRollback: Set<string>;
     onToggleNode: (node: ArrayTreeNode) => Promise<void>;
     onDiscardNode: (node: ArrayTreeNode) => Promise<void>;
-    onDiffRequest?: (file: string, mode: string, line?: number) => void;
+    onDiffRequest?: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
     onRollbackToggle: (path: string) => void;
 }
 
@@ -63,7 +64,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
             StatusIcon = AlertTriangle;
         }
 
-        const defaultDiffMode = f.isConflicted ? ('conflicted' as any) : (f.isUnstaged ? 'unstaged' : 'staged');
+        const defaultDiffMode: 'staged' | 'unstaged' | 'conflicted' = f.isConflicted ? 'conflicted' : (f.isUnstaged ? 'unstaged' : 'staged');
         const isSelectedForRollback = selectedForRollback.has(node.fullPath);
         return (
             <div className="min-w-0">
@@ -217,6 +218,22 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
     const [isMergeInProgress, setIsMergeInProgress] = useState(false);
+    const [currentBranch, setCurrentBranch] = useState('');
+
+    // ── Derived values ────────────────────────────────────────────────────────
+    const tree = useMemo(() => buildTree(files), [files]);
+    const totalFiles = files.length;
+    const isAnythingStaged = useMemo(() => files.some(f => f.isStaged), [files]);
+    const masterCheckState = useMemo(() => {
+        if (totalFiles === 0) return 'unchecked';
+        const fullyStagedCount = files.filter(f => f.isStaged && !f.isUnstaged).length;
+        if (fullyStagedCount === totalFiles) return 'checked';
+        if (isAnythingStaged) return 'partial';
+        return 'unchecked';
+    }, [files, totalFiles, isAnythingStaged]);
+
+    const MasterCheckIcon = masterCheckState === 'checked' ? CheckSquare : (masterCheckState === 'partial' ? MinusSquare : Square);
+    const masterCheckColor = masterCheckState === 'checked' ? 'text-nexus-neon' : (masterCheckState === 'partial' ? 'text-nexus-accent' : 'text-slate-500');
 
     const checkMergeStatus = useCallback(async () => {
         try {
@@ -227,10 +244,14 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
         }
     }, [projectPath]);
 
+    // Check merge status on mount and project change only — not on every status refresh
+    useEffect(() => {
+        if (projectPath) checkMergeStatus();
+    }, [projectPath, checkMergeStatus]);
+
     const loadStatus = useCallback(async () => {
         setLoading(true);
         setError(null);
-        await checkMergeStatus();
         try {
             const result: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', {
                 projectPath,
@@ -265,11 +286,22 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
         } finally {
             setLoading(false);
         }
-    }, [projectPath, checkMergeStatus]);
+    }, [projectPath]);
 
     useEffect(() => {
         if (projectPath) loadStatus();
     }, [projectPath, refreshKey, loadStatus]);
+
+    useEffect(() => {
+        if (!projectPath) return;
+        setCurrentBranch('');
+        invoke<{ stdout: string; success: boolean }>('git_execute', {
+            projectPath,
+            args: ['branch', '--show-current'],
+        }).then(res => {
+            if (res.success) setCurrentBranch(res.stdout.trim());
+        }).catch(() => {});
+    }, [projectPath]);
 
     const handleStageToggleAll = useCallback(async (stage: boolean) => {
         setLoading(true);
@@ -353,6 +385,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
                 setError(result.stderr || 'Commit failed');
             } else {
                 setCommitMessage('');
+                await checkMergeStatus(); // commit might complete a merge
                 if (onTimelineRefresh) onTimelineRefresh();
                 if (onStatusRefresh) onStatusRefresh();
                 if (!onTimelineRefresh && !onStatusRefresh) await loadStatus();
@@ -360,7 +393,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
         } finally {
             setIsCommitting(false);
         }
-    }, [commitMessage, projectPath, onTimelineRefresh, onStatusRefresh, loadStatus]);
+    }, [commitMessage, projectPath, onTimelineRefresh, onStatusRefresh, loadStatus, checkMergeStatus, isAnythingStaged]);
 
     const handleAbortMerge = useCallback(async () => {
         if (!confirm('Are you sure you want to abort the merge? This will discard all uncommitted changes.')) return;
@@ -370,30 +403,15 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
             if (!res.success) {
                 setError(res.stderr || 'Failed to abort merge');
             }
+            await checkMergeStatus(); // explicit re-check after abort
             if (onTimelineRefresh) onTimelineRefresh();
             if (onStatusRefresh) onStatusRefresh();
             if (!onTimelineRefresh && !onStatusRefresh) await loadStatus();
         } finally {
             setLoading(false);
         }
-    }, [projectPath, onTimelineRefresh, onStatusRefresh, loadStatus]);
+    }, [projectPath, onTimelineRefresh, onStatusRefresh, loadStatus, checkMergeStatus]);
 
-    // ── Derived values ────────────────────────────────────────────────────────
-
-    const tree = useMemo(() => buildTree(files), [files]);
-
-    const totalFiles = files.length;
-    const isAnythingStaged = useMemo(() => files.some(f => f.isStaged), [files]);
-    const masterCheckState = useMemo(() => {
-        if (totalFiles === 0) return 'unchecked';
-        const fullyStagedCount = files.filter(f => f.isStaged && !f.isUnstaged).length;
-        if (fullyStagedCount === totalFiles) return 'checked';
-        if (isAnythingStaged) return 'partial';
-        return 'unchecked';
-    }, [files, totalFiles, isAnythingStaged]);
-
-    const MasterCheckIcon = masterCheckState === 'checked' ? CheckSquare : (masterCheckState === 'partial' ? MinusSquare : Square);
-    const masterCheckColor = masterCheckState === 'checked' ? 'text-nexus-neon' : (masterCheckState === 'partial' ? 'text-nexus-accent' : 'text-slate-500');
 
     const handleMasterToggle = useCallback(async () => {
         if (masterCheckState === 'checked') {
@@ -497,6 +515,18 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, r
                     <GitCommit size={16} className="mr-2" />
                     {isCommitting ? 'Committing...' : 'Commit'}
                 </button>
+                <GitJiraCommitButton
+                    projectPath={projectPath}
+                    commitMessage={commitMessage}
+                    isAnythingStaged={isAnythingStaged}
+                    currentBranch={currentBranch}
+                    onSuccess={() => {
+                        setCommitMessage('');
+                        if (onTimelineRefresh) onTimelineRefresh();
+                        if (onStatusRefresh) onStatusRefresh();
+                        if (!onTimelineRefresh && !onStatusRefresh) loadStatus();
+                    }}
+                />
             </div>
         </div>
     );

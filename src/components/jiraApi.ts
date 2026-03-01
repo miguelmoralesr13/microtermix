@@ -193,6 +193,7 @@ async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
         `curl -s -X ${method}`,
         `'${fullUrl}'`,
         `-H 'Authorization: Bearer <TOKEN>'`,
+        `-H 'Accept: application/json'`,
         `-H 'Content-Type: application/json'`,
     ];
     if (bodyStr) curlParts.push(`-d '${bodyStr}'`);
@@ -207,6 +208,7 @@ async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
             ...opts,
             headers: {
                 'Authorization': `Bearer ${cfg.tempoToken}`,
+                'Accept': 'application/json',
                 'Content-Type': 'application/json',
                 ...(opts?.headers ?? {}),
             },
@@ -225,6 +227,7 @@ async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
         if (!String(e?.message).startsWith('Tempo ')) {
             jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, durationMs, ok: false, curl, error: e?.message });
         }
+        console.error('[Tempo] Fetch Error:', e);
         throw new Error(e?.message || 'Error de conexión con Tempo.');
     }
 }
@@ -237,6 +240,21 @@ export async function getProjects(): Promise<{ key: string; name: string; id: st
 export async function getIssueTypes(projectKey: string): Promise<{ id: string; name: string; iconUrl: string }[]> {
     const data = await jiraFetch(`/project/${projectKey}`);
     return (data.issueTypes ?? []).map((t: any) => ({ id: t.id, name: t.name, iconUrl: t.iconUrl }));
+}
+
+export async function getActivityOptions(projectKey: string): Promise<{ id: string; value: string }[]> {
+    const cfg = loadConfig();
+    if (!cfg.activityFieldId) return [];
+    const taskType = encodeURIComponent(cfg.taskType || 'Task');
+    const data = await jiraFetch(
+        `/issue/createmeta?projectKeys=${projectKey}&issuetypeNames=${taskType}&expand=projects.issuetypes.fields`,
+    );
+    const fields = data?.projects?.[0]?.issuetypes?.[0]?.fields;
+    if (!fields) return [];
+    return (fields[cfg.activityFieldId]?.allowedValues ?? []).map((v: any) => ({
+        id: String(v.id),
+        value: String(v.value),
+    }));
 }
 
 export async function getPriorities(): Promise<{ id: string; name: string; iconUrl: string }[]> {
@@ -341,8 +359,15 @@ export async function getTasksByStory(storyKey: string): Promise<JiraIssue[]> {
     return searchIssues(jql, 100);
 }
 
-/** Creates a sub-task under parentKey with auto-filled activity and assignee */
-export async function createSubTask(parentKey: string, summary: string, description?: string): Promise<{ id: string; key: string }> {
+/** Creates a sub-task under parentKey.
+ *  Pass `activity` to set an explicit activity value (e.g. from git flow config).
+ *  Without it, the activity is inherited from the parent story. */
+export async function createSubTask(
+    parentKey: string,
+    summary: string,
+    description?: string,
+    activity?: { id: string; value: string },
+): Promise<{ id: string; key: string }> {
     const cfg = loadConfig();
     const fields: Record<string, any> = {
         project: { key: cfg.storiesProject || cfg.defaultProject },
@@ -351,10 +376,25 @@ export async function createSubTask(parentKey: string, summary: string, descript
         summary,
     };
     if (cfg.defaultAssigneeId) fields.assignee = { accountId: cfg.defaultAssigneeId };
-    if (cfg.activityFieldId && cfg.activityValue) {
-        const activity: Record<string, string> = { value: cfg.activityValue };
-        if (cfg.activityId) activity.id = cfg.activityId;
-        fields[cfg.activityFieldId] = activity;
+    if (cfg.activityFieldId) {
+        if (activity?.value) {
+            const act: Record<string, string> = { value: activity.value };
+            if (activity.id) act.id = activity.id;
+            fields[cfg.activityFieldId] = act;
+        } else {
+            // Inherit from parent story
+            try {
+                const parent = await jiraFetch(`/issue/${parentKey}?fields=${cfg.activityFieldId}`);
+                const parentActivity = parent?.fields?.[cfg.activityFieldId];
+                if (parentActivity?.value) {
+                    const act: Record<string, string> = { value: parentActivity.value };
+                    if (parentActivity.id) act.id = String(parentActivity.id);
+                    fields[cfg.activityFieldId] = act;
+                }
+            } catch {
+                // Can't read parent — skip activity field
+            }
+        }
     }
     if (description?.trim()) {
         fields.description = {
@@ -549,10 +589,12 @@ export async function getBoardIssues(projectKey: string, filter: BoardFilter = {
 export async function getTempoWorklogs(
     from: string,
     to: string,
-    authorAccountId: string,
+    authorAccountId?: string,
+    issueId?: number,
 ): Promise<TempoWorklogEntry[]> {
     const params = new URLSearchParams({ from, to, limit: '200' });
     if (authorAccountId) params.set('authorAccountId', authorAccountId);
+    if (issueId) params.set('issueId', String(issueId));
     const data = await tempoFetch(`/worklogs?${params.toString()}`);
     return (data.results ?? []).map((r: any): TempoWorklogEntry => ({
         tempoWorklogId: r.tempoWorklogId,

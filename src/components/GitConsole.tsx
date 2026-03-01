@@ -25,6 +25,7 @@ export const GitConsole: React.FC = () => {
     const [consoleHeight, setConsoleHeight] = useState(CONSOLE_HEIGHT_DEFAULT);
     const [logs, setLogs] = useState<GitLogEntry[]>([]);
     const logsEndRef = useRef<HTMLDivElement>(null);
+    const prevExpandedRef = useRef(false);
 
     useEffect(() => {
         const unlisten = listen<GitLogPayload>('git-log', (event) => {
@@ -45,9 +46,15 @@ export const GitConsole: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (logsEndRef.current && isExpanded) {
-            logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        if (!logsEndRef.current || !isExpanded) {
+            prevExpandedRef.current = isExpanded;
+            return;
         }
+        // Use instant scroll when opening (avoids slow animation through full history)
+        // Use smooth scroll only when new logs arrive while already expanded
+        const justOpened = !prevExpandedRef.current;
+        prevExpandedRef.current = isExpanded;
+        logsEndRef.current.scrollIntoView({ behavior: justOpened ? 'instant' : 'smooth' });
     }, [logs, isExpanded]);
 
     const handleClear = (e: React.MouseEvent) => {

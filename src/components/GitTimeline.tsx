@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -232,29 +232,29 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
             setLocalHashes(new Set());
         }
 
-        // Fetch GitHub CI Statuses for the 10 most recent commits in the timeline
+        // Fetch GitHub CI Statuses — deferred so the timeline renders first before network calls start
         if (parsed.length > 0) {
             const token = state.gitConfig.token;
             if (token && state.gitConfig.provider === 'github') {
-                // To avoid rate-limits and UI freezing, only check the top 15 commits
-                const topHashes = parsed.slice(0, 15).map(c => c.hash);
-                // We'll import fetchGithubCommitStatus dynamically or keep it simple
-                // Wait, dynamic import or static is fine. We will import statically at the top
-                import('../services/githubApi').then(({ fetchGithubCommitStatus }) => {
-                    Promise.allSettled(
-                        topHashes.map(h => fetchGithubCommitStatus(projectPath, token, h).then(res => ({ hash: h, state: res?.state || null })))
-                    ).then(results => {
-                        const newStatuses: Record<string, any> = {};
-                        results.forEach(r => {
-                            if (r.status === 'fulfilled' && r.value.state) {
-                                newStatuses[r.value.hash] = r.value.state;
+                // Only check top 5 commits to reduce concurrent fetch calls
+                const topHashes = parsed.slice(0, 5).map(c => c.hash);
+                setTimeout(() => {
+                    import('../services/githubApi').then(({ fetchGithubCommitStatus }) => {
+                        Promise.allSettled(
+                            topHashes.map(h => fetchGithubCommitStatus(projectPath, token, h).then(res => ({ hash: h, state: res?.state || null })))
+                        ).then(results => {
+                            const newStatuses: Record<string, any> = {};
+                            results.forEach(r => {
+                                if (r.status === 'fulfilled' && r.value.state) {
+                                    newStatuses[r.value.hash] = r.value.state;
+                                }
+                            });
+                            if (Object.keys(newStatuses).length > 0) {
+                                setCommitStatuses(prev => ({ ...prev, ...newStatuses }));
                             }
                         });
-                        if (Object.keys(newStatuses).length > 0) {
-                            setCommitStatuses(prev => ({ ...prev, ...newStatuses }));
-                        }
                     });
-                });
+                }, 1500);
             }
         }
 

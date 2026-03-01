@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Settings, Plus, RefreshCw, Search, X, CheckCircle,
-    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, Pin, UserCheck
+    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, Pin, UserCheck, Timer
 } from 'lucide-react';
 import {
     JiraConfig, JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
@@ -9,8 +9,10 @@ import {
     statusColor,
     getProjects, getIssueTypes, getUsers, createIssue,
     getEpics, getStoriesByEpic, getTasksByStory, createSubTask, transitionIssue,
-    getTransitions, assignIssue, getBoardIssues, getIssueDetail, JiraIssueDetail, BoardFilter, getJiraMediaUrl
+    getTransitions, assignIssue, getBoardIssues, getIssueDetail, JiraIssueDetail, BoardFilter, getJiraMediaUrl,
+    getActivityOptions,
 } from './jiraApi';
+import { TempoLogModal } from './TempoLogModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -962,6 +964,7 @@ function StoriesView() {
     const [taskError, setTaskError] = useState<string | null>(null);
 
     const [selectedTask, setSelectedTask] = useState<JiraIssue | null>(null);
+    const [showTempoModal, setShowTempoModal] = useState(false);
     const [taskTransitions, setTaskTransitions] = useState<JiraTransition[]>([]);
     const [loadingTransitions, setLoadingTransitions] = useState(false);
     const [transitioningTask, setTransitioningTask] = useState<string | null>(null);
@@ -1340,7 +1343,7 @@ function StoriesView() {
                                 <div className="bg-slate-900/60 rounded-lg p-3 border border-slate-800">
                                     <p className="font-mono text-[10px] text-nexus-neon/60 mb-1">{selectedTask.key}</p>
                                     <p className="text-xs text-slate-200 leading-snug">{selectedTask.fields.summary}</p>
-                                    <div className="mt-2">
+                                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                                         <span
                                             className="px-2 py-0.5 text-[9px] rounded-full font-bold uppercase"
                                             style={{
@@ -1349,6 +1352,15 @@ function StoriesView() {
                                                 border: `1px solid ${statusColor(selectedTask.fields.status.statusCategory.colorName)}44`,
                                             }}
                                         >{selectedTask.fields.status.name}</span>
+                                        {selectedTask.fields.status.name.toLowerCase() === 'working' && (
+                                            <button
+                                                onClick={() => setShowTempoModal(true)}
+                                                className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-full transition-colors"
+                                            >
+                                                <Timer size={10} />
+                                                Log Time
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1541,6 +1553,14 @@ function StoriesView() {
                 />
             )}
             {detailEpic && <EpicDetailModal epic={detailEpic} onClose={() => setDetailEpic(null)} />}
+            {showTempoModal && selectedTask && (
+                <TempoLogModal
+                    issue={selectedTask}
+                    authorAccountId={myAccountId}
+                    onClose={() => setShowTempoModal(false)}
+                    onSuccess={() => setShowTempoModal(false)}
+                />
+            )}
         </div>
     );
 }
@@ -1555,6 +1575,24 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
     // For custom fields editor
     const [newFieldKey, setNewFieldKey] = useState('');
     const [newFieldVal, setNewFieldVal] = useState('');
+    // Activity field options
+    const [activityOpts, setActivityOpts] = useState<{ id: string; value: string }[]>([]);
+    const [loadingActivityOpts, setLoadingActivityOpts] = useState(false);
+
+    const loadActivityOpts = (fieldId: string, proj: string) => {
+        if (!fieldId || !proj) return;
+        setLoadingActivityOpts(true);
+        getActivityOptions(proj)
+            .then(list => setActivityOpts(list))
+            .catch(() => setActivityOpts([]))
+            .finally(() => setLoadingActivityOpts(false));
+    };
+
+    // Auto-load on mount using saved config
+    useEffect(() => {
+        const saved = loadConfig();
+        loadActivityOpts(saved.activityFieldId, saved.storiesProject || saved.defaultProject);
+    }, []);
 
     const handleTest = async () => {
         setTesting(true);
@@ -1624,6 +1662,15 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
                 )}
             </section>
 
+            {/* Tempo */}
+            <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <Timer size={12} /> Tempo
+                </h3>
+                {field('Tempo API Token (app.tempo.io → API Integration)', 'tempoToken', 'password')}
+                <p className="text-[10px] text-slate-600">El account ID del autor se toma del campo "Account ID del asignado por defecto" de arriba.</p>
+            </section>
+
             {/* Default fields */}
             <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
                 <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valores por defecto (para crear issues)</h3>
@@ -1665,8 +1712,36 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
                 {field('Tipo Story (Technical)', 'storyType')}
                 {field('Tipo Task (Sub-tarea)', 'taskType')}
                 {field('ID del campo Activity (ej. customfield_10115) — dejar vacío para omitir', 'activityFieldId')}
-                {field('ID de la opción Activity (ej. 10301)', 'activityId')}
-                {field('Valor del campo Activity (ej. Development)', 'activityValue')}
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">Valor de Activity</label>
+                    <div className="flex gap-2">
+                        <select
+                            value={cfg.activityValue}
+                            onChange={e => {
+                                const found = activityOpts.find(a => a.value === e.target.value);
+                                setCfg(c => ({ ...c, activityValue: e.target.value, activityId: found?.id ?? c.activityId }));
+                            }}
+                            disabled={activityOpts.length === 0}
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon disabled:text-slate-600"
+                        >
+                            <option value="">{activityOpts.length === 0 ? 'Carga las opciones primero →' : 'Selecciona un valor'}</option>
+                            {activityOpts.map(a => (
+                                <option key={a.id} value={a.value}>{a.value}</option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            onClick={() => loadActivityOpts(cfg.activityFieldId, cfg.storiesProject || cfg.defaultProject)}
+                            disabled={!cfg.activityFieldId || !(cfg.storiesProject || cfg.defaultProject) || loadingActivityOpts}
+                            className="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                        >
+                            {loadingActivityOpts ? <RefreshCw size={12} className="animate-spin" /> : 'Recargar'}
+                        </button>
+                    </div>
+                    {cfg.activityId && (
+                        <p className="text-[10px] text-slate-600 mt-1">ID: {cfg.activityId}</p>
+                    )}
+                </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">Statuses con color especial (separados por coma)</label>
                     <input
