@@ -6,7 +6,8 @@
       "Bash(npm run:*)",
       "Bash(grep:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:httpbin.org)"
+      "WebFetch(domain:httpbin.org)",
+      "Bash(cargo build:*)"
     ]
   }
 }

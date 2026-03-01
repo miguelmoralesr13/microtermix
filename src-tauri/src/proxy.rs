@@ -11,7 +11,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::AppState;
+use crate::state::{AppState, ServerHandle};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyCandidate {
@@ -443,7 +443,8 @@ pub async fn start_proxy(
         "proxy-logs",
         format!("Proxy listening on http://{}", bind_addr),
     );
-    let handle = tokio::spawn(async move {
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let join = tokio::spawn(async move {
         let app_emit = app_clone.clone();
         let router = Router::new().fallback(move |req: Request| {
             let routes = routes_clone.clone();
@@ -451,20 +452,21 @@ pub async fn start_proxy(
             let app = app_emit.clone();
             async move { proxy_handler(routes, intercept, req, app).await }
         });
-        let server = axum::serve(listener, router);
-        if let Err(e) = server.await {
+        let shutdown = async { let _ = shutdown_rx.await; };
+        if let Err(e) = axum::serve(listener, router).with_graceful_shutdown(shutdown).await {
             let _ = app_clone.emit("proxy-logs", format!("Proxy error: {}", e));
         }
     });
-    *guard = Some(handle);
+    *guard = Some(ServerHandle { shutdown_tx, join });
     Ok(())
 }
 
 #[tauri::command]
 pub async fn stop_proxy(state: State<'_, AppState>) -> Result<(), String> {
     let mut guard = state.proxy_abort.lock().await;
-    if let Some(handle) = guard.take() {
-        handle.abort();
+    if let Some(h) = guard.take() {
+        let _ = h.shutdown_tx.send(());
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), h.join).await;
     }
     Ok(())
 }

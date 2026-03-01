@@ -9,7 +9,7 @@ use axum::Router;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::AppState;
+use crate::state::{AppState, ServerHandle};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileServerRoute {
@@ -104,17 +104,19 @@ pub async fn start_file_server(
         "file-server-logs",
         format!("File server listening on http://{}", bind_addr),
     );
-    let handle = tokio::spawn(async move {
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let join = tokio::spawn(async move {
         let r = routes_arc.clone();
         let router = Router::new().fallback(move |req: Request| {
             let routes = r.clone();
             async move { file_server_handler(routes, req).await }
         });
-        if let Err(e) = axum::serve(listener, router).await {
+        let shutdown = async { let _ = shutdown_rx.await; };
+        if let Err(e) = axum::serve(listener, router).with_graceful_shutdown(shutdown).await {
             eprintln!("File server error: {}", e);
         }
     });
-    *guard = Some(handle);
+    *guard = Some(ServerHandle { shutdown_tx, join });
     Ok(())
 }
 
@@ -141,8 +143,10 @@ fn content_type_from_path(path: &str) -> String {
 #[tauri::command]
 pub async fn stop_file_server(state: State<'_, AppState>) -> Result<(), String> {
     let mut guard = state.file_server_abort.lock().await;
-    if let Some(handle) = guard.take() {
-        handle.abort();
+    if let Some(h) = guard.take() {
+        let _ = h.shutdown_tx.send(());
+        // Wait up to 5 s for graceful shutdown, then abort.
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), h.join).await;
     }
     Ok(())
 }
@@ -150,7 +154,13 @@ pub async fn stop_file_server(state: State<'_, AppState>) -> Result<(), String> 
 /// Returns true if the file server task is currently running.
 #[tauri::command]
 pub async fn is_file_server_running(state: State<'_, AppState>) -> Result<bool, String> {
-    let guard = state.file_server_abort.lock().await;
+    let mut guard = state.file_server_abort.lock().await;
+    // Clean up if the task finished on its own (e.g. bind error).
+    if let Some(h) = guard.as_ref() {
+        if h.join.is_finished() {
+            *guard = None;
+        }
+    }
     Ok(guard.is_some())
 }
 
@@ -191,7 +201,8 @@ pub async fn start_coverage_server(
 ) -> Result<u16, String> {
     let mut guard = state.coverage_server_abort.lock().await;
     if let Some(old) = guard.take() {
-        old.abort();
+        let _ = old.shutdown_tx.send(());
+        old.join.abort();
     }
     let base_dir = PathBuf::from(&html_dir);
     if !base_dir.is_dir() {
@@ -201,24 +212,27 @@ pub async fn start_coverage_server(
         .await
         .map_err(|e| e.to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    let handle = tokio::spawn(async move {
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let join = tokio::spawn(async move {
         let router = Router::new().fallback(move |req: Request| {
             let dir = base_dir.clone();
             async move { coverage_file_handler(dir, req).await }
         });
-        if let Err(e) = axum::serve(listener, router).await {
+        let shutdown = async { let _ = shutdown_rx.await; };
+        if let Err(e) = axum::serve(listener, router).with_graceful_shutdown(shutdown).await {
             eprintln!("Coverage server error: {}", e);
         }
     });
-    *guard = Some(handle);
+    *guard = Some(ServerHandle { shutdown_tx, join });
     Ok(port)
 }
 
 #[tauri::command]
 pub async fn stop_coverage_server(state: State<'_, AppState>) -> Result<(), String> {
     let mut guard = state.coverage_server_abort.lock().await;
-    if let Some(handle) = guard.take() {
-        handle.abort();
+    if let Some(h) = guard.take() {
+        let _ = h.shutdown_tx.send(());
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(5), h.join).await;
     }
     Ok(())
 }
