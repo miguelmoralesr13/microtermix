@@ -552,32 +552,80 @@ export async function getIssueDetail(issueKey: string): Promise<JiraIssueDetail>
 
 /** Enhanced board search: supports assignee, issueType, and multi-status filters */
 export interface BoardFilter {
-    assignee?: 'me' | 'unassigned' | '';   // '' = any
-    issueType?: string;
-    statuses?: string[];                    // multi-select; empty = all
+    assignees?: string[];    // 'me' | 'unassigned' | accountId
+    issueTypes?: string[];
+    statuses?: string[];
+    priorities?: string[];
+    labels?: string[];
+    epicKeys?: string[];
     text?: string;
 }
 
 export async function getBoardIssues(projectKey: string, filter: BoardFilter = {}): Promise<JiraIssue[]> {
     const parts: string[] = [`project = "${projectKey}"`];
 
-    if (filter.assignee === 'me') parts.push('assignee = currentUser()');
-    else if (filter.assignee === 'unassigned') parts.push('assignee is EMPTY');
-
-    if (filter.issueType) parts.push(`issuetype = "${filter.issueType}"`);
-
-    if (filter.statuses && filter.statuses.length > 0) {
-        const list = filter.statuses.map(s => `"${s}"`).join(', ');
-        parts.push(`status in (${list})`);
+    if (filter.assignees?.length) {
+        const clauses: string[] = [];
+        if (filter.assignees.includes('me')) clauses.push('assignee = currentUser()');
+        if (filter.assignees.includes('unassigned')) clauses.push('assignee is EMPTY');
+        const ids = filter.assignees.filter(a => a !== 'me' && a !== 'unassigned');
+        if (ids.length) clauses.push(`assignee in (${ids.map(id => `"${id}"`).join(',')})`);
+        if (clauses.length) parts.push(`(${clauses.join(' OR ')})`);
     }
-
+    if (filter.issueTypes?.length)
+        parts.push(`issuetype in (${filter.issueTypes.map(t => `"${t}"`).join(',')})`);
+    if (filter.statuses?.length)
+        parts.push(`status in (${filter.statuses.map(s => `"${s}"`).join(',')})`);
+    if (filter.priorities?.length)
+        parts.push(`priority in (${filter.priorities.map(p => `"${p}"`).join(',')})`);
+    if (filter.labels?.length)
+        parts.push(`labels in (${filter.labels.map(l => `"${l}"`).join(',')})`);
+    if (filter.epicKeys?.length)
+        parts.push(`(parent in (${filter.epicKeys.map(k => `"${k}"`).join(',')}) OR "Epic Link" in (${filter.epicKeys.map(k => `"${k}"`).join(',')}))`);
     if (filter.text?.trim()) {
         const t = filter.text.trim();
-        if (/^[A-Z]+-\d+$/i.test(t)) parts.push(`(summary ~ "${t}" OR key = "${t.toUpperCase()}")`);
-        else parts.push(`summary ~ "${t}"`);
+        parts.push(/^[A-Z]+-\d+$/i.test(t) ? `(summary ~ "${t}" OR key = "${t.toUpperCase()}")` : `summary ~ "${t}"`);
     }
 
     return searchIssues(parts.join(' AND ') + ' ORDER BY updated DESC', 100);
+}
+
+export async function getProjectStatuses(projectKey: string): Promise<string[]> {
+    const data = await jiraFetch(`/project/${projectKey}/statuses`);
+    const set = new Set<string>();
+    for (const type of data ?? []) for (const s of type.statuses ?? []) set.add(s.name);
+    return [...set].sort();
+}
+
+export async function addComment(issueKey: string, text: string): Promise<void> {
+    const paragraphs = text.split('\n').map(line => ({
+        type: 'paragraph',
+        content: line.trim() ? [{ type: 'text', text: line }] : [],
+    }));
+    await jiraFetch(`/issue/${issueKey}/comment`, {
+        method: 'POST',
+        body: JSON.stringify({ body: { type: 'doc', version: 1, content: paragraphs } }),
+    });
+}
+
+export async function uploadAttachment(issueKey: string, files: File[]): Promise<void> {
+    const cfg = loadConfig();
+    if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) throw new Error('Jira not configured.');
+    const token = btoa(`${cfg.email}:${cfg.apiToken}`);
+    const url = `${cfg.baseUrl.replace(/\/$/, '')}/rest/api/3/issue/${issueKey}/attachments`;
+    for (const file of files) {
+        const form = new FormData();
+        form.append('file', file, file.name);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Authorization': `Basic ${token}`, 'X-Atlassian-Token': 'no-check' },
+            body: form,
+        });
+        if (!res.ok) {
+            const msg = await res.text().catch(() => '');
+            throw new Error(`Error subiendo ${file.name}: ${msg}`);
+        }
+    }
 }
 
 // ── Tempo API methods ─────────────────────────────────────────────────────

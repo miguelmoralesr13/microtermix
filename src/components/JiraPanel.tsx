@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
     Settings, Plus, RefreshCw, Search, X, CheckCircle,
-    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, Pin, UserCheck, Timer
+    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, ChevronDown, Pin, UserCheck, Timer, Paperclip, Send
 } from 'lucide-react';
 import {
     JiraConfig, JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
@@ -10,7 +10,7 @@ import {
     getProjects, getIssueTypes, getUsers, createIssue,
     getEpics, getStoriesByEpic, getTasksByStory, createSubTask, transitionIssue,
     getTransitions, assignIssue, getBoardIssues, getIssueDetail, JiraIssueDetail, BoardFilter, getJiraMediaUrl,
-    getActivityOptions,
+    getActivityOptions, getProjectStatuses, addComment, uploadAttachment,
 } from './jiraApi';
 import { TempoLogModal } from './TempoLogModal';
 
@@ -91,6 +91,83 @@ function IssueCard({ issue, onClick }: { issue: JiraIssue; onClick: () => void }
             )}
         </div>
     );
+}
+
+// ── ADF (Atlassian Document Format) renderer ──────────────────────────────────
+
+function AdfMediaFile({ id }: { id: string }) {
+    const cfg = loadConfig();
+    const [src, setSrc] = useState<string | null>(null);
+    useEffect(() => {
+        getJiraMediaUrl(`${cfg.baseUrl}/rest/api/3/attachment/content/${id}`)
+            .then(setSrc).catch(() => {});
+    }, [id, cfg.baseUrl]);
+    if (!src) return null;
+    return <img src={src} alt="" className="max-w-full rounded my-2 border border-slate-800" />;
+}
+
+function AdfInline({ node }: { node: any }): React.ReactElement | null {
+    if (node.type === 'hardBreak') return <br />;
+    if (node.type === 'mention') return <span className="text-nexus-accent font-medium">@{node.attrs?.text ?? node.attrs?.id}</span>;
+    if (node.type === 'emoji') return <span>{node.attrs?.text ?? '😊'}</span>;
+    if (node.type === 'inlineCard') return <a href={node.attrs?.url} target="_blank" rel="noopener noreferrer" className="text-nexus-neon underline text-xs break-all">{node.attrs?.url}</a>;
+    if (node.type === 'text') {
+        const marks: any[] = node.marks ?? [];
+        let el: React.ReactNode = node.text;
+        if (marks.some(m => m.type === 'strong')) el = <strong>{el}</strong>;
+        if (marks.some(m => m.type === 'em')) el = <em>{el}</em>;
+        if (marks.some(m => m.type === 'code')) el = <code className="bg-slate-800 px-1 rounded text-[11px] font-mono">{el}</code>;
+        if (marks.some(m => m.type === 'strike')) el = <s>{el}</s>;
+        const link = marks.find(m => m.type === 'link');
+        if (link) el = <a href={link.attrs?.href} target="_blank" rel="noopener noreferrer" className="text-nexus-neon underline">{el}</a>;
+        return <>{el}</>;
+    }
+    return <>{node.text ?? null}</>;
+}
+
+function AdfNode({ node }: { node: any }): React.ReactElement | null {
+    const children = (nodes: any[]) => nodes?.map((n, i) => <AdfNode key={i} node={n} />) ?? null;
+    const inlines = (nodes: any[]) => nodes?.map((n, i) => <AdfInline key={i} node={n} />) ?? null;
+
+    switch (node.type) {
+        case 'paragraph':
+            return <p className="mb-2 last:mb-0 leading-relaxed">{inlines(node.content ?? [])}</p>;
+        case 'hardBreak':
+            return <br />;
+        case 'heading':
+            return <p className="font-bold mb-1 text-slate-200">{inlines(node.content ?? [])}</p>;
+        case 'bulletList':
+            return <ul className="list-disc pl-4 mb-2 space-y-0.5">{children(node.content)}</ul>;
+        case 'orderedList':
+            return <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children(node.content)}</ol>;
+        case 'listItem':
+            return <li className="text-sm text-slate-300">{children(node.content)}</li>;
+        case 'blockquote':
+            return <blockquote className="border-l-2 border-slate-600 pl-3 italic text-slate-400 my-2">{children(node.content)}</blockquote>;
+        case 'codeBlock':
+            return <pre className="bg-slate-950 border border-slate-700 rounded p-3 text-xs text-slate-300 overflow-x-auto my-2 font-mono">{(node.content ?? []).map((n: any) => n.text ?? '').join('')}</pre>;
+        case 'rule':
+            return <hr className="border-slate-700 my-3" />;
+        case 'mediaSingle':
+        case 'mediaInline': {
+            const media = node.content?.[0];
+            if (!media) return null;
+            if (media.attrs?.type === 'external') return <img src={media.attrs.url} alt="" className="max-w-full rounded my-2 border border-slate-800" />;
+            if (media.attrs?.type === 'file' && media.attrs.id) return <AdfMediaFile id={media.attrs.id} />;
+            return null;
+        }
+        default:
+            if (node.content) return <>{children(node.content)}</>;
+            if (node.text) return <AdfInline node={node} />;
+            return null;
+    }
+}
+
+function AdfBody({ body }: { body: any }) {
+    if (!body) return null;
+    if (typeof body === 'string') return <span className="whitespace-pre-wrap text-sm text-slate-300">{body}</span>;
+    if (!body.content?.length) return null;
+    return <>{body.content.map((n: any, i: number) => <AdfNode key={i} node={n} />)}</>;
 }
 
 // ── Issue Detail Modal (Rich) ──────────────────────────────────────────────────
@@ -179,6 +256,87 @@ function AttachmentViewer({ attachments, initialIndex, onClose }: { attachments:
     );
 }
 
+// ── Comment Form ─────────────────────────────────────────────────────────────
+
+function CommentForm({ issueKey, onSuccess }: { issueKey: string; onSuccess: () => void }) {
+    const [text, setText] = useState('');
+    const [files, setFiles] = useState<File[]>([]);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleSubmit = async () => {
+        if (!text.trim() && files.length === 0) return;
+        setSubmitting(true);
+        setError(null);
+        try {
+            if (text.trim()) await addComment(issueKey, text.trim());
+            if (files.length > 0) await uploadAttachment(issueKey, files);
+            setText('');
+            setFiles([]);
+            onSuccess();
+        } catch (e: any) {
+            setError(e?.message ?? 'Error al enviar');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        e.target.value = '';
+    };
+
+    const removeFile = (idx: number) => setFiles(prev => prev.filter((_, i) => i !== idx));
+
+    return (
+        <section>
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Agregar Comentario</h3>
+            <div className="bg-slate-800/40 border border-slate-700 rounded-xl overflow-hidden">
+                <textarea
+                    value={text}
+                    onChange={e => setText(e.target.value)}
+                    placeholder="Escribe un comentario…"
+                    rows={3}
+                    className="w-full bg-transparent px-4 py-3 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none"
+                />
+                {files.length > 0 && (
+                    <div className="px-4 pb-2 flex flex-wrap gap-2">
+                        {files.map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5 bg-slate-700 rounded-full px-2.5 py-1 text-[11px] text-slate-300 max-w-[180px]">
+                                <Paperclip size={10} className="shrink-0 text-slate-400" />
+                                <span className="truncate">{f.name}</span>
+                                <button onClick={() => removeFile(i)} className="text-slate-500 hover:text-red-400 shrink-0 ml-0.5"><X size={10} /></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="flex items-center justify-between px-3 py-2 border-t border-slate-700/60">
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Adjuntar archivo"
+                        className="p-1.5 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 transition-colors"
+                    >
+                        <Paperclip size={15} />
+                    </button>
+                    <input ref={fileInputRef} type="file" multiple hidden onChange={handleFileChange} />
+                    <button
+                        onClick={handleSubmit}
+                        disabled={submitting || (!text.trim() && files.length === 0)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-nexus-accent/20 hover:bg-nexus-accent/30 disabled:opacity-40 disabled:cursor-not-allowed text-nexus-accent text-xs font-bold rounded-lg border border-nexus-accent/30 transition-colors"
+                    >
+                        {submitting ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}
+                        {submitting ? 'Enviando…' : 'Comentar'}
+                    </button>
+                </div>
+            </div>
+            {error && <p className="text-[11px] text-red-400 mt-2">{error}</p>}
+        </section>
+    );
+}
+
+// ── Issue Detail Modal ────────────────────────────────────────────────────────
+
 function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () => void }) {
     const cfg = loadConfig();
     const { fields: initialFields } = issue;
@@ -187,6 +345,7 @@ function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () =>
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [viewingAttachment, setViewingAttachment] = useState<any | null>(null);
+    const [reloadTick, setReloadTick] = useState(0);
 
     const handleClose = useCallback(() => {
         if (!viewingAttachment) onClose();
@@ -199,7 +358,7 @@ function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () =>
             .then(setDetail)
             .catch(e => setError(e?.message ?? 'Error cargando detalles'))
             .finally(() => setLoading(false));
-    }, [issue.key]);
+    }, [issue.key, reloadTick]);
 
     const fields = detail?.fields ?? initialFields;
     const descText = !fields.description ? null
@@ -282,23 +441,20 @@ function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () =>
                                     Comentarios <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded text-[10px]">{detail.comments.length}</span>
                                 </h3>
                                 <div className="space-y-4">
-                                    {detail.comments.map(comment => {
-                                        const bodyText = typeof comment.body === 'string' ? comment.body : comment.body?.content?.[0]?.content?.[0]?.text ?? '(contenido no soportado)';
-                                        return (
-                                            <div key={comment.id} className="flex gap-3">
-                                                <img src={comment.author.avatarUrls['32x32']} alt="" className="w-8 h-8 rounded-full shrink-0 border border-slate-700" />
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-baseline gap-2 mb-1 flex-wrap">
-                                                        <span className="text-xs font-bold text-slate-200">{comment.author.displayName}</span>
-                                                        <span className="text-[10px] text-slate-500">{new Date(comment.created).toLocaleString()}</span>
-                                                    </div>
-                                                    <div className="text-sm text-slate-300 bg-slate-900 rounded-b-xl rounded-tr-xl p-3 border border-slate-800 whitespace-pre-wrap leading-relaxed shadow-sm block">
-                                                        {bodyText}
-                                                    </div>
+                                    {detail.comments.map(comment => (
+                                        <div key={comment.id} className="flex gap-3">
+                                            <img src={comment.author.avatarUrls['32x32']} alt="" className="w-8 h-8 rounded-full shrink-0 border border-slate-700" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-baseline gap-2 mb-1 flex-wrap">
+                                                    <span className="text-xs font-bold text-slate-200">{comment.author.displayName}</span>
+                                                    <span className="text-[10px] text-slate-500">{new Date(comment.created).toLocaleString()}</span>
+                                                </div>
+                                                <div className="text-sm text-slate-300 bg-slate-900 rounded-b-xl rounded-tr-xl p-3 border border-slate-800 leading-relaxed shadow-sm">
+                                                    <AdfBody body={comment.body} />
                                                 </div>
                                             </div>
-                                        );
-                                    })}
+                                        </div>
+                                    ))}
                                 </div>
                             </section>
                         )}
@@ -309,6 +465,8 @@ function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () =>
                                 <p className="text-sm text-slate-600 italic px-2">Sin comentarios en este issue.</p>
                             </section>
                         )}
+
+                        <CommentForm issueKey={issue.key} onSuccess={() => setReloadTick(t => t + 1)} />
                     </div>
 
                     {/* Right Column (Metadata) */}
@@ -1926,66 +2084,182 @@ function CreateIssueForm({ onCreated }: { onCreated: (key: string) => void }) {
     );
 }
 
+// ── MultiSelect ────────────────────────────────────────────────────────────────
+
+function MultiSelect({ label, options, selected, onChange }: {
+    label: string;
+    options: { value: string; label: string }[];
+    selected: string[];
+    onChange: (v: string[]) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const ref = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const h = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+        document.addEventListener('mousedown', h);
+        return () => document.removeEventListener('mousedown', h);
+    }, []);
+
+    useEffect(() => {
+        if (open) { setSearch(''); setTimeout(() => searchRef.current?.focus(), 0); }
+    }, [open]);
+
+    const toggle = (v: string) =>
+        onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v]);
+
+    const filtered = search.trim()
+        ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+        : options;
+
+    const display = selected.length === 0 ? 'Todos'
+        : selected.length === 1 ? (options.find(o => o.value === selected[0])?.label ?? selected[0])
+        : `${selected.length} sel.`;
+
+    const active = selected.length > 0;
+
+    return (
+        <div ref={ref} className="relative">
+            <button
+                onClick={() => setOpen(v => !v)}
+                className={`flex items-center gap-1.5 px-2 py-1.5 text-[11px] rounded border transition-colors ${active
+                    ? 'bg-nexus-accent/10 border-nexus-accent/40 text-nexus-accent'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600'}`}
+            >
+                <span className="text-[9px] text-slate-500 uppercase tracking-wider">{label}</span>
+                <span className="font-medium">{display}</span>
+                {active && (
+                    <span onClick={e => { e.stopPropagation(); onChange([]); }} className="opacity-60 hover:opacity-100">
+                        <X size={9} />
+                    </span>
+                )}
+                <ChevronDown size={9} className={`opacity-40 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && (
+                <div className="absolute top-full mt-1 left-0 z-50 bg-slate-900 border border-slate-700 rounded-lg shadow-xl min-w-[180px] flex flex-col max-h-64">
+                    <div className="p-1.5 border-b border-slate-800 shrink-0">
+                        <input
+                            ref={searchRef}
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                            placeholder="Buscar..."
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                        />
+                    </div>
+                    <div className="overflow-y-auto py-1">
+                        {filtered.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-slate-600 italic">Sin resultados</p>
+                        ) : filtered.map(opt => (
+                            <label key={opt.value} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-slate-800 cursor-pointer text-xs text-slate-300">
+                                <input
+                                    type="checkbox"
+                                    checked={selected.includes(opt.value)}
+                                    onChange={() => toggle(opt.value)}
+                                    className="accent-nexus-accent w-3 h-3"
+                                />
+                                {opt.label}
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function BoardView() {
     const cfg = loadConfig();
     const [issues, setIssues] = useState<JiraIssue[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selected, setSelected] = useState<JiraIssue | null>(null);
-
-    // Multi-filters
     const [filter, setFilter] = useState<BoardFilter>(() => {
         try {
             const saved = localStorage.getItem('nexus_jira_board_filter');
-            return saved ? JSON.parse(saved) : { assignee: 'me' };
-        } catch { return { assignee: 'me' }; }
+            if (!saved) return { assignees: ['me'] };
+            const p = JSON.parse(saved);
+            // Migrate old single-value fields to arrays
+            if (p.assignee !== undefined && !p.assignees) {
+                p.assignees = p.assignee ? [p.assignee] : [];
+                delete p.assignee;
+            }
+            if (p.issueType !== undefined && !p.issueTypes) {
+                p.issueTypes = p.issueType ? [p.issueType] : [];
+                delete p.issueType;
+            }
+            return p;
+        } catch { return { assignees: ['me'] }; }
     });
-    const [availableStatuses] = useState<string[]>([
-        'Open', 'In Progress', 'Done', 'Released', 'Discarded', 'Blocked', 'To Do', 'Review'
-    ]);
-    const [projectKey, setProjectKey] = useState<string>(() => {
-        return localStorage.getItem('nexus_jira_board_proj') || cfg.defaultProject;
-    });
+
+    const [searchInput, setSearchInput] = useState(() =>
+        loadLS<BoardFilter>('nexus_jira_board_filter', {}).text ?? ''
+    );
+
+    const [projectKey, setProjectKey] = useState<string>(() =>
+        localStorage.getItem('nexus_jira_board_proj') || cfg.defaultProject
+    );
     const [projects, setProjects] = useState<{ key: string; name: string }[]>([]);
     const [projectIssueTypes, setProjectIssueTypes] = useState<{ id: string; name: string }[]>([]);
+    const [projectStatuses, setProjectStatuses] = useState<string[]>([]);
+    const [projectEpics, setProjectEpics] = useState<JiraIssue[]>([]);
 
-    useEffect(() => {
-        localStorage.setItem('nexus_jira_board_filter', JSON.stringify(filter));
-    }, [filter]);
+    // Derived from loaded issues
+    const assigneeOptions = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const issue of issues) {
+            const a = issue.fields.assignee;
+            if (a?.accountId) map.set(a.accountId, a.displayName ?? a.accountId);
+        }
+        return [...map.entries()].map(([value, label]) => ({ value, label }));
+    }, [issues]);
 
+    const labelOptions = useMemo(() =>
+        [...new Set(issues.flatMap(i => (i.fields as any).labels ?? []))].sort()
+            .map((l: string) => ({ value: l, label: l })),
+        [issues]
+    );
+
+    const PRIORITIES = [
+        { value: 'Highest', label: '🔴 Highest' },
+        { value: 'High', label: '🟠 High' },
+        { value: 'Medium', label: '🟡 Medium' },
+        { value: 'Low', label: '🔵 Low' },
+        { value: 'Lowest', label: '⚪ Lowest' },
+    ];
+
+    // Persist filter & project
+    useEffect(() => { localStorage.setItem('nexus_jira_board_filter', JSON.stringify(filter)); }, [filter]);
     useEffect(() => {
         if (projectKey) localStorage.setItem('nexus_jira_board_proj', projectKey);
         else localStorage.removeItem('nexus_jira_board_proj');
     }, [projectKey]);
 
-    useEffect(() => {
-        getProjects().then(setProjects).catch(() => { });
-    }, []);
+    // Load projects once
+    useEffect(() => { getProjects().then(setProjects).catch(() => {}); }, []);
 
+    // Load project metadata when project changes
     useEffect(() => {
-        const fetchMeta = async () => {
-            try {
-                if (projectKey) {
-                    const types = await getIssueTypes(projectKey);
-                    setProjectIssueTypes(types);
-                }
-            } catch (e) {
-                console.error('Failed to load board meta', e);
-            }
-        };
-        fetchMeta();
+        if (!projectKey) return;
+        Promise.all([
+            getIssueTypes(projectKey).catch(() => [] as { id: string; name: string }[]),
+            getProjectStatuses(projectKey).catch(() => [] as string[]),
+            getEpics(projectKey).catch(() => [] as JiraIssue[]),
+        ]).then(([types, statuses, epics]) => {
+            setProjectIssueTypes(types);
+            setProjectStatuses(statuses);
+            setProjectEpics(epics);
+        });
     }, [projectKey]);
 
     const load = useCallback(async () => {
-        if (!projectKey) {
-            setError('Falta seleccionar un proyecto');
-            return;
-        }
+        if (!projectKey) { setError('Falta seleccionar un proyecto'); return; }
         setLoading(true);
         setError(null);
         try {
-            const data = await getBoardIssues(projectKey, filter);
-            setIssues(data);
+            setIssues(await getBoardIssues(projectKey, filter));
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -1993,56 +2267,42 @@ function BoardView() {
         }
     }, [filter, projectKey]);
 
-    // Apply text search on Enter only, other dropdown filters fetch instantly
-    useEffect(() => { load(); }, [load, filter.assignee, filter.issueType, filter.statuses, filter.text, projectKey]);
+    useEffect(() => { load(); }, [load]);
 
-    // Handle pressing enter on search
-    const [searchInput, setSearchInput] = useState(filter.text || '');
+    const hasFilters = !!(
+        filter.assignees?.length || filter.issueTypes?.length || filter.statuses?.length ||
+        filter.priorities?.length || filter.labels?.length || filter.epicKeys?.length || filter.text
+    );
+    const resetFilters = () => { setSearchInput(''); setFilter({ assignees: ['me'] }); };
 
-    const hasFilters = filter.assignee !== 'me' || filter.issueType || filter.statuses?.length || filter.text;
-    const resetFilters = () => {
-        setSearchInput('');
-        setFilter({ assignee: 'me' });
-    };
-
-    if (!cfg.baseUrl) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-slate-500 p-12">
-                <AlertCircle size={40} />
-                <p className="text-sm text-center">Jira no está configurado.<br />Ve a <strong className="text-slate-300">Settings</strong> para agregar tus credenciales.</p>
-            </div>
-        );
-    }
+    if (!cfg.baseUrl) return (
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-slate-500 p-12">
+            <AlertCircle size={40} />
+            <p className="text-sm text-center">Jira no está configurado.<br />Ve a <strong className="text-slate-300">Settings</strong> para agregar tus credenciales.</p>
+        </div>
+    );
 
     return (
         <div className="flex flex-col h-full min-h-0">
-            {/* Toolbar — Multi-filter */}
             <div className="flex flex-col gap-2 px-4 py-3 border-b border-slate-800 bg-slate-900/50 shrink-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                    {/* Project */}
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Proyecto:</span>
-                        <select
-                            value={projectKey || ''}
-                            onChange={e => {
-                                setProjectKey(e.target.value);
-                                setFilter(prev => ({ ...prev, issueType: undefined })); // Reset type filter on project change
-                            }}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon font-bold text-nexus-neon"
-                        >
-                            <option value="">Seleccionar Proyecto...</option>
-                            {projects.map(p => <option key={p.key} value={p.key}>{p.key} ({p.name})</option>)}
-                        </select>
-                    </div>
+                {/* Row 1: project, search, actions */}
+                <div className="flex items-center gap-2">
+                    <select
+                        value={projectKey || ''}
+                        onChange={e => { setProjectKey(e.target.value); setFilter(prev => ({ ...prev, issueTypes: [], epicKeys: [] })); }}
+                        className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] font-bold text-nexus-neon focus:outline-none focus:border-nexus-neon"
+                    >
+                        <option value="">Seleccionar Proyecto...</option>
+                        {projects.map(p => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
+                    </select>
 
-                    {/* Text search */}
-                    <div className="relative flex-1 min-w-[150px] ml-1">
+                    <div className="relative flex-1">
                         <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                         <input
                             value={searchInput}
                             onChange={e => setSearchInput(e.target.value)}
                             onKeyDown={e => {
-                                if (e.key === 'Enter') setFilter(prev => ({ ...prev, text: searchInput }));
+                                if (e.key === 'Enter') setFilter(prev => ({ ...prev, text: searchInput || undefined }));
                                 if (e.key === 'Escape') { setSearchInput(''); setFilter(prev => ({ ...prev, text: undefined })); }
                             }}
                             placeholder="Buscar título o clave... ↵"
@@ -2050,74 +2310,70 @@ function BoardView() {
                         />
                         {searchInput && (
                             <button onClick={() => { setSearchInput(''); setFilter(prev => ({ ...prev, text: undefined })); }}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-0.5 rounded">
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                                 <X size={11} />
                             </button>
                         )}
                     </div>
 
-                    {/* Assignee */}
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider ml-1">Asignado:</span>
-                        <select
-                            value={filter.assignee ?? ''}
-                            onChange={e => setFilter(prev => ({ ...prev, assignee: e.target.value as any }))}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon"
-                        >
-                            <option value="">Cualquier asignado</option>
-                            <option value="me">👤 Asignados a mí</option>
-                            <option value="unassigned">Sin asignar</option>
-                        </select>
-                    </div>
-
-                    {/* Issue Type */}
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider ml-1">Tipo:</span>
-                        <select
-                            value={filter.issueType ?? ''}
-                            onChange={e => setFilter(prev => ({ ...prev, issueType: e.target.value || undefined }))}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon"
-                        >
-                            <option value="">Todos los tipos</option>
-                            {projectIssueTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                        </select>
-                    </div>
-
-                    {/* Status Toggle */}
-                    <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider ml-1">Estado:</span>
-                        <div className="relative group">
-                            <select
-                                value={(filter.statuses ?? [])[0] ?? ''}
-                                onChange={e => setFilter(prev => ({ ...prev, statuses: e.target.value ? [e.target.value] : undefined }))}
-                                className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] text-slate-300 focus:outline-none focus:border-nexus-neon min-w-[120px]"
-                            >
-                                <option value="">Todos los estados</option>
-                                {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="flex-1"></div> {/* Spacer */}
-
                     {hasFilters && (
                         <button onClick={resetFilters}
-                            className="text-[10px] text-nexus-neon hover:text-nexus-neon flex items-center gap-1 border border-nexus-neon/30 bg-nexus-neon/10 px-2 py-1.5 rounded" title="Restaurar a 'Asignados a mí'">
+                            className="text-[10px] text-nexus-neon flex items-center gap-1 border border-nexus-neon/30 bg-nexus-neon/10 px-2 py-1.5 rounded whitespace-nowrap">
                             <X size={10} /> Reset
                         </button>
                     )}
-
-                    <button onClick={load} disabled={loading} className="p-1.5 ml-2 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors border border-slate-700 bg-slate-950">
+                    <button onClick={load} disabled={loading}
+                        className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded border border-slate-700 bg-slate-950">
                         <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{issues.length} resultados en {projectKey || '—'}</span>
+                {/* Row 2: multi-select filters */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                    <MultiSelect
+                        label="Asignado"
+                        options={[{ value: 'me', label: '👤 Yo' }, { value: 'unassigned', label: '— Sin asignar' }, ...assigneeOptions]}
+                        selected={filter.assignees ?? []}
+                        onChange={v => setFilter(prev => ({ ...prev, assignees: v }))}
+                    />
+                    <MultiSelect
+                        label="Tipo"
+                        options={projectIssueTypes.map(t => ({ value: t.name, label: t.name }))}
+                        selected={filter.issueTypes ?? []}
+                        onChange={v => setFilter(prev => ({ ...prev, issueTypes: v }))}
+                    />
+                    <MultiSelect
+                        label="Estado"
+                        options={projectStatuses.map(s => ({ value: s, label: s }))}
+                        selected={filter.statuses ?? []}
+                        onChange={v => setFilter(prev => ({ ...prev, statuses: v }))}
+                    />
+                    <MultiSelect
+                        label="Prioridad"
+                        options={PRIORITIES}
+                        selected={filter.priorities ?? []}
+                        onChange={v => setFilter(prev => ({ ...prev, priorities: v }))}
+                    />
+                    <MultiSelect
+                        label="Épica"
+                        options={projectEpics.map(e => ({ value: e.key, label: `${e.key} — ${e.fields.summary}` }))}
+                        selected={filter.epicKeys ?? []}
+                        onChange={v => setFilter(prev => ({ ...prev, epicKeys: v }))}
+                    />
+                    {labelOptions.length > 0 && (
+                        <MultiSelect
+                            label="Label"
+                            options={labelOptions}
+                            selected={filter.labels ?? []}
+                            onChange={v => setFilter(prev => ({ ...prev, labels: v }))}
+                        />
+                    )}
+                    <span className="ml-auto text-[10px] text-slate-600 font-bold uppercase tracking-wider">
+                        {issues.length} resultados
+                    </span>
                 </div>
             </div>
 
-            {/* Issues container... */}
             <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-2 bg-slate-950">
                 {error && (
                     <div className="p-3 bg-nexus-danger/10 border border-nexus-danger/30 rounded-lg text-nexus-danger text-xs flex items-start gap-2">
@@ -2130,7 +2386,7 @@ function BoardView() {
                     </div>
                 ) : issues.length === 0 ? (
                     <div className="text-center text-slate-500 py-16 text-[13px] border border-dashed border-slate-800 rounded-xl m-4 bg-slate-900/40">
-                        No se encontraron issues con los filtros actuales en el proyecto {projectKey}.
+                        No se encontraron issues con los filtros actuales en {projectKey || 'el proyecto'}.
                         {hasFilters && <p className="mt-2"><button onClick={resetFilters} className="text-nexus-neon underline decoration-nexus-neon/30 hover:decoration-nexus-neon">Restablecer filtros</button></p>}
                     </div>
                 ) : (
