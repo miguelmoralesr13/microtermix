@@ -29,7 +29,10 @@ pub use crate::file_server::{
     stop_file_server, FileServerRoute,
 };
 pub use crate::workspace::{get_initial_workspace_for_window, open_new_workspace};
-pub use crate::cloudwatch::cw_ping;
+pub use crate::cloudwatch::{
+    cw_get_log_groups, cw_get_log_streams, cw_get_log_events,
+    cw_list_metrics, cw_get_metric_data,
+};
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -203,7 +206,11 @@ pub fn run() {
             is_file_server_running,
             start_coverage_server,
             stop_coverage_server,
-            cw_ping
+            cw_get_log_groups,
+            cw_get_log_streams,
+            cw_get_log_events,
+            cw_list_metrics,
+            cw_get_metric_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
