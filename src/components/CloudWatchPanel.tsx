@@ -124,6 +124,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
     const [streamSearch, setStreamSearch] = useState('');
     const [selectedStream, setSelectedStream] = useState<string | null>(null);
     const [loadingStreams, setLoadingStreams] = useState(false);
+    const [streamError, setStreamError] = useState<string | null>(null);
 
     // ── Events ──
     const [events, setEvents] = useState<CwLogEvent[]>([]);
@@ -137,46 +138,66 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
     // Keep ref in sync with state for use inside interval
     useEffect(() => { nextTokenRef.current = nextToken; }, [nextToken]);
 
-    // Load groups on mount
-    useEffect(() => {
+    // Fetching functions
+    const fetchGroups = useCallback((prefix?: string) => {
         setLoadingGroups(true);
         setGroupError(null);
-        cwGetLogGroups(cfg)
+        cwGetLogGroups(cfg, prefix)
             .then(setGroups)
             .catch(e => setGroupError(e?.message ?? String(e)))
             .finally(() => setLoadingGroups(false));
-    }, []);
+    }, [cfg]);
+
+    const fetchStreams = useCallback((group: string, prefix?: string) => {
+        setLoadingStreams(true);
+        setStreamError(null);
+        cwGetLogStreams(cfg, group, prefix)
+            .then(res => {
+                setStreams(res);
+                if (res.length === 0 && prefix) {
+                    setStreamError(`No se encontraron streams que empiecen con "${prefix}"`);
+                }
+            })
+            .catch(e => setStreamError(e?.message ?? String(e)))
+            .finally(() => setLoadingStreams(false));
+    }, [cfg]);
+
+    // Initial load groups
+    useEffect(() => {
+        fetchGroups();
+    }, [fetchGroups]);
 
     // Load streams when group changes
     useEffect(() => {
-        if (!selectedGroup) { setStreams([]); setSelectedStream(null); return; }
-        setLoadingStreams(true);
-        cwGetLogStreams(cfg, selectedGroup)
-            .then(setStreams)
-            .catch(() => setStreams([]))
-            .finally(() => setLoadingStreams(false));
+        if (!selectedGroup) {
+            setStreams([]);
+            setSelectedStream(null);
+            setEvents([]);
+            return;
+        }
+        fetchStreams(selectedGroup);
         setSelectedStream(null);
         setEvents([]);
         setNextToken(null);
         setTailing(false);
-    }, [selectedGroup]);
+    }, [selectedGroup, fetchStreams]);
 
-    // Initial load when stream selected
+    // Initial load events when stream selected
     useEffect(() => {
         if (!selectedGroup || !selectedStream) return;
         setEvents([]);
         setNextToken(null);
         setLoadingEvents(true);
-        const startMs = Date.now() - 10 * 60 * 1000;
-        cwGetLogEvents(cfg, selectedGroup, selectedStream, null, startMs)
+        // Remove startMs restriction to see logs of any stream regardless of age
+        cwGetLogEvents(cfg, selectedGroup, selectedStream, null, null)
             .then(res => {
                 setEvents(res.events);
                 setNextToken(res.next_forward_token);
                 setTailing(true);
             })
-            .catch(() => {})
+            .catch(() => { })
             .finally(() => setLoadingEvents(false));
-    }, [selectedStream]);
+    }, [selectedStream, cfg, selectedGroup]);
 
     // Auto-scroll to bottom on new events
     useEffect(() => {
@@ -203,15 +224,16 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
             } catch { /* ignore tail errors silently */ }
         }, 5000);
         return () => { if (tailRef.current) clearInterval(tailRef.current); };
-    }, [tailing, selectedGroup, selectedStream]);
+    }, [tailing, selectedGroup, selectedStream, cfg]);
 
-    const filteredGroups = groupSearch
-        ? groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
-        : groups;
+    // Local filtered lists for UI
+    const filteredGroups = groupSearch.trim() === ''
+        ? groups
+        : groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()));
 
-    const filteredStreams = streamSearch
-        ? streams.filter(s => s.name.toLowerCase().includes(streamSearch.toLowerCase()))
-        : streams;
+    const filteredStreams = streamSearch.trim() === ''
+        ? streams
+        : streams.filter(s => s.name.toLowerCase().includes(streamSearch.toLowerCase()));
 
     return (
         <div className="flex h-full min-h-0">
@@ -219,17 +241,28 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
             <div className="w-64 shrink-0 border-r border-slate-800 flex flex-col min-h-0">
                 {/* Group search */}
                 <div className="p-2 border-b border-slate-800">
-                    <div className="relative">
-                        <input
-                            value={groupSearch}
-                            onChange={e => setGroupSearch(e.target.value)}
-                            placeholder="Buscar grupo…"
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
-                        />
-                        {loadingGroups && <RefreshCw size={10} className="animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />}
+                    <div className="flex gap-1">
+                        <div className="relative flex-1">
+                            <input
+                                value={groupSearch}
+                                onChange={e => setGroupSearch(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && fetchGroups(groupSearch.trim())}
+                                placeholder="Buscar grupo…"
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                            />
+                            {loadingGroups && <RefreshCw size={10} className="animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />}
+                        </div>
+                        <button
+                            onClick={() => fetchGroups(groupSearch.trim())}
+                            disabled={loadingGroups}
+                            title="Buscar en AWS CloudWatch"
+                            className="px-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded border border-slate-700 transition-colors"
+                        >
+                            <RefreshCw size={12} className={loadingGroups ? 'animate-spin' : ''} />
+                        </button>
                     </div>
                 </div>
-                {groupError && <p className="px-2 py-1 text-[10px] text-red-400">{groupError}</p>}
+                {groupError && <p className="px-2 py-1 text-[10px] text-red-400 bg-red-500/10 border-b border-red-500/20">{groupError}</p>}
 
                 <div className="flex-1 overflow-y-auto py-1">
                     {filteredGroups.map(g => (
@@ -237,35 +270,71 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                             className={`w-full text-left px-3 py-2 text-xs font-mono truncate transition-colors ${selectedGroup === g.name
                                 ? 'bg-nexus-neon/10 text-nexus-neon'
                                 : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                            }`} title={g.name}>
+                                }`} title={g.name}>
                             {g.name}
                         </button>
                     ))}
+                    {filteredGroups.length === 0 && !loadingGroups && (
+                        <p className="px-4 py-3 text-[10px] text-slate-600 italic">No hay resultados.</p>
+                    )}
                 </div>
 
                 {/* Streams */}
                 {selectedGroup && (
                     <>
-                        <div className="border-t border-slate-800 p-2">
-                            <div className="text-[9px] text-slate-600 uppercase tracking-wider mb-1.5 px-1">Streams</div>
-                            <input
-                                value={streamSearch}
-                                onChange={e => setStreamSearch(e.target.value)}
-                                placeholder="Buscar stream…"
-                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
-                            />
-                            {loadingStreams && <RefreshCw size={10} className="animate-spin mt-1 text-slate-500" />}
+                        <div className="border-t border-slate-800 p-2 bg-slate-900/40">
+                            <div className="text-[9px] text-slate-600 uppercase tracking-wider mb-1.5 px-1 flex justify-between items-center">
+                                <span>Log Streams</span>
+                                {loadingStreams && <RefreshCw size={10} className="animate-spin text-slate-500" />}
+                            </div>
+                            <div className="flex gap-1">
+                                <div className="relative flex-1">
+                                    <input
+                                        value={streamSearch}
+                                        onChange={e => setStreamSearch(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && fetchStreams(selectedGroup, streamSearch.trim())}
+                                        placeholder="Filtrar o buscar (Enter)…"
+                                        className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                                    />
+                                    {streamSearch && (
+                                        <button
+                                            onClick={() => { setStreamSearch(''); fetchStreams(selectedGroup); }}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => fetchStreams(selectedGroup, streamSearch.trim())}
+                                    disabled={loadingStreams}
+                                    title="Profundizar búsqueda en AWS"
+                                    className="px-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded border border-slate-700 transition-colors"
+                                >
+                                    <RefreshCw size={12} className={loadingStreams ? 'animate-spin' : ''} />
+                                </button>
+                            </div>
                         </div>
-                        <div className="overflow-y-auto max-h-48 py-1 border-t border-slate-800">
+                        {streamError && <p className="px-2 py-1 text-[10px] text-amber-400 bg-amber-500/5 border-b border-amber-500/10 leading-tight">{streamError}</p>}
+
+                        <div className="overflow-y-auto max-h-56 py-1 border-t border-slate-800">
                             {filteredStreams.map(s => (
                                 <button key={s.name} onClick={() => setSelectedStream(s.name)}
-                                    className={`w-full text-left px-3 py-1.5 text-[11px] font-mono truncate transition-colors ${selectedStream === s.name
+                                    className={`w-full text-left px-3 py-1.5 text-[11px] font-mono transition-colors flex justify-between items-center gap-2 ${selectedStream === s.name
                                         ? 'bg-nexus-accent/10 text-nexus-accent'
                                         : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
-                                    }`} title={s.name}>
-                                    {s.name}
+                                        }`} title={s.name}>
+                                    <span className="truncate flex-1">{s.name}</span>
+                                    {s.last_event_ms && (
+                                        <span className="text-[9px] opacity-60 shrink-0">
+                                            {new Date(s.last_event_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    )}
                                 </button>
                             ))}
+                            {filteredStreams.length === 0 && !loadingStreams && !streamError && (
+                                <p className="px-4 py-2 text-[10px] text-slate-600 italic">Nada por aquí.</p>
+                            )}
                         </div>
                     </>
                 )}
@@ -288,7 +357,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                                 className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded border transition-colors ${tailing
                                     ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
                                     : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-                                }`}
+                                    }`}
                             >
                                 <span className={`w-1.5 h-1.5 rounded-full ${tailing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
                                 {tailing ? 'Live' : 'Pausado'}
@@ -608,7 +677,7 @@ export const CloudWatchPanel: React.FC = () => {
                         className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === t.id
                             ? 'border-nexus-neon text-white'
                             : 'border-transparent text-slate-500 hover:text-slate-300'
-                        }`}>
+                            }`}>
                         {t.label}
                     </button>
                 ))}

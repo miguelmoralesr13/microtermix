@@ -114,12 +114,14 @@ pub async fn cw_get_log_streams(
     let client = logs_client(&credentials).await;
     let mut req = client.describe_log_streams()
         .log_group_name(&log_group)
-        .order_by(OrderBy::LastEventTime)
-        .descending(true)
         .limit(50);
+    
     if let Some(p) = prefix.filter(|s| !s.is_empty()) {
         req = req.log_stream_name_prefix(p);
+    } else {
+        req = req.order_by(OrderBy::LastEventTime).descending(true);
     }
+    
     let resp = req.send().await.map_err(|e| e.to_string())?;
     Ok(resp.log_streams().iter()
         .filter_map(|s| s.log_stream_name().map(|n| LogStream {

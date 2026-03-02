@@ -327,9 +327,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         const compositeServiceId = `${projectPath}::${rawScript} `;
 
         // Check if rawScript is actually a saved named command
-        let actualScript = rawScript;
-        if (state.savedCommands && state.savedCommands[rawScript]) {
-            actualScript = state.savedCommands[rawScript];
+        let actualScript = rawScript.trim();
+        if (state.savedCommands && state.savedCommands[actualScript]) {
+            actualScript = state.savedCommands[actualScript];
         }
 
         // Load envs FIRST so we can build a display string showing them at {{ENVS}} position
@@ -383,7 +383,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error(`Execution failed for ${compositeServiceId}`, e);
             updateProcessStatus(compositeServiceId, 'error');
         }
-    }, [updateProcessStatus]);
+    }, [updateProcessStatus, state.savedCommands]);
 
     return (
         <WorkspaceContext.Provider value={{

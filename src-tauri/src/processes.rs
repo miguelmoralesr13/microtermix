@@ -157,7 +157,7 @@ pub async fn execute_service_script(
     project_path: String,
     script: String,
     env_vars_json: String,
-    script_display: Option<String>,
+    _script_display: Option<String>,
     use_vite_wrapper: Option<bool>,
     vite_wrapper_remotes: Option<HashMap<String, String>>,
 ) -> Result<(), String> {
