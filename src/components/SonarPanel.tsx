@@ -302,7 +302,7 @@ export const SonarPanel: React.FC = () => {
 
     const scanCommand = useMemo(() => {
         const { serverUrl, token, organization } = globalConfig;
-        let cmd = `sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${serverUrl} -Dsonar.token=${token}`;
+        let cmd = `npx sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${serverUrl} -Dsonar.token=${token}`;
         if (organization) cmd += ` -Dsonar.organization=${organization}`;
         return cmd;
     }, [globalConfig, projectKey]);

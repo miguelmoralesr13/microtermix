@@ -91,7 +91,7 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                 pendingEnv = true;
             } else if (step.value.trim()) {
                 const cmd = step.value.trim();
-                parts.push(pendingEnv ? `cross-env {{ENVS}} ${cmd}` : cmd);
+                parts.push(pendingEnv ? `npx cross-env {{ENVS}} ${cmd}` : cmd);
                 pendingEnv = false;
             }
         }
@@ -181,11 +181,10 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                         {steps.map((step, index) => (
                             <div
                                 key={step.id}
-                                className={`flex items-center gap-2 bg-slate-950 p-2 rounded-lg border transition-colors ${
-                                    dragOverIdx === index && draggedIdx !== index
+                                className={`flex items-center gap-2 bg-slate-950 p-2 rounded-lg border transition-colors ${dragOverIdx === index && draggedIdx !== index
                                         ? 'border-nexus-neon'
                                         : 'border-slate-800 hover:border-slate-700'
-                                } ${draggedIdx === index ? 'opacity-40' : ''}`}
+                                    } ${draggedIdx === index ? 'opacity-40' : ''}`}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, index)}
                                 onDragOver={(e) => handleDragOver(e, index)}
