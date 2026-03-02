@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Cloud, Settings, RefreshCw, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Cloud, Settings, RefreshCw, CheckCircle, AlertCircle, X, Star } from 'lucide-react';
 import {
     CwCredentials,
     CwLogGroup,
@@ -17,6 +17,38 @@ import {
 } from '../services/cloudwatchApi';
 
 type CwTab = 'settings' | 'logs' | 'metrics';
+
+function usePersistedState<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+    const [state, setState] = useState<T>(() => {
+        try {
+            const saved = localStorage.getItem(key);
+            if (saved !== null) return JSON.parse(saved);
+        } catch { }
+        return initialValue;
+    });
+
+    useEffect(() => {
+        localStorage.setItem(key, JSON.stringify(state));
+    }, [key, state]);
+
+    return [state, setState];
+}
+
+// ── LogMessage Formatter ──────────────────────────────────────────────────────
+
+function LogMessage({ message }: { message: string }) {
+    try {
+        const parsed = JSON.parse(message);
+        return (
+            <pre className="text-[10px] text-slate-300 bg-slate-900/50 p-2 rounded-md border border-slate-800/50 whitespace-pre-wrap break-words">
+                {JSON.stringify(parsed, null, 2)}
+            </pre>
+        );
+    } catch {
+        // Not JSON, return as normal text
+        return <span className="break-all">{message}</span>;
+    }
+}
 
 // ── Settings Tab ──────────────────────────────────────────────────────────────
 
@@ -113,16 +145,33 @@ function NeedConfig({ onGo }: { onGo: () => void }) {
 
 function LogsTab({ cfg }: { cfg: CwCredentials }) {
     // ── Log groups ──
-    const [groups, setGroups] = useState<CwLogGroup[]>([]);
-    const [groupSearch, setGroupSearch] = useState('');
-    const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+    const [groups, setGroups] = usePersistedState<CwLogGroup[]>('nexus-cw-logs-groups', []);
+    const [groupSearch, setGroupSearch] = usePersistedState('nexus-cw-logs-group-search', '');
+    const [selectedGroup, setSelectedGroup] = usePersistedState<string | null>('nexus-cw-logs-selected-group', null);
     const [loadingGroups, setLoadingGroups] = useState(false);
     const [groupError, setGroupError] = useState<string | null>(null);
+    const [favorites, setFavorites] = usePersistedState<string[]>('nexus-cw-favorites', []);
+
+    const toggleFavorite = (name: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setFavorites(prev =>
+            prev.includes(name) ? prev.filter(f => f !== name) : [...prev, name]
+        );
+    };
+
+    const [streamFavorites, setStreamFavorites] = usePersistedState<string[]>('nexus-cw-stream-favorites', []);
+
+    const toggleStreamFavorite = (name: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setStreamFavorites(prev =>
+            prev.includes(name) ? prev.filter(f => f !== name) : [...prev, name]
+        );
+    };
 
     // ── Log streams ──
-    const [streams, setStreams] = useState<CwLogStream[]>([]);
-    const [streamSearch, setStreamSearch] = useState('');
-    const [selectedStream, setSelectedStream] = useState<string | null>(null);
+    const [streams, setStreams] = usePersistedState<CwLogStream[]>('nexus-cw-logs-streams', []);
+    const [streamSearch, setStreamSearch] = usePersistedState('nexus-cw-logs-stream-search', '');
+    const [selectedStream, setSelectedStream] = usePersistedState<string | null>('nexus-cw-logs-selected-stream', null);
     const [loadingStreams, setLoadingStreams] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
 
@@ -131,6 +180,8 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
     const [nextToken, setNextToken] = useState<string | null>(null);
     const [tailing, setTailing] = useState(false);
     const [loadingEvents, setLoadingEvents] = useState(false);
+    const [logFilters, setLogFilters] = useState<string[]>([]);
+    const [filterInput, setFilterInput] = useState('');
     const tailRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const nextTokenRef = useRef<string | null>(null);
@@ -227,13 +278,65 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
     }, [tailing, selectedGroup, selectedStream, cfg]);
 
     // Local filtered lists for UI
-    const filteredGroups = groupSearch.trim() === ''
-        ? groups
-        : groups.filter(g => g.name.toLowerCase().includes(groupSearch.toLowerCase()));
+    // Favorites are always included, others only if they match the search
 
-    const filteredStreams = streamSearch.trim() === ''
-        ? streams
-        : streams.filter(s => s.name.toLowerCase().includes(streamSearch.toLowerCase()));
+    // For groups: Include all favorites even if not in the current 'groups' list (as stubs),
+    // then filter by search (favorites bypass search), then sort.
+    const allGroups = [...groups];
+    favorites.forEach(fav => {
+        if (!allGroups.some(g => g.name === fav)) {
+            allGroups.push({ name: fav, stored_bytes: 0 }); // stub for missing favorite
+        }
+    });
+
+    const sortedGroups = allGroups
+        .filter(g => favorites.includes(g.name) || g.name.toLowerCase().includes(groupSearch.toLowerCase()))
+        .sort((a, b) => {
+            const aFav = favorites.includes(a.name);
+            const bFav = favorites.includes(b.name);
+            if (aFav && !bFav) return -1;
+            if (!aFav && bFav) return 1;
+            return 0;
+        });
+
+    // For streams: Include all streamFavorites as stubs if missing
+    const allStreams = [...streams];
+    streamFavorites.forEach(fav => {
+        if (!allStreams.some(s => s.name === fav)) {
+            allStreams.push({ name: fav, last_event_ms: null });
+        }
+    });
+
+    const filteredStreams = allStreams
+        .filter(s => streamFavorites.includes(s.name) || streamSearch.trim() === '' || s.name.toLowerCase().includes(streamSearch.toLowerCase()))
+        .sort((a, b) => {
+            const aFav = streamFavorites.includes(a.name);
+            const bFav = streamFavorites.includes(b.name);
+            if (aFav && !bFav) return -1;
+            if (!aFav && bFav) return 1;
+            return 0;
+        });
+
+    // Local filtered events
+    const filteredEvents = events.filter(e => {
+        if (logFilters.length === 0) return true;
+        const msg = e.message.toLowerCase();
+        return logFilters.every(filter => msg.includes(filter.toLowerCase()));
+    });
+
+    const removeLogFilter = (f: string) => {
+        setLogFilters(prev => prev.filter(x => x !== f));
+    };
+
+    const addLogFilter = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && filterInput.trim()) {
+            const f = filterInput.trim();
+            if (!logFilters.includes(f)) {
+                setLogFilters(prev => [...prev, f]);
+            }
+            setFilterInput('');
+        }
+    };
 
     return (
         <div className="flex h-full min-h-0">
@@ -265,16 +368,27 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                 {groupError && <p className="px-2 py-1 text-[10px] text-red-400 bg-red-500/10 border-b border-red-500/20">{groupError}</p>}
 
                 <div className="flex-1 overflow-y-auto py-1">
-                    {filteredGroups.map(g => (
-                        <button key={g.name} onClick={() => setSelectedGroup(g.name)}
-                            className={`w-full text-left px-3 py-2 text-xs font-mono truncate transition-colors ${selectedGroup === g.name
-                                ? 'bg-nexus-neon/10 text-nexus-neon'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                                }`} title={g.name}>
-                            {g.name}
-                        </button>
-                    ))}
-                    {filteredGroups.length === 0 && !loadingGroups && (
+                    {sortedGroups.map(g => {
+                        const isFav = favorites.includes(g.name);
+                        return (
+                            <div key={g.name} className="group flex items-center pr-1">
+                                <button onClick={() => setSelectedGroup(g.name)}
+                                    className={`flex-1 text-left px-3 py-2 text-xs font-mono truncate transition-colors ${selectedGroup === g.name
+                                        ? 'bg-nexus-neon/10 text-nexus-neon'
+                                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                                        }`} title={g.name}>
+                                    {g.name}
+                                </button>
+                                <button
+                                    onClick={(e) => toggleFavorite(g.name, e)}
+                                    className={`p-1.5 rounded-md hover:bg-slate-800 transition-colors ${isFav ? 'text-amber-400' : 'text-slate-700 opacity-0 group-hover:opacity-100'}`}
+                                >
+                                    <Star size={12} fill={isFav ? "currentColor" : "none"} />
+                                </button>
+                            </div>
+                        );
+                    })}
+                    {sortedGroups.length === 0 && !loadingGroups && (
                         <p className="px-4 py-3 text-[10px] text-slate-600 italic">No hay resultados.</p>
                     )}
                 </div>
@@ -318,20 +432,31 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                         {streamError && <p className="px-2 py-1 text-[10px] text-amber-400 bg-amber-500/5 border-b border-amber-500/10 leading-tight">{streamError}</p>}
 
                         <div className="overflow-y-auto max-h-56 py-1 border-t border-slate-800">
-                            {filteredStreams.map(s => (
-                                <button key={s.name} onClick={() => setSelectedStream(s.name)}
-                                    className={`w-full text-left px-3 py-1.5 text-[11px] font-mono transition-colors flex justify-between items-center gap-2 ${selectedStream === s.name
-                                        ? 'bg-nexus-accent/10 text-nexus-accent'
-                                        : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
-                                        }`} title={s.name}>
-                                    <span className="truncate flex-1">{s.name}</span>
-                                    {s.last_event_ms && (
-                                        <span className="text-[9px] opacity-60 shrink-0">
-                                            {new Date(s.last_event_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    )}
-                                </button>
-                            ))}
+                            {filteredStreams.map(s => {
+                                const isFav = streamFavorites.includes(s.name);
+                                return (
+                                    <div key={s.name} className="group flex items-center pr-1">
+                                        <button onClick={() => setSelectedStream(s.name)}
+                                            className={`flex-1 text-left px-3 py-1.5 text-[11px] font-mono transition-colors flex justify-between items-center gap-2 ${selectedStream === s.name
+                                                ? 'bg-nexus-accent/10 text-nexus-accent'
+                                                : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
+                                                }`} title={s.name}>
+                                            <span className="truncate flex-1">{s.name}</span>
+                                            {s.last_event_ms && (
+                                                <span className="text-[9px] opacity-60 shrink-0">
+                                                    {new Date(s.last_event_ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={(e) => toggleStreamFavorite(s.name, e)}
+                                            className={`p-1.5 rounded-md hover:bg-slate-800 transition-colors ${isFav ? 'text-amber-400' : 'text-slate-700 opacity-0 group-hover:opacity-100'}`}
+                                        >
+                                            <Star size={12} fill={isFav ? "currentColor" : "none"} />
+                                        </button>
+                                    </div>
+                                );
+                            })}
                             {filteredStreams.length === 0 && !loadingStreams && !streamError && (
                                 <p className="px-4 py-2 text-[10px] text-slate-600 italic">Nada por aquí.</p>
                             )}
@@ -341,7 +466,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
             </div>
 
             {/* Right: event viewer */}
-            <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col min-w-0 min-h-0">
                 {!selectedStream ? (
                     <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
                         Selecciona un grupo y un stream
@@ -349,33 +474,63 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                 ) : (
                     <>
                         {/* Toolbar */}
-                        <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 shrink-0 bg-slate-900/40">
-                            <span className="text-[10px] text-slate-500 font-mono truncate flex-1">{selectedGroup} › {selectedStream}</span>
-                            {loadingEvents && <RefreshCw size={11} className="animate-spin text-slate-500" />}
-                            <button
-                                onClick={() => setTailing(v => !v)}
-                                className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded border transition-colors ${tailing
-                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
-                                    }`}
-                            >
-                                <span className={`w-1.5 h-1.5 rounded-full ${tailing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                                {tailing ? 'Live' : 'Pausado'}
-                            </button>
-                            <button onClick={() => setEvents([])} className="text-[10px] text-slate-600 hover:text-slate-400">Limpiar</button>
+                        <div className="flex flex-col border-b border-slate-800 shrink-0 bg-slate-900/40 min-w-0">
+                            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 min-w-0">
+                                <span className="text-[10px] text-slate-500 font-mono truncate flex-1 min-w-0" title={`${selectedGroup} › ${selectedStream}`}>
+                                    {selectedGroup} › {selectedStream}
+                                </span>
+                                {loadingEvents && <RefreshCw size={11} className="animate-spin text-slate-500 shrink-0" />}
+
+                                <div className="flex items-center gap-1.5 ml-2 shrink-0 flex-wrap sm:flex-nowrap justify-end">
+                                    <input
+                                        value={filterInput}
+                                        onChange={e => setFilterInput(e.target.value)}
+                                        onKeyDown={addLogFilter}
+                                        placeholder="Filtrar logs (Enter)"
+                                        className="w-32 bg-slate-950 border border-slate-700/50 rounded px-2 py-1 text-[10px] text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-nexus-accent transition-colors"
+                                    />
+                                    <button
+                                        onClick={() => setTailing(v => !v)}
+                                        className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded border transition-colors ${tailing
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                            : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                                            }`}
+                                    >
+                                        <span className={`w-1.5 h-1.5 rounded-full ${tailing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                                        {tailing ? 'Live' : 'Pausado'}
+                                    </button>
+                                    <button onClick={() => setEvents([])} className="text-[10px] text-slate-600 hover:text-slate-400 ml-1">Limpiar</button>
+                                </div>
+                            </div>
+
+                            {/* Filter Chips */}
+                            {logFilters.length > 0 && (
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 flex-wrap">
+                                    <span className="text-[9px] text-slate-600 uppercase">Filtros:</span>
+                                    {logFilters.map(f => (
+                                        <span key={f} className="flex items-center gap-1 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/20 px-1.5 py-0.5 rounded text-[10px]">
+                                            {f}
+                                            <button onClick={() => removeLogFilter(f)} className="hover:text-white rounded-full p-0.5 transition-colors"><X size={9} /></button>
+                                        </span>
+                                    ))}
+                                    <button onClick={() => setLogFilters([])} className="text-[9px] text-slate-500 hover:text-slate-300 ml-1">Limpiar filtros</button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Log lines */}
-                        <div className="flex-1 overflow-y-auto bg-slate-950 p-3 font-mono text-[11px] text-slate-300 space-y-px">
-                            {events.length === 0 && !loadingEvents && (
-                                <p className="text-slate-600 italic">Sin eventos recientes.</p>
+                        <div className="flex-1 overflow-y-auto bg-slate-950 p-3 font-mono text-[11px] text-slate-300 space-y-1">
+                            {filteredEvents.length === 0 && !loadingEvents && (
+                                <p className="text-slate-600 italic">Sin eventos que coincidan.</p>
                             )}
-                            {events.map((e, i) => (
-                                <div key={i} className="flex gap-3 leading-relaxed hover:bg-slate-900 px-1 rounded">
-                                    <span className="text-slate-600 shrink-0 select-none">
+                            {[...filteredEvents].reverse().map((e, i) => (
+                                <div key={i} className="flex gap-3 leading-relaxed hover:bg-slate-800/40 p-1.5 rounded-md transition-colors w-full group overflow-hidden">
+                                    <span className="text-slate-600 shrink-0 select-none whitespace-nowrap mt-0.5">
                                         {new Date(e.timestamp).toLocaleTimeString()}
                                     </span>
-                                    <span className="break-all">{e.message}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <LogMessage message={e.message} />
+                                    </div>
                                 </div>
                             ))}
                             <div ref={bottomRef} />
@@ -466,16 +621,16 @@ const RANGE_OPTIONS = [
 ];
 
 function MetricsTab({ cfg }: { cfg: CwCredentials }) {
-    const [namespace, setNamespace] = useState('');
-    const [metricSearch, setMetricSearch] = useState('');
-    const [metrics, setMetrics] = useState<CwMetricItem[]>([]);
+    const [namespace, setNamespace] = usePersistedState('nexus-cw-metrics-ns', '');
+    const [metricSearch, setMetricSearch] = usePersistedState('nexus-cw-metrics-search', '');
+    const [metrics, setMetrics] = usePersistedState<CwMetricItem[]>('nexus-cw-metrics-list', []);
     const [loadingMetrics, setLoadingMetrics] = useState(false);
-    const [selectedMetric, setSelectedMetric] = useState<CwMetricItem | null>(null);
-    const [dimensions, setDimensions] = useState<CwDimension[]>([]);
-    const [stat, setStat] = useState('Average');
-    const [period, setPeriod] = useState(300);
-    const [range, setRange] = useState(3600_000);
-    const [datapoints, setDatapoints] = useState<CwDatapoint[]>([]);
+    const [selectedMetric, setSelectedMetric] = usePersistedState<CwMetricItem | null>('nexus-cw-metrics-selected', null);
+    const [dimensions, setDimensions] = usePersistedState<CwDimension[]>('nexus-cw-metrics-dims', []);
+    const [stat, setStat] = usePersistedState('nexus-cw-metrics-stat', 'Average');
+    const [period, setPeriod] = usePersistedState('nexus-cw-metrics-period', 300);
+    const [range, setRange] = usePersistedState('nexus-cw-metrics-range', 3600_000);
+    const [datapoints, setDatapoints] = usePersistedState<CwDatapoint[]>('nexus-cw-metrics-data', []);
     const [loadingData, setLoadingData] = useState(false);
     const [dataError, setDataError] = useState<string | null>(null);
 
@@ -649,7 +804,7 @@ function MetricsTab({ cfg }: { cfg: CwCredentials }) {
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export const CloudWatchPanel: React.FC = () => {
-    const [tab, setTab] = useState<CwTab>('settings');
+    const [tab, setTab] = usePersistedState<CwTab>('nexus-cw-active-tab', 'settings');
     const [savedMsg, setSavedMsg] = useState(false);
     const [cfg, setCfg] = useState<CwCredentials>(() => loadCwConfig());
     const isConfigured = !!(cfg.accessKeyId && cfg.secretAccessKey && cfg.region);

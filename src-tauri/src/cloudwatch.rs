@@ -83,6 +83,36 @@ pub struct MetricDatapoint {
     pub value: f64,
 }
 
+// ── Error Formatters ──────────────────────────────────────────────────────────
+
+fn format_logs_err<E, R>(e: aws_sdk_cloudwatchlogs::error::SdkError<E, R>) -> String
+where
+    E: aws_sdk_cloudwatchlogs::error::ProvideErrorMetadata,
+{
+    match e.as_service_error() {
+        Some(err) => {
+            let code = err.code().unwrap_or("UnknownAWSCode");
+            let msg = err.message().unwrap_or("No detailed message from AWS");
+            format!("{}: {}", code, msg)
+        }
+        None => e.to_string(),
+    }
+}
+
+fn format_metrics_err<E, R>(e: aws_sdk_cloudwatch::error::SdkError<E, R>) -> String
+where
+    E: aws_sdk_cloudwatch::error::ProvideErrorMetadata,
+{
+    match e.as_service_error() {
+        Some(err) => {
+            let code = err.code().unwrap_or("UnknownAWSCode");
+            let msg = err.message().unwrap_or("No detailed message from AWS");
+            format!("{}: {}", code, msg)
+        }
+        None => e.to_string(),
+    }
+}
+
 // ── Commands ──────────────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -95,7 +125,7 @@ pub async fn cw_get_log_groups(
     if let Some(p) = prefix.filter(|s| !s.is_empty()) {
         req = req.log_group_name_prefix(p);
     }
-    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let resp = req.send().await.map_err(format_logs_err)?;
     Ok(resp.log_groups().iter()
         .filter_map(|g| g.log_group_name().map(|n| LogGroup {
             name: n.to_string(),
@@ -122,7 +152,7 @@ pub async fn cw_get_log_streams(
         req = req.order_by(OrderBy::LastEventTime).descending(true);
     }
     
-    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let resp = req.send().await.map_err(format_logs_err)?;
     Ok(resp.log_streams().iter()
         .filter_map(|s| s.log_stream_name().map(|n| LogStream {
             name: n.to_string(),
@@ -150,7 +180,7 @@ pub async fn cw_get_log_events(
     } else if let Some(ms) = start_ms {
         req = req.start_time(ms);
     }
-    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let resp = req.send().await.map_err(format_logs_err)?;
     let events = resp.events().iter()
         .filter_map(|e| e.message().map(|m| LogEvent {
             timestamp: e.timestamp().unwrap_or(0),
@@ -177,7 +207,7 @@ pub async fn cw_list_metrics(
     if let Some(mn) = metric_name.filter(|s| !s.is_empty()) {
         req = req.metric_name(mn);
     }
-    let resp = req.send().await.map_err(|e| e.to_string())?;
+    let resp = req.send().await.map_err(format_metrics_err)?;
     Ok(resp.metrics().iter()
         .filter_map(|m| {
             let ns = m.namespace()?.to_string();
@@ -237,7 +267,7 @@ pub async fn cw_get_metric_data(
         .metric_data_queries(query)
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(format_metrics_err)?;
 
     let points = resp.metric_data_results()
         .first()
