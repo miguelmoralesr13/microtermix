@@ -6,6 +6,7 @@ mod proxy;
 mod file_server;
 mod workspace;
 mod cloudwatch;
+mod http_client;
 
 use std::fs;
 use std::path::Path;
@@ -33,6 +34,7 @@ pub use crate::cloudwatch::{
     cw_get_log_groups, cw_get_log_streams, cw_get_log_events,
     cw_list_metrics, cw_get_metric_data,
 };
+pub use crate::http_client::make_http_request;
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -211,6 +213,7 @@ pub fn run() {
             cw_get_log_events,
             cw_list_metrics,
             cw_get_metric_data,
+            make_http_request,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -15,6 +15,7 @@ import { CommandsPanel } from './CommandsPanel';
 import { TestsPanel } from './TestsPanel';
 import { SonarPanel } from './SonarPanel';
 import { CloudWatchPanel } from './CloudWatchPanel';
+import { HttpPanel } from './http/HttpPanel';
 import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
 import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -522,6 +523,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'cloudwatch' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <CloudWatchPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'http' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <HttpPanel />
                         </div>
                     )}
                 </div>
