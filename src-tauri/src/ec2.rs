@@ -360,6 +360,7 @@ pub async fn spawn_interactive(
 /// Spawns a process directly bypasses shell completely (no cmd /C or sh -c).
 /// This is perfect for programs that take complex arguments like JSON (e.g. session-manager-plugin)
 /// which would otherwise be mangled by cmd.exe's quoting rules on Windows.
+#[allow(dead_code)]
 pub async fn spawn_process(
     app: tauri::AppHandle,
     state: tauri::State<'_, crate::AppState>,
@@ -369,7 +370,6 @@ pub async fn spawn_process(
     envs: Option<std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
     use tauri::Emitter;
-    use tokio::io::{AsyncBufReadExt, BufReader};
     use tokio::process::Command as AsyncCommand;
     use tokio::sync::mpsc;
     use std::process::Stdio;
@@ -427,7 +427,7 @@ pub async fn spawn_process(
     let notify = std::sync::Arc::new(tokio::sync::Notify::new());
     procs_arc.lock().await.insert(service_id.clone(), notify.clone());
 
-    // Stdin writer task
+    // Stdin writer task — xterm.js sends \r for Enter, so we pass raw bytes as-is
     {
         let n = notify.clone();
         let mut handle = stdin_handle;
@@ -436,10 +436,10 @@ pub async fn spawn_process(
             loop {
                 tokio::select! {
                     _ = n.notified() => break,
-                    line_opt = rx.recv() => match line_opt {
-                        Some(line) => {
-                            if handle.write_all(line.as_bytes()).await.is_err() { break; }
-                            if handle.write_all(b"\n").await.is_err() { break; }
+                    data_opt = rx.recv() => match data_opt {
+                        Some(data) => {
+                            if handle.write_all(data.as_bytes()).await.is_err() { break; }
+                            if handle.flush().await.is_err() { break; }
                         }
                         None => break,
                     }
@@ -448,38 +448,54 @@ pub async fn spawn_process(
         });
     }
 
-    // Stdout reader task
+    // Stdout reader — read raw byte chunks and emit as pty-output
     {
         let app2 = app.clone();
         let sid = service_id.clone();
         let n = notify.clone();
         tokio::spawn(async move {
-            let mut reader = BufReader::new(stdout).lines();
+            use tokio::io::AsyncReadExt;
+            let mut buf = vec![0u8; 4096];
+            let mut stdout = stdout;
             loop {
                 tokio::select! {
                     _ = n.notified() => break,
-                    line = reader.next_line() => match line {
-                        Ok(Some(l)) => { let _ = app2.emit("service-logs", crate::LogEvent { service_id: sid.clone(), line: l, is_error: false }); }
-                        _ => break,
+                    result = stdout.read(&mut buf) => match result {
+                        Ok(0) | Err(_) => break,
+                        Ok(n_bytes) => {
+                            let chunk = String::from_utf8_lossy(&buf[..n_bytes]).to_string();
+                            let _ = app2.emit("pty-output", serde_json::json!({
+                                "serviceId": sid,
+                                "data": chunk,
+                            }));
+                        }
                     }
                 }
             }
         });
     }
 
-    // Stderr reader task
+    // Stderr reader — merge into same pty-output stream
     {
         let app2 = app.clone();
         let sid = service_id.clone();
         let n = notify.clone();
         tokio::spawn(async move {
-            let mut reader = BufReader::new(stderr).lines();
+            use tokio::io::AsyncReadExt;
+            let mut buf = vec![0u8; 4096];
+            let mut stderr = stderr;
             loop {
                 tokio::select! {
                     _ = n.notified() => break,
-                    line = reader.next_line() => match line {
-                        Ok(Some(l)) => { let _ = app2.emit("service-logs", crate::LogEvent { service_id: sid.clone(), line: l, is_error: true }); }
-                        _ => break,
+                    result = stderr.read(&mut buf) => match result {
+                        Ok(0) | Err(_) => break,
+                        Ok(n_bytes) => {
+                            let chunk = String::from_utf8_lossy(&buf[..n_bytes]).to_string();
+                            let _ = app2.emit("pty-output", serde_json::json!({
+                                "serviceId": sid,
+                                "data": chunk,
+                            }));
+                        }
                     }
                 }
             }
@@ -506,6 +522,172 @@ pub async fn spawn_process(
     Ok(())
 }
 
+
+/// Spawns a process inside a PTY (pseudo-terminal) so the child sees a real
+/// terminal — critical for programs like `session-manager-plugin` that check
+/// whether stdin is a console before enabling raw-mode input.
+///
+/// Output is emitted as `pty-output` events (same as `spawn_process`).
+/// Input is sent via `write_stdin_line` (same channel key = service_id).
+pub async fn spawn_pty_process(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    service_id: String,
+    program: String,
+    args: Vec<String>,
+    envs: Option<std::collections::HashMap<String, String>>,
+) -> Result<(), String> {
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use tauri::Emitter;
+    use tokio::sync::mpsc;
+
+    let procs_arc  = state.processes.clone();
+    let stdins_arc = state.stdin_senders.clone();
+
+    // Kill any existing session with the same id
+    {
+        let mut procs = procs_arc.lock().await;
+        if let Some(notify) = procs.remove(&service_id) { notify.notify_waiters(); }
+    }
+    stdins_arc.lock().await.remove(&service_id);
+
+    // Open PTY
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize { rows: 24, cols: 220, pixel_width: 0, pixel_height: 0 })
+        .map_err(|e| format!("PTY open failed: {e}"))?;
+
+    // Build the command (portable-pty uses its own CommandBuilder)
+    let mut cmd = CommandBuilder::new(&program);
+    for arg in &args {
+        cmd.arg(arg);
+    }
+    if let Some(ref env_map) = envs {
+        for (k, v) in env_map {
+            cmd.env(k, v);
+        }
+    }
+
+    // Spawn child inside the PTY slave
+    let mut child = pair.slave.spawn_command(cmd)
+        .map_err(|e| format!("Failed to spawn {program}: {e}"))?;
+
+    // IMPORTANT: Do NOT drop pair.slave yet.
+    // On Windows (ConPTY), dropping the slave calls ClosePseudoConsole which
+    // sends CTRL_CLOSE_EVENT to the child and makes it exit immediately.
+    // We keep the slave alive and drop it only after the child exits.
+    let slave = pair.slave;
+
+    // ── stdin forwarding ──────────────────────────────────────────────────────
+    // tokio channel → std sync channel → dedicated OS thread writes to PTY master
+    let (async_tx, mut async_rx) = mpsc::unbounded_channel::<String>();
+    stdins_arc.lock().await.insert(service_id.clone(), async_tx);
+
+    let (sync_tx, sync_rx) = std::sync::mpsc::channel::<String>();
+
+    // Bridge: async tokio receiver → sync std sender
+    tokio::spawn(async move {
+        while let Some(data) = async_rx.recv().await {
+            if sync_tx.send(data).is_err() { break; }
+        }
+    });
+
+    // Blocking OS thread: std receiver → PTY master write
+    let pty_writer = pair.master.take_writer()
+        .map_err(|e| format!("PTY writer error: {e}"))?;
+    std::thread::spawn(move || {
+        use std::io::Write;
+        let mut w = pty_writer;
+        for data in sync_rx {
+            if w.write_all(data.as_bytes()).is_err() || w.flush().is_err() { break; }
+        }
+    });
+
+    // ── stdout reader (PTY master → pty-output events) ────────────────────────
+    let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    procs_arc.lock().await.insert(service_id.clone(), notify.clone());
+
+    {
+        let app2  = app.clone();
+        let sid   = service_id.clone();
+        let stop  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let n     = notify.clone();
+
+        // PTY read is blocking — run in a dedicated OS thread
+        let pty_reader = pair.master.try_clone_reader()
+            .map_err(|e| format!("PTY reader error: {e}"))?;
+
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut r = pty_reader;
+            let mut buf = vec![0u8; 4096];
+            loop {
+                if stop2.load(std::sync::atomic::Ordering::Relaxed) { break; }
+                match r.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n_bytes) => {
+                        let chunk = String::from_utf8_lossy(&buf[..n_bytes]).to_string();
+                        let _ = app2.emit("pty-output", serde_json::json!({
+                            "serviceId": sid,
+                            "data": chunk,
+                        }));
+                    }
+                }
+            }
+        });
+
+        // Signal the reader thread to stop on kill
+        tokio::spawn(async move {
+            n.notified().await;
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+    }
+
+    // ── wait / cleanup ────────────────────────────────────────────────────────
+    // portable_pty::Child::kill() and wait() both take &mut self, so we can't
+    // call them concurrently.  Poll try_wait() in a blocking thread and check
+    // an AtomicBool set by the kill-notify watcher.
+    // The slave is moved here and dropped AFTER the child exits — this ensures
+    // ClosePseudoConsole is called only after the process has terminated.
+    {
+        let app2    = app.clone();
+        let sid     = service_id.clone();
+        let killed  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let killed2 = killed.clone();
+
+        // Async watcher: when notify fires, set the flag
+        let n = notify.clone();
+        tokio::spawn(async move {
+            n.notified().await;
+            killed2.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+
+        // Blocking poller: checks flag + try_wait, drops slave, then cleans up
+        tokio::task::spawn_blocking(move || {
+            let rt       = tokio::runtime::Handle::current();
+            let _slave   = slave; // dropped at end of this block (after child exits)
+            loop {
+                if killed.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = child.kill();
+                    break;
+                }
+                match child.try_wait() {
+                    Ok(Some(_)) | Err(_) => break,
+                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
+                }
+            }
+            drop(_slave); // ClosePseudoConsole now safe — child has exited
+            rt.block_on(async {
+                procs_arc.lock().await.remove(&sid);
+                stdins_arc.lock().await.remove(&sid);
+                let _ = app2.emit("service-stopped", sid);
+            });
+        });
+    }
+
+    Ok(())
+}
 
 /// Sends a line of text to the stdin of a running interactive process.
 #[tauri::command]

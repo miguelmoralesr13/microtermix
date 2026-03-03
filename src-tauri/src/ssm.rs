@@ -202,6 +202,7 @@ pub async fn ssm_start_session(
         endpoint,
     ];
 
-    // Delegate to spawn_process which runs the plugin safely avoiding cmd.exe's quoting hell
-    crate::ec2::spawn_process(app, state, service_id, plugin_str, args, Some(envs)).await
+    // Delegate to spawn_pty_process: gives the plugin a real PTY so it can
+    // enable raw-mode stdin (required for interactive input to work on Windows).
+    crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, Some(envs)).await
 }

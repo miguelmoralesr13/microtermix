@@ -34,6 +34,7 @@ aws-sdk-ssm = "1"
 aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-credential-types = "1"
 uuid = { version = "1", features = ["v4"] }
+portable-pty = "0.8"
 tower = "0.4"
 regex = "1"
 tauri-plugin-http = "2"

@@ -4,8 +4,9 @@ import { listen } from '@tauri-apps/api/event';
 import {
     Cloud, Settings, RefreshCw, CheckCircle, AlertCircle, X, Star,
     Monitor, Play, Square, RotateCcw, Terminal, ChevronDown, ChevronRight,
-    Circle, Loader, Search,
+    Circle, Loader, Search, ClipboardPaste,
 } from 'lucide-react';
+import { SsmTerminal } from './SsmTerminal';
 import {
     CwCredentials,
     CwLogGroup,
@@ -234,6 +235,7 @@ interface SshSession {
 interface LogLine { text: string; isError: boolean; }
 
 function Ec2Terminal({ session, onDisconnect }: { session: SshSession; onDisconnect: () => void }) {
+    const isSsm = session.sshCmd.startsWith('SSM →');
     const [logs, setLogs] = useState<LogLine[]>([]);
     const [input, setInput] = useState('');
     const [alive, setAlive] = useState(true);
@@ -241,7 +243,7 @@ function Ec2Terminal({ session, onDisconnect }: { session: SshSession; onDisconn
     const inputRef = useRef<HTMLInputElement>(null);
     const displayName = session.inst.name ?? session.inst.instance_id;
 
-    // Listen to service-logs and service-stopped for this session
+    // Listen to service-logs and service-stopped (used for SSH mode only)
     useEffect(() => {
         const unlistenLogs = listen<{ service_id: string; line: string; is_error: boolean }>(
             'service-logs',
@@ -266,13 +268,11 @@ function Ec2Terminal({ session, onDisconnect }: { session: SshSession; onDisconn
         logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [logs]);
 
-    // Focus input on mount
     useEffect(() => { inputRef.current?.focus(); }, []);
 
     async function sendLine(line: string) {
         if (!alive) return;
         setInput('');
-        // Echo the input locally
         setLogs(prev => [...prev, { text: `$ ${line}`, isError: false }]);
         try {
             await invoke('write_stdin_line', { serviceId: session.serviceId, line });
@@ -298,12 +298,14 @@ function Ec2Terminal({ session, onDisconnect }: { session: SshSession; onDisconn
                     : <span className="flex items-center gap-1 text-xs text-slate-500 ml-1"><Circle size={11} /> Desconectado</span>
                 }
                 <div className="ml-auto flex items-center gap-2">
-                    <button
-                        onClick={() => sendLine('')}
-                        disabled={!alive}
-                        className="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-500 disabled:opacity-40"
-                        title="Enviar Enter"
-                    >↵</button>
+                    {!isSsm && (
+                        <button
+                            onClick={() => sendLine('')}
+                            disabled={!alive}
+                            className="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-500 disabled:opacity-40"
+                            title="Enviar Enter"
+                        >↵</button>
+                    )}
                     <button
                         onClick={handleDisconnect}
                         className="px-2.5 py-1 rounded text-xs text-red-400 hover:bg-red-400/10 border border-red-900/40"
@@ -315,35 +317,43 @@ function Ec2Terminal({ session, onDisconnect }: { session: SshSession; onDisconn
                 </div>
             </div>
 
-            {/* Log area */}
-            <div
-                className="flex-1 overflow-y-auto bg-slate-950 px-4 py-3 font-mono text-xs leading-relaxed"
-                onClick={() => inputRef.current?.focus()}
-            >
-                {logs.map((l, i) => (
-                    <div key={i} className={l.isError ? 'text-red-400' : l.text.startsWith('$') ? 'text-nexus-neon' : l.text.startsWith('[') ? 'text-slate-500' : 'text-slate-200'}>
-                        {l.text}
+            {/* Body */}
+            {isSsm ? (
+                /* xterm.js real terminal for SSM */
+                <div className="flex-1 min-h-0 p-2 bg-[#020617]">
+                    <SsmTerminal serviceId={session.serviceId} onClose={() => setAlive(false)} />
+                </div>
+            ) : (
+                /* Simple log viewer for SSH */
+                <>
+                    <div
+                        className="flex-1 overflow-y-auto bg-slate-950 px-4 py-3 font-mono text-xs leading-relaxed"
+                        onClick={() => inputRef.current?.focus()}
+                    >
+                        {logs.map((l, i) => (
+                            <div key={i} className={l.isError ? 'text-red-400' : l.text.startsWith('$') ? 'text-nexus-neon' : l.text.startsWith('[') ? 'text-slate-500' : 'text-slate-200'}>
+                                {l.text}
+                            </div>
+                        ))}
+                        <div ref={logsEndRef} />
                     </div>
-                ))}
-                <div ref={logsEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-800 bg-slate-900 shrink-0">
-                <span className="text-nexus-neon font-mono text-xs select-none">$</span>
-                <input
-                    ref={inputRef}
-                    value={input}
-                    onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => {
-                        if (e.key === 'Enter') { e.preventDefault(); sendLine(input); }
-                        if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); sendLine('\x03'); }
-                    }}
-                    disabled={!alive}
-                    placeholder={alive ? 'Escribe un comando y presiona Enter…' : 'Sesión terminada'}
-                    className="flex-1 bg-transparent text-slate-100 font-mono text-xs focus:outline-none placeholder-slate-600 disabled:opacity-40"
-                />
-            </div>
+                    <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-800 bg-slate-900 shrink-0">
+                        <span className="text-nexus-neon font-mono text-xs select-none">$</span>
+                        <input
+                            ref={inputRef}
+                            value={input}
+                            onChange={e => setInput(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') { e.preventDefault(); sendLine(input); }
+                                if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); sendLine('\x03'); }
+                            }}
+                            disabled={!alive}
+                            placeholder={alive ? 'Escribe un comando y presiona Enter…' : 'Sesión terminada'}
+                            className="flex-1 bg-transparent text-slate-100 font-mono text-xs focus:outline-none placeholder-slate-600 disabled:opacity-40"
+                        />
+                    </div>
+                </>
+            )}
         </div>
     );
 }
@@ -588,11 +598,39 @@ function LogMessage({ message }: { message: string }) {
 
 // ── Settings Tab ──────────────────────────────────────────────────────────────
 
+/** Parses the block that AWS gives you (CLI format or export format) and returns
+ *  whichever credential fields it finds.
+ *
+ *  Handles both:
+ *    aws_access_key_id=VALUE
+ *    export AWS_ACCESS_KEY_ID=VALUE
+ */
+function parseAwsCredentialBlock(text: string): Partial<CwCredentials> {
+    const result: Partial<CwCredentials> = {};
+    for (const raw of text.split('\n')) {
+        // strip leading "export " and surrounding whitespace
+        const line = raw.replace(/^\s*export\s+/i, '').trim();
+        const eq = line.indexOf('=');
+        if (eq === -1) continue;
+        const key = line.slice(0, eq).trim().toLowerCase();
+        const value = line.slice(eq + 1).trim();
+        if (!value) continue;
+        if (key === 'aws_access_key_id')     result.accessKeyId     = value;
+        if (key === 'aws_secret_access_key') result.secretAccessKey = value;
+        if (key === 'aws_session_token')     result.sessionToken    = value;
+        if (key === 'region' || key === 'aws_default_region') result.region = value;
+    }
+    return result;
+}
+
 function SettingsTab({ onSaved }: { onSaved: () => void }) {
     const [draft, setDraft] = useState<CwCredentials>(() => loadCwConfig());
     const [testing, setTesting] = useState(false);
     const [result, setResult] = useState<'ok' | 'error' | null>(null);
     const [errMsg, setErrMsg] = useState('');
+    const [showPaste, setShowPaste] = useState(false);
+    const [pasteText, setPasteText] = useState('');
+    const [pasteApplied, setPasteApplied] = useState(false);
 
     const handleSave = () => {
         saveCwConfig(draft);
@@ -613,6 +651,16 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
         }
     };
 
+    function applyPaste(text: string) {
+        const parsed = parseAwsCredentialBlock(text);
+        if (Object.keys(parsed).length === 0) return;
+        setDraft(prev => ({ ...prev, ...parsed }));
+        setPasteText('');
+        setShowPaste(false);
+        setPasteApplied(true);
+        setTimeout(() => setPasteApplied(false), 2500);
+    }
+
     const field = (label: string, key: keyof CwCredentials, placeholder: string, secret = false) => (
         <div key={key}>
             <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</label>
@@ -628,9 +676,67 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
 
     return (
         <div className="max-w-md mx-auto p-6 space-y-4">
-            <h2 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                <Settings size={15} /> Credenciales AWS CloudWatch
-            </h2>
+            <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-slate-300 flex items-center gap-2">
+                    <Settings size={15} /> Credenciales AWS
+                </h2>
+                <button
+                    onClick={() => { setShowPaste(p => !p); setPasteText(''); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${showPaste
+                        ? 'bg-nexus-neon/10 text-nexus-neon border-nexus-neon/30'
+                        : 'text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500'}`}
+                    title="Pegar el bloque de credenciales que entrega AWS"
+                >
+                    <ClipboardPaste size={13} />
+                    Pegar bloque AWS
+                </button>
+            </div>
+
+            {/* ── Paste area ── */}
+            {showPaste && (
+                <div className="rounded-lg border border-nexus-neon/20 bg-nexus-neon/5 p-3 space-y-2">
+                    <p className="text-[11px] text-slate-400">
+                        Pega aquí el bloque completo que AWS te da (formato <code className="text-nexus-neon">aws_access_key_id=…</code>).
+                        Los campos se rellenarán automáticamente.
+                    </p>
+                    <textarea
+                        autoFocus
+                        value={pasteText}
+                        onChange={e => setPasteText(e.target.value)}
+                        onPaste={e => {
+                            // auto-apply on paste without needing to click Apply
+                            const text = e.clipboardData.getData('text');
+                            e.preventDefault();
+                            applyPaste(text);
+                        }}
+                        placeholder={`aws_access_key_id=ASIA…\naws_secret_access_key=…\naws_session_token=…`}
+                        rows={5}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-nexus-neon placeholder:text-slate-600 resize-none"
+                    />
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => applyPaste(pasteText)}
+                            disabled={!pasteText.trim()}
+                            className="px-3 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 disabled:opacity-40 transition-colors"
+                        >
+                            Aplicar
+                        </button>
+                        <button
+                            onClick={() => { setShowPaste(false); setPasteText(''); }}
+                            className="px-3 py-1 rounded text-xs text-slate-400 border border-slate-700 hover:text-slate-200 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {pasteApplied && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 rounded px-3 py-2">
+                    <CheckCircle size={13} /> Credenciales aplicadas — revisa los campos y guarda.
+                </div>
+            )}
+
             {field('Región', 'region', 'us-east-1')}
             {field('Access Key ID', 'accessKeyId', 'AKIAIOSFODNN7EXAMPLE')}
             {field('Secret Access Key', 'secretAccessKey', '••••••••••••••••••••', true)}
