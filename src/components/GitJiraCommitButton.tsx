@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Settings, Zap, RefreshCw, X, Check, ChevronDown } from 'lucide-react';
 import {
     JiraIssue, createSubTask, transitionIssue, getIssue, loadConfig,
-    getProjects, getEpics, getStoriesByEpic, getActivityOptions,
+    getProjects, getEpics, getStoriesByEpic, getActivityOptions, getLastWorkingIssue
 } from './jiraApi';
 import { TempoLogModal } from './TempoLogModal';
 
@@ -16,6 +16,7 @@ interface GitJiraConfig {
     storyKey: string;
     activityId: string;
     activityValue: string;
+    createTask: boolean;
 }
 
 type FlowStep =
@@ -46,10 +47,10 @@ function configKey(projectPath: string): string {
 function loadGitJiraConfig(projectPath: string): GitJiraConfig {
     try {
         const raw = localStorage.getItem(configKey(projectPath));
-        if (!raw) return { projectKey: '', epicKey: '', storyKey: '', activityId: '', activityValue: '' };
-        return { projectKey: '', epicKey: '', storyKey: '', activityId: '', activityValue: '', ...JSON.parse(raw) };
+        if (!raw) return { projectKey: '', epicKey: '', storyKey: '', activityId: '', activityValue: '', createTask: true };
+        return { projectKey: '', epicKey: '', storyKey: '', activityId: '', activityValue: '', createTask: true, ...JSON.parse(raw) };
     } catch {
-        return { projectKey: '', epicKey: '', storyKey: '', activityId: '', activityValue: '' };
+        return { projectKey: '', epicKey: '', storyKey: '', activityId: '', activityValue: '', createTask: true };
     }
 }
 
@@ -58,6 +59,7 @@ function saveGitJiraConfig(projectPath: string, cfg: GitJiraConfig): void {
 }
 
 function isConfigComplete(cfg: GitJiraConfig): boolean {
+    if (!cfg.createTask) return !!cfg.projectKey.trim(); // Solo proyecto para contexto si no crea
     return !!cfg.projectKey.trim() && !!cfg.epicKey.trim() && !!cfg.storyKey.trim() && !!cfg.activityValue.trim();
 }
 
@@ -212,17 +214,30 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
         setErrorMsg(null);
 
         try {
-            setFlowStep('creating');
-            const created = await createSubTask(config.storyKey, commitMessage, undefined,
-                config.activityId ? { id: config.activityId, value: config.activityValue } : undefined,
-            );
-            const taskKey = created.key;
+            let taskKey = '';
 
-            setFlowStep('transitioning');
-            try {
-                await transitionIssue(taskKey, 'Working');
-            } catch {
-                // non-blocking
+            if (config.createTask) {
+                setFlowStep('creating');
+                const created = await createSubTask(config.storyKey, commitMessage, undefined,
+                    config.activityId ? { id: config.activityId, value: config.activityValue } : undefined,
+                );
+                taskKey = created.key;
+            } else {
+                setFlowStep('transitioning'); // Buscando/Usando existente
+                const lastWorking = await getLastWorkingIssue(config.storyKey);
+                if (!lastWorking) {
+                    throw new Error(`No se encontró ninguna tarea propia en "Working" dentro de la historia ${config.storyKey}.`);
+                }
+                taskKey = lastWorking.key;
+            }
+
+            if (config.createTask) {
+                setFlowStep('transitioning');
+                try {
+                    await transitionIssue(taskKey, 'Working');
+                } catch {
+                    // non-blocking
+                }
             }
 
             setFlowStep('committing');
@@ -317,38 +332,52 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                         onChange={v => setDraft(d => ({ ...d, projectKey: v, epicKey: '', storyKey: '', activityId: '', activityValue: '' }))}
                     />
 
-                    <SelectField
-                        label="Épica"
-                        value={draft.epicKey}
-                        options={epics}
-                        loading={loadingEpics}
-                        disabled={!draft.projectKey}
-                        placeholder={draft.projectKey ? 'Selecciona una épica' : 'Primero selecciona proyecto'}
-                        onChange={v => setDraft(d => ({ ...d, epicKey: v, storyKey: '' }))}
-                    />
+                    <div className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                        <span className="text-[10px] font-bold text-slate-300 uppercase">Crear nueva sub-tarea</span>
+                        <button
+                            onClick={() => setDraft(d => ({ ...d, createTask: !d.createTask }))}
+                            className={`w-8 h-4 rounded-full relative transition-colors ${draft.createTask ? 'bg-nexus-neon' : 'bg-slate-700'}`}
+                        >
+                            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${draft.createTask ? 'left-[18px]' : 'left-0.5'}`} />
+                        </button>
+                    </div>
 
-                    <SelectField
-                        label="Historia Técnica"
-                        value={draft.storyKey}
-                        options={stories}
-                        loading={loadingStories}
-                        disabled={!draft.epicKey}
-                        placeholder={draft.epicKey ? 'Selecciona una historia' : 'Primero selecciona épica'}
-                        onChange={v => setDraft(d => ({ ...d, storyKey: v }))}
-                    />
+                    {draft.createTask && (
+                        <>
+                            <SelectField
+                                label="Épica"
+                                value={draft.epicKey}
+                                options={epics}
+                                loading={loadingEpics}
+                                disabled={!draft.projectKey}
+                                placeholder={draft.projectKey ? 'Selecciona una épica' : 'Primero selecciona proyecto'}
+                                onChange={v => setDraft(d => ({ ...d, epicKey: v, storyKey: '' }))}
+                            />
 
-                    <SelectField
-                        label="Tipo de Actividad"
-                        value={draft.activityValue}
-                        options={activityOpts.map(a => ({ value: a.value, label: a.value }))}
-                        loading={loadingActivities}
-                        disabled={!draft.projectKey || activityOpts.length === 0}
-                        placeholder={draft.projectKey ? 'Selecciona una actividad' : 'Primero selecciona proyecto'}
-                        onChange={v => {
-                            const found = activityOpts.find(a => a.value === v);
-                            setDraft(d => ({ ...d, activityValue: v, activityId: found?.id ?? '' }));
-                        }}
-                    />
+                            <SelectField
+                                label="Historia Técnica"
+                                value={draft.storyKey}
+                                options={stories}
+                                loading={loadingStories}
+                                disabled={!draft.epicKey}
+                                placeholder={draft.epicKey ? 'Selecciona una historia' : 'Primero selecciona épica'}
+                                onChange={v => setDraft(d => ({ ...d, storyKey: v }))}
+                            />
+
+                            <SelectField
+                                label="Tipo de Actividad"
+                                value={draft.activityValue}
+                                options={activityOpts.map(a => ({ value: a.value, label: a.value }))}
+                                loading={loadingActivities}
+                                disabled={!draft.projectKey || activityOpts.length === 0}
+                                placeholder={draft.projectKey ? 'Selecciona una actividad' : 'Primero selecciona proyecto'}
+                                onChange={v => {
+                                    const found = activityOpts.find(a => a.value === v);
+                                    setDraft(d => ({ ...d, activityValue: v, activityId: found?.id ?? '' }));
+                                }}
+                            />
+                        </>
+                    )}
 
                     <button
                         onClick={handleSaveConfig}

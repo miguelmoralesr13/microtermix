@@ -298,6 +298,16 @@ export async function getMyIssues(): Promise<JiraIssue[]> {
     return searchIssues('assignee = currentUser() ORDER BY updated DESC');
 }
 
+export async function getLastWorkingIssue(parentKey?: string): Promise<JiraIssue | null> {
+    let jql = 'assignee = currentUser() AND status = "Working"';
+    if (parentKey) {
+        jql += ` AND parent = "${parentKey}"`;
+    }
+    jql += ' ORDER BY updated DESC';
+    const issues = await searchIssues(jql, 1);
+    return issues.length > 0 ? issues[0] : null;
+}
+
 export async function getProjectIssues(projectKey: string, statusFilter?: string): Promise<JiraIssue[]> {
     let jql = `project = ${projectKey} ORDER BY updated DESC`;
     if (statusFilter) jql = `project = ${projectKey} AND status = "${statusFilter}" ORDER BY updated DESC`;

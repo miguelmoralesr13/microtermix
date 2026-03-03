@@ -182,6 +182,10 @@ pub async fn git_execute_impl(
     let mut cmd = AsyncCommand::new("git");
     cmd.args(&args);
     cmd.current_dir(&project_path);
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x08000000);
+    }
     let output = cmd.output().await.map_err(|e| e.to_string())?;
 
     let stdout_str = String::from_utf8_lossy(&output.stdout).to_string();
@@ -225,6 +229,10 @@ pub async fn git_reword_commit_impl(
     let mut head_cmd = AsyncCommand::new("git");
     head_cmd.args(&["rev-parse", "--short", "HEAD"]);
     head_cmd.current_dir(&project_path);
+    #[cfg(target_os = "windows")]
+    {
+        head_cmd.creation_flags(0x08000000);
+    }
     let head_out = head_cmd.output().await.map_err(|e| e.to_string())?;
     let head_short = String::from_utf8_lossy(&head_out.stdout).trim().to_string();
 
@@ -233,6 +241,10 @@ pub async fn git_reword_commit_impl(
         let mut cmd = AsyncCommand::new("git");
         cmd.args(&["commit", "--amend", "-m", &new_message]);
         cmd.current_dir(&project_path);
+        #[cfg(target_os = "windows")]
+        {
+            cmd.creation_flags(0x08000000);
+        }
         cmd.output().await.map_err(|e| e.to_string())?
     } else {
         // Non-HEAD: use rebase -i with env var automation
@@ -270,6 +282,10 @@ pub async fn git_reword_commit_impl(
         // Prevent git from opening a pager
         cmd.env("GIT_PAGER", "cat");
         cmd.env("TERM", "dumb");
+        #[cfg(target_os = "windows")]
+        {
+            cmd.creation_flags(0x08000000);
+        }
         let out = cmd.output().await.map_err(|e| e.to_string())?;
 
         // Clean up temp scripts
