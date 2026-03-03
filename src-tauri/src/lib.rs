@@ -41,7 +41,7 @@ pub use crate::ec2::{
     ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
     spawn_interactive, write_stdin_line,
 };
-pub use crate::ssm::ssm_start_session;
+pub use crate::ssm::{ssm_start_session, ssm_check_plugin};
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -229,6 +229,7 @@ pub fn run() {
             spawn_interactive,
             write_stdin_line,
             ssm_start_session,
+            ssm_check_plugin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

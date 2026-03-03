@@ -33,9 +33,7 @@ aws-sdk-ec2 = "1"
 aws-sdk-ssm = "1"
 aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-credential-types = "1"
-tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 uuid = { version = "1", features = ["v4"] }
-sha2 = "0.10"
 tower = "0.4"
 regex = "1"
 tauri-plugin-http = "2"

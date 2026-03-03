@@ -98,13 +98,14 @@ function formatLaunchTime(iso: string | null): string {
 
 // ── EC2 Instance Row ──────────────────────────────────────────────────────────
 
-function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConnect }: {
+function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConnect, connecting }: {
     inst: Ec2Instance;
     ssh: SshDefaults;
     onAction: (action: 'start' | 'stop' | 'reboot', id: string) => void;
     pending: string | null;
     onSshConnect: (inst: Ec2Instance, cmd: string) => void;
     onSsmConnect: (inst: Ec2Instance) => void;
+    connecting: string | null; // which connect mode is active: 'ssh' | 'ssm'
 }) {
     const [expanded, setExpanded] = useState(false);
     const displayName = inst.name ?? inst.instance_id;
@@ -163,16 +164,17 @@ function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConne
                                 </button>
                                 <button
                                     onClick={() => connectHost && onSshConnect(inst, buildSshCmd())}
-                                    disabled={!connectHost}
+                                    disabled={!connectHost || !!connecting}
                                     className="px-2.5 py-1 rounded text-xs bg-slate-700 text-slate-200 border border-slate-600 hover:bg-slate-600 disabled:opacity-40 flex items-center gap-1.5"
                                     title={connectHost ? buildSshCmd() : 'Sin IP disponible'}>
-                                    <Terminal size={12} /> SSH
+                                    {connecting === 'ssh' ? <Loader size={12} className="animate-spin" /> : <Terminal size={12} />} SSH
                                 </button>
                                 <button
                                     onClick={() => onSsmConnect(inst)}
-                                    className="px-2.5 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 flex items-center gap-1.5"
+                                    disabled={!!connecting}
+                                    className="px-2.5 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 flex items-center gap-1.5 disabled:opacity-40"
                                     title="Conectar via AWS SSM Session Manager (sin puerto 22)">
-                                    <Terminal size={12} /> SSM
+                                    {connecting === 'ssm' ? <Loader size={12} className="animate-spin" /> : <Terminal size={12} />} SSM
                                 </button>
                             </>}
                         </>
@@ -384,6 +386,7 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
     const [search, setSearch] = useState('');
     const [ssh, setSsh] = useState<SshDefaults>(loadSshDefaults);
     const [sshSession, setSshSession] = useState<SshSession | null>(null);
+    const [connectingId, setConnectingId] = useState<{ id: string, type: 'ssh' | 'ssm' } | null>(null);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetchInstances = useCallback(async () => {
@@ -410,7 +413,7 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
         try {
             const cmd = action === 'start' ? 'ec2_start_instance'
                 : action === 'stop' ? 'ec2_stop_instance'
-                : 'ec2_reboot_instance';
+                    : 'ec2_reboot_instance';
             await invoke(cmd, { credentials: toEc2Rust(cfg), instanceId: id });
             await new Promise(r => setTimeout(r, 1500));
             await fetchInstances();
@@ -422,16 +425,22 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
     }
 
     async function handleSshConnect(inst: Ec2Instance, sshCmd: string) {
+        if (connectingId) return;
+        setConnectingId({ id: inst.instance_id, type: 'ssh' });
         const serviceId = `ec2::ssh::${inst.instance_id}`;
         try {
             await invoke('spawn_interactive', { serviceId, command: sshCmd, envs: null });
             setSshSession({ serviceId, inst, sshCmd, connected: true });
         } catch (e) {
             alert(`No se pudo iniciar SSH: ${e}`);
+        } finally {
+            setConnectingId(null);
         }
     }
 
     async function handleSsmConnect(inst: Ec2Instance) {
+        if (connectingId) return;
+        setConnectingId({ id: inst.instance_id, type: 'ssm' });
         const serviceId = `ec2::ssm::${inst.instance_id}`;
         const credentials = {
             access_key_id: cfg.accessKeyId,
@@ -448,6 +457,8 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
             setSshSession({ serviceId, inst, sshCmd: `SSM → ${inst.instance_id}`, connected: true });
         } catch (e) {
             alert(`No se pudo iniciar SSM Session: ${e}`);
+        } finally {
+            setConnectingId(null);
         }
     }
 
@@ -525,7 +536,8 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
                         {filtered.map(inst => (
                             <Ec2InstanceRow key={inst.instance_id} inst={inst} ssh={ssh}
                                 onAction={handleAction} pending={pendingMap[inst.instance_id] ?? null}
-                                onSshConnect={handleSshConnect} onSsmConnect={handleSsmConnect} />
+                                onSshConnect={handleSshConnect} onSsmConnect={handleSsmConnect}
+                                connecting={connectingId?.id === inst.instance_id ? connectingId.type : null} />
                         ))}
                     </div>
                 )}

@@ -249,7 +249,7 @@ pub async fn spawn_interactive(
         #[allow(unused_imports)]
         use std::os::windows::process::CommandExt;
         let mut c = AsyncCommand::new("cmd");
-        c.args(["/C", &command]).creation_flags(0x08000000);
+        c.arg("/C").raw_arg(&command).creation_flags(0x08000000);
         c
     };
 
@@ -357,6 +357,156 @@ pub async fn spawn_interactive(
     Ok(())
 }
 
+/// Spawns a process directly bypasses shell completely (no cmd /C or sh -c).
+/// This is perfect for programs that take complex arguments like JSON (e.g. session-manager-plugin)
+/// which would otherwise be mangled by cmd.exe's quoting rules on Windows.
+pub async fn spawn_process(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    service_id: String,
+    program: String,
+    args: Vec<String>,
+    envs: Option<std::collections::HashMap<String, String>>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::process::Command as AsyncCommand;
+    use tokio::sync::mpsc;
+    use std::process::Stdio;
+
+    let procs_arc = state.processes.clone();
+    let stdins_arc = state.stdin_senders.clone();
+
+    // Kill any existing session with the same id
+    {
+        let mut procs = procs_arc.lock().await;
+        if let Some(notify) = procs.remove(&service_id) {
+            notify.notify_waiters();
+        }
+    }
+    {
+        let mut senders = stdins_arc.lock().await;
+        senders.remove(&service_id);
+    }
+
+    let _ = app.emit("service-logs", crate::LogEvent {
+        service_id: service_id.clone(),
+        line: format!("[Process] {} {}", program, args.join(" ")),
+        is_error: false,
+    });
+
+    let mut cmd = AsyncCommand::new(&program);
+    cmd.args(&args);
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
+    cmd.stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    if let Some(env_map) = envs {
+        cmd.envs(env_map);
+    }
+
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn {}: {}", program, e))?;
+
+    let stdin_handle = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    {
+        let mut senders = stdins_arc.lock().await;
+        senders.insert(service_id.clone(), tx);
+    }
+
+    let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    procs_arc.lock().await.insert(service_id.clone(), notify.clone());
+
+    // Stdin writer task
+    {
+        let n = notify.clone();
+        let mut handle = stdin_handle;
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            loop {
+                tokio::select! {
+                    _ = n.notified() => break,
+                    line_opt = rx.recv() => match line_opt {
+                        Some(line) => {
+                            if handle.write_all(line.as_bytes()).await.is_err() { break; }
+                            if handle.write_all(b"\n").await.is_err() { break; }
+                        }
+                        None => break,
+                    }
+                }
+            }
+        });
+    }
+
+    // Stdout reader task
+    {
+        let app2 = app.clone();
+        let sid = service_id.clone();
+        let n = notify.clone();
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stdout).lines();
+            loop {
+                tokio::select! {
+                    _ = n.notified() => break,
+                    line = reader.next_line() => match line {
+                        Ok(Some(l)) => { let _ = app2.emit("service-logs", crate::LogEvent { service_id: sid.clone(), line: l, is_error: false }); }
+                        _ => break,
+                    }
+                }
+            }
+        });
+    }
+
+    // Stderr reader task
+    {
+        let app2 = app.clone();
+        let sid = service_id.clone();
+        let n = notify.clone();
+        tokio::spawn(async move {
+            let mut reader = BufReader::new(stderr).lines();
+            loop {
+                tokio::select! {
+                    _ = n.notified() => break,
+                    line = reader.next_line() => match line {
+                        Ok(Some(l)) => { let _ = app2.emit("service-logs", crate::LogEvent { service_id: sid.clone(), line: l, is_error: true }); }
+                        _ => break,
+                    }
+                }
+            }
+        });
+    }
+
+    // Wait / cleanup task
+    {
+        let app2 = app.clone();
+        let sid = service_id.clone();
+        let n = notify.clone();
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = n.notified() => { let _ = child.kill().await; }
+                _ = child.wait() => {
+                    procs_arc.lock().await.remove(&sid);
+                    stdins_arc.lock().await.remove(&sid);
+                    let _ = app2.emit("service-stopped", sid);
+                }
+            }
+        });
+    }
+
+    Ok(())
+}
+
+
 /// Sends a line of text to the stdin of a running interactive process.
 #[tauri::command]
 pub async fn write_stdin_line(
@@ -378,6 +528,7 @@ pub async fn write_stdin_line(
 pub fn ec2_open_terminal(ssh_command: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        #[allow(unused_imports)]
         use std::os::windows::process::CommandExt;
         std::process::Command::new("cmd")
             .args(["/C", "start", "cmd", "/K", &ssh_command])
