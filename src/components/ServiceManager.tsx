@@ -16,6 +16,7 @@ import { TestsPanel } from './TestsPanel';
 import { SonarPanel } from './SonarPanel';
 import { CloudWatchPanel } from './CloudWatchPanel';
 import { HttpPanel } from './http/HttpPanel';
+import { JenkinsPanel } from './JenkinsPanel';
 import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
 import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -531,6 +532,13 @@ export const ServiceManager: React.FC = () => {
                             <HttpPanel />
                         </div>
                     )}
+
+                    {state.activeView === 'jenkins' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <JenkinsPanel />
+                        </div>
+                    )}
+
                 </div>
             </div>
         </div>

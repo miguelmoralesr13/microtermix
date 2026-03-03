@@ -12,6 +12,7 @@ pub struct ServerHandle {
 /// Estado compartido de la aplicación backend.
 pub struct AppState {
     pub processes: Arc<AsyncMutex<HashMap<String, Arc<tokio::sync::Notify>>>>,
+    pub stdin_senders: Arc<AsyncMutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<String>>>>,
     pub proxy_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
     pub file_server_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
     pub coverage_server_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
@@ -22,6 +23,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(AsyncMutex::new(HashMap::new())),
+            stdin_senders: Arc::new(AsyncMutex::new(HashMap::new())),
             proxy_abort: Arc::new(AsyncMutex::new(None)),
             file_server_abort: Arc::new(AsyncMutex::new(None)),
             coverage_server_abort: Arc::new(AsyncMutex::new(None)),

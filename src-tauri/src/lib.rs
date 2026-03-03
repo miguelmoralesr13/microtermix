@@ -7,6 +7,8 @@ mod file_server;
 mod workspace;
 mod cloudwatch;
 mod http_client;
+mod ec2;
+mod ssm;
 
 use std::fs;
 use std::path::Path;
@@ -35,6 +37,11 @@ pub use crate::cloudwatch::{
     cw_list_metrics, cw_get_metric_data,
 };
 pub use crate::http_client::make_http_request;
+pub use crate::ec2::{
+    ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
+    spawn_interactive, write_stdin_line,
+};
+pub use crate::ssm::ssm_start_session;
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -214,6 +221,14 @@ pub fn run() {
             cw_list_metrics,
             cw_get_metric_data,
             make_http_request,
+            ec2_list_instances,
+            ec2_start_instance,
+            ec2_stop_instance,
+            ec2_reboot_instance,
+            ec2_open_terminal,
+            spawn_interactive,
+            write_stdin_line,
+            ssm_start_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

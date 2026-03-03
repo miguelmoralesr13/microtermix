@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Cloud, Settings, RefreshCw, CheckCircle, AlertCircle, X, Star } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import {
+    Cloud, Settings, RefreshCw, CheckCircle, AlertCircle, X, Star,
+    Monitor, Play, Square, RotateCcw, Terminal, ChevronDown, ChevronRight,
+    Circle, Loader, Search,
+} from 'lucide-react';
 import {
     CwCredentials,
     CwLogGroup,
@@ -16,7 +22,525 @@ import {
     cwGetMetricData,
 } from '../services/cloudwatchApi';
 
-type CwTab = 'settings' | 'logs' | 'metrics';
+type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2';
+
+// ── EC2 Types ─────────────────────────────────────────────────────────────────
+
+interface Ec2Tag { key: string; value: string; }
+
+interface Ec2Instance {
+    instance_id: string;
+    name: string | null;
+    state: string;
+    state_code: number;
+    instance_type: string;
+    public_ip: string | null;
+    private_ip: string | null;
+    key_name: string | null;
+    launch_time: string | null;
+    availability_zone: string | null;
+    image_id: string | null;
+    platform: string | null;
+    vpc_id: string | null;
+    subnet_id: string | null;
+    tags: Ec2Tag[];
+}
+
+interface SshDefaults { username: string; keyPath: string; port: number; }
+
+const SSH_KEY = 'nexus-ec2-ssh';
+
+function loadSshDefaults(): SshDefaults {
+    try {
+        const raw = localStorage.getItem(SSH_KEY);
+        if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return { username: 'ec2-user', keyPath: '', port: 22 };
+}
+function saveSshDefaults(s: SshDefaults) { localStorage.setItem(SSH_KEY, JSON.stringify(s)); }
+
+function toEc2Rust(cfg: CwCredentials) {
+    return {
+        access_key_id: cfg.accessKeyId,
+        secret_access_key: cfg.secretAccessKey,
+        region: cfg.region,
+        session_token: cfg.sessionToken ?? null,
+    };
+}
+
+// ── EC2 Helpers ───────────────────────────────────────────────────────────────
+
+function ec2StateColor(state: string): string {
+    switch (state) {
+        case 'running': return '#22c55e';
+        case 'stopped': return '#ef4444';
+        case 'stopping': case 'pending': case 'shutting-down': return '#f59e0b';
+        case 'terminated': return '#475569';
+        default: return '#6b7280';
+    }
+}
+
+function Ec2StateIcon({ state }: { state: string }) {
+    const color = ec2StateColor(state);
+    if (state === 'running') return <CheckCircle size={14} style={{ color }} />;
+    if (state === 'stopped') return <X size={14} style={{ color }} />;
+    if (['pending', 'stopping', 'shutting-down'].includes(state))
+        return <Loader size={14} style={{ color }} className="animate-spin" />;
+    if (state === 'terminated') return <Circle size={14} style={{ color }} />;
+    return <AlertCircle size={14} style={{ color }} />;
+}
+
+function formatLaunchTime(iso: string | null): string {
+    if (!iso) return '–';
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+// ── EC2 Instance Row ──────────────────────────────────────────────────────────
+
+function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConnect }: {
+    inst: Ec2Instance;
+    ssh: SshDefaults;
+    onAction: (action: 'start' | 'stop' | 'reboot', id: string) => void;
+    pending: string | null;
+    onSshConnect: (inst: Ec2Instance, cmd: string) => void;
+    onSsmConnect: (inst: Ec2Instance) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const displayName = inst.name ?? inst.instance_id;
+    const connectHost = inst.public_ip ?? inst.private_ip;
+    const isRunning = inst.state === 'running';
+    const isStopped = inst.state === 'stopped';
+
+    function buildSshCmd(): string {
+        const keyFlag = ssh.keyPath ? ` -i "${ssh.keyPath}"` : '';
+        const portFlag = ssh.port !== 22 ? ` -p ${ssh.port}` : '';
+        return `ssh -tt${keyFlag}${portFlag} ${ssh.username}@${connectHost}`;
+    }
+
+    return (
+        <div className="border border-slate-800 rounded-lg overflow-hidden">
+            <div
+                className="flex items-center gap-3 px-4 py-3 bg-slate-900 hover:bg-slate-800/70 cursor-pointer select-none"
+                onClick={() => setExpanded(e => !e)}
+            >
+                <span className="text-slate-600">
+                    {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </span>
+                <Ec2StateIcon state={inst.state} />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-100 truncate">{displayName}</span>
+                        {inst.name && <span className="text-xs text-slate-600 font-mono">{inst.instance_id}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                        <span style={{ color: ec2StateColor(inst.state) }}>
+                            {inst.state.charAt(0).toUpperCase() + inst.state.slice(1)}
+                        </span>
+                        <span>{inst.instance_type}</span>
+                        {inst.availability_zone && <span>{inst.availability_zone}</span>}
+                        {connectHost && <span className="font-mono">{connectHost}</span>}
+                    </div>
+                </div>
+                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                    {pending
+                        ? <Loader size={14} className="animate-spin text-slate-400 mx-1" />
+                        : <>
+                            {isStopped && (
+                                <button onClick={() => onAction('start', inst.instance_id)}
+                                    className="p-1.5 rounded text-green-400 hover:bg-green-400/10" title="Start">
+                                    <Play size={14} />
+                                </button>
+                            )}
+                            {isRunning && <>
+                                <button onClick={() => onAction('stop', inst.instance_id)}
+                                    className="p-1.5 rounded text-red-400 hover:bg-red-400/10" title="Stop">
+                                    <Square size={14} />
+                                </button>
+                                <button onClick={() => onAction('reboot', inst.instance_id)}
+                                    className="p-1.5 rounded text-yellow-400 hover:bg-yellow-400/10" title="Reboot">
+                                    <RotateCcw size={14} />
+                                </button>
+                                <button
+                                    onClick={() => connectHost && onSshConnect(inst, buildSshCmd())}
+                                    disabled={!connectHost}
+                                    className="px-2.5 py-1 rounded text-xs bg-slate-700 text-slate-200 border border-slate-600 hover:bg-slate-600 disabled:opacity-40 flex items-center gap-1.5"
+                                    title={connectHost ? buildSshCmd() : 'Sin IP disponible'}>
+                                    <Terminal size={12} /> SSH
+                                </button>
+                                <button
+                                    onClick={() => onSsmConnect(inst)}
+                                    className="px-2.5 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 flex items-center gap-1.5"
+                                    title="Conectar via AWS SSM Session Manager (sin puerto 22)">
+                                    <Terminal size={12} /> SSM
+                                </button>
+                            </>}
+                        </>
+                    }
+                </div>
+            </div>
+            {expanded && (
+                <div className="bg-slate-950 border-t border-slate-800 px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+                    {([
+                        ['Instance ID', inst.instance_id],
+                        ['Type', inst.instance_type],
+                        ['Platform', inst.platform ?? 'Linux / Other'],
+                        ['Public IP', inst.public_ip ?? '–'],
+                        ['Private IP', inst.private_ip ?? '–'],
+                        ['Key Pair', inst.key_name ?? '–'],
+                        ['Image ID', inst.image_id ?? '–'],
+                        ['VPC', inst.vpc_id ?? '–'],
+                        ['Subnet', inst.subnet_id ?? '–'],
+                        ['AZ', inst.availability_zone ?? '–'],
+                        ['Launch', formatLaunchTime(inst.launch_time)],
+                    ] as [string, string][]).map(([k, v]) => (
+                        <div key={k} className="flex gap-2">
+                            <span className="text-slate-500 shrink-0 w-20">{k}</span>
+                            <span className="text-slate-300 font-mono break-all">{v}</span>
+                        </div>
+                    ))}
+                    {inst.tags.length > 0 && (
+                        <div className="col-span-2 flex flex-wrap gap-1.5 mt-1">
+                            {inst.tags.map(t => (
+                                <span key={t.key} className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-xs">
+                                    {t.key}: {t.value}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    {connectHost && isRunning && (
+                        <div className="col-span-2 mt-1">
+                            <span className="text-slate-500">SSH  </span>
+                            <span className="font-mono text-slate-300 select-all">{buildSshCmd()}</span>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── EC2 SSH Terminal (inline) ─────────────────────────────────────────────────
+
+interface SshSession {
+    serviceId: string;
+    inst: Ec2Instance;
+    sshCmd: string;
+    connected: boolean;
+}
+
+interface LogLine { text: string; isError: boolean; }
+
+function Ec2Terminal({ session, onDisconnect }: { session: SshSession; onDisconnect: () => void }) {
+    const [logs, setLogs] = useState<LogLine[]>([]);
+    const [input, setInput] = useState('');
+    const [alive, setAlive] = useState(true);
+    const logsEndRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const displayName = session.inst.name ?? session.inst.instance_id;
+
+    // Listen to service-logs and service-stopped for this session
+    useEffect(() => {
+        const unlistenLogs = listen<{ service_id: string; line: string; is_error: boolean }>(
+            'service-logs',
+            ({ payload }) => {
+                if (payload.service_id !== session.serviceId) return;
+                setLogs(prev => [...prev, { text: payload.line, isError: payload.is_error }]);
+            }
+        );
+        const unlistenStopped = listen<string>('service-stopped', ({ payload }) => {
+            if (payload !== session.serviceId) return;
+            setAlive(false);
+            setLogs(prev => [...prev, { text: '[Conexión cerrada]', isError: false }]);
+        });
+        return () => {
+            unlistenLogs.then(fn => fn());
+            unlistenStopped.then(fn => fn());
+        };
+    }, [session.serviceId]);
+
+    // Auto-scroll
+    useEffect(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [logs]);
+
+    // Focus input on mount
+    useEffect(() => { inputRef.current?.focus(); }, []);
+
+    async function sendLine(line: string) {
+        if (!alive) return;
+        setInput('');
+        // Echo the input locally
+        setLogs(prev => [...prev, { text: `$ ${line}`, isError: false }]);
+        try {
+            await invoke('write_stdin_line', { serviceId: session.serviceId, line });
+        } catch (e) {
+            setLogs(prev => [...prev, { text: `[Error enviando: ${e}]`, isError: true }]);
+        }
+    }
+
+    async function handleDisconnect() {
+        try { await invoke('kill_service', { serviceId: session.serviceId }); } catch { /* ignore */ }
+        onDisconnect();
+    }
+
+    return (
+        <div className="flex flex-col h-full min-h-0">
+            {/* Terminal header */}
+            <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-700 bg-slate-900 shrink-0">
+                <Terminal size={14} className="text-nexus-neon" />
+                <span className="text-sm font-medium text-slate-200">{displayName}</span>
+                <span className="text-xs text-slate-500 font-mono">{session.inst.public_ip ?? session.inst.private_ip}</span>
+                {alive
+                    ? <span className="flex items-center gap-1 text-xs text-green-400 ml-1"><CheckCircle size={11} /> Conectado</span>
+                    : <span className="flex items-center gap-1 text-xs text-slate-500 ml-1"><Circle size={11} /> Desconectado</span>
+                }
+                <div className="ml-auto flex items-center gap-2">
+                    <button
+                        onClick={() => sendLine('')}
+                        disabled={!alive}
+                        className="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-500 disabled:opacity-40"
+                        title="Enviar Enter"
+                    >↵</button>
+                    <button
+                        onClick={handleDisconnect}
+                        className="px-2.5 py-1 rounded text-xs text-red-400 hover:bg-red-400/10 border border-red-900/40"
+                    >Desconectar</button>
+                    <button
+                        onClick={onDisconnect}
+                        className="px-2.5 py-1 rounded text-xs text-slate-400 hover:text-slate-200 border border-slate-700"
+                    >← Volver</button>
+                </div>
+            </div>
+
+            {/* Log area */}
+            <div
+                className="flex-1 overflow-y-auto bg-slate-950 px-4 py-3 font-mono text-xs leading-relaxed"
+                onClick={() => inputRef.current?.focus()}
+            >
+                {logs.map((l, i) => (
+                    <div key={i} className={l.isError ? 'text-red-400' : l.text.startsWith('$') ? 'text-nexus-neon' : l.text.startsWith('[') ? 'text-slate-500' : 'text-slate-200'}>
+                        {l.text}
+                    </div>
+                ))}
+                <div ref={logsEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-800 bg-slate-900 shrink-0">
+                <span className="text-nexus-neon font-mono text-xs select-none">$</span>
+                <input
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => {
+                        if (e.key === 'Enter') { e.preventDefault(); sendLine(input); }
+                        if (e.key === 'c' && e.ctrlKey) { e.preventDefault(); sendLine('\x03'); }
+                    }}
+                    disabled={!alive}
+                    placeholder={alive ? 'Escribe un comando y presiona Enter…' : 'Sesión terminada'}
+                    className="flex-1 bg-transparent text-slate-100 font-mono text-xs focus:outline-none placeholder-slate-600 disabled:opacity-40"
+                />
+            </div>
+        </div>
+    );
+}
+
+// ── EC2 SSH Settings bar ──────────────────────────────────────────────────────
+
+function Ec2SshSettings({ ssh, setSsh }: { ssh: SshDefaults; setSsh: (s: SshDefaults) => void }) {
+    return (
+        <div className="border-t border-slate-800 px-4 py-2 flex flex-wrap gap-4 items-end bg-slate-900/40 shrink-0">
+            <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider">SSH User</label>
+                <input value={ssh.username} onChange={e => { const s = { ...ssh, username: e.target.value }; setSsh(s); saveSshDefaults(s); }}
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon w-28" />
+            </div>
+            <div className="flex flex-col gap-0.5 flex-1 min-w-40">
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider">Key (.pem)</label>
+                <input value={ssh.keyPath} onChange={e => { const s = { ...ssh, keyPath: e.target.value }; setSsh(s); saveSshDefaults(s); }}
+                    placeholder="/path/to/key.pem"
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-nexus-neon placeholder-slate-600" />
+            </div>
+            <div className="flex flex-col gap-0.5">
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider">Port</label>
+                <input type="number" value={ssh.port} onChange={e => { const s = { ...ssh, port: parseInt(e.target.value) || 22 }; setSsh(s); saveSshDefaults(s); }}
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon w-20" />
+            </div>
+        </div>
+    );
+}
+
+// ── EC2 Tab ───────────────────────────────────────────────────────────────────
+
+type Ec2StateFilter = 'all' | 'running' | 'stopped';
+
+function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
+    const [instances, setInstances] = useState<Ec2Instance[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [pendingMap, setPendingMap] = useState<Record<string, string>>({});
+    const [stateFilter, setStateFilter] = useState<Ec2StateFilter>('all');
+    const [search, setSearch] = useState('');
+    const [ssh, setSsh] = useState<SshDefaults>(loadSshDefaults);
+    const [sshSession, setSshSession] = useState<SshSession | null>(null);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const fetchInstances = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const result = await invoke<Ec2Instance[]>('ec2_list_instances', { credentials: toEc2Rust(cfg) });
+            setInstances(result);
+        } catch (e) {
+            setError(String(e));
+        } finally {
+            setLoading(false);
+        }
+    }, [cfg]);
+
+    useEffect(() => {
+        fetchInstances();
+        pollRef.current = setInterval(fetchInstances, 30_000);
+        return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    }, [fetchInstances]);
+
+    async function handleAction(action: 'start' | 'stop' | 'reboot', id: string) {
+        setPendingMap(p => ({ ...p, [id]: action }));
+        try {
+            const cmd = action === 'start' ? 'ec2_start_instance'
+                : action === 'stop' ? 'ec2_stop_instance'
+                : 'ec2_reboot_instance';
+            await invoke(cmd, { credentials: toEc2Rust(cfg), instanceId: id });
+            await new Promise(r => setTimeout(r, 1500));
+            await fetchInstances();
+        } catch (e) {
+            alert(`Error al ${action} instancia: ${e}`);
+        } finally {
+            setPendingMap(p => { const n = { ...p }; delete n[id]; return n; });
+        }
+    }
+
+    async function handleSshConnect(inst: Ec2Instance, sshCmd: string) {
+        const serviceId = `ec2::ssh::${inst.instance_id}`;
+        try {
+            await invoke('spawn_interactive', { serviceId, command: sshCmd, envs: null });
+            setSshSession({ serviceId, inst, sshCmd, connected: true });
+        } catch (e) {
+            alert(`No se pudo iniciar SSH: ${e}`);
+        }
+    }
+
+    async function handleSsmConnect(inst: Ec2Instance) {
+        const serviceId = `ec2::ssm::${inst.instance_id}`;
+        const credentials = {
+            access_key_id: cfg.accessKeyId,
+            secret_access_key: cfg.secretAccessKey,
+            region: cfg.region,
+            session_token: cfg.sessionToken ?? null,
+        };
+        try {
+            await invoke('ssm_start_session', {
+                credentials,
+                instanceId: inst.instance_id,
+                serviceId,
+            });
+            setSshSession({ serviceId, inst, sshCmd: `SSM → ${inst.instance_id}`, connected: true });
+        } catch (e) {
+            alert(`No se pudo iniciar SSM Session: ${e}`);
+        }
+    }
+
+    function handleDisconnect() {
+        setSshSession(null);
+    }
+
+    // If a session is active, show the terminal
+    if (sshSession) {
+        return <Ec2Terminal session={sshSession} onDisconnect={handleDisconnect} />;
+    }
+
+    const counts = {
+        all: instances.length,
+        running: instances.filter(i => i.state === 'running').length,
+        stopped: instances.filter(i => i.state === 'stopped').length,
+    };
+
+    const filtered = instances.filter(i => {
+        if (stateFilter !== 'all' && i.state !== stateFilter) return false;
+        if (search) {
+            const q = search.toLowerCase();
+            return (i.name ?? '').toLowerCase().includes(q)
+                || i.instance_id.toLowerCase().includes(q)
+                || (i.public_ip ?? '').includes(q)
+                || (i.private_ip ?? '').includes(q);
+        }
+        return true;
+    });
+
+    return (
+        <div className="flex flex-col h-full min-h-0">
+            {/* Toolbar */}
+            <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-800 shrink-0">
+                <div className="flex gap-1">
+                    {(['all', 'running', 'stopped'] as Ec2StateFilter[]).map(f => (
+                        <button key={f} onClick={() => setStateFilter(f)}
+                            className={`px-3 py-1 rounded text-xs capitalize transition-colors ${stateFilter === f ? 'bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30' : 'text-slate-500 hover:text-slate-300'}`}>
+                            {f} <span className="opacity-50">({counts[f]})</span>
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded px-2 py-1 flex-1 max-w-xs">
+                    <Search size={13} className="text-slate-500 shrink-0" />
+                    <input value={search} onChange={e => setSearch(e.target.value)}
+                        placeholder="Filtrar por nombre, IP…"
+                        className="bg-transparent text-xs text-slate-100 focus:outline-none placeholder-slate-600 w-full" />
+                    {search && <button onClick={() => setSearch('')} className="text-slate-500 hover:text-slate-300"><X size={13} /></button>}
+                </div>
+                <div className="ml-auto flex items-center gap-2">
+                    {loading && <Loader size={14} className="animate-spin text-slate-400" />}
+                    <button onClick={fetchInstances} disabled={loading}
+                        className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors disabled:opacity-40" title="Actualizar">
+                        <RefreshCw size={14} />
+                    </button>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+                {error && (
+                    <div className="flex items-start gap-2 p-3 bg-red-900/20 border border-red-800/40 rounded text-red-400 text-sm mb-3">
+                        <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                        <span>{error}</span>
+                    </div>
+                )}
+                {!error && !loading && instances.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-40 gap-3 text-slate-500">
+                        <Monitor size={36} strokeWidth={1} />
+                        <p className="text-sm">No hay instancias en <span className="text-slate-300">{cfg.region}</span>.</p>
+                    </div>
+                )}
+                {filtered.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                        {filtered.map(inst => (
+                            <Ec2InstanceRow key={inst.instance_id} inst={inst} ssh={ssh}
+                                onAction={handleAction} pending={pendingMap[inst.instance_id] ?? null}
+                                onSshConnect={handleSshConnect} onSsmConnect={handleSsmConnect} />
+                        ))}
+                    </div>
+                )}
+                {!error && instances.length > 0 && filtered.length === 0 && (
+                    <p className="text-center text-slate-500 text-sm pt-16">
+                        Ninguna instancia coincide con el filtro.
+                    </p>
+                )}
+            </div>
+
+            {/* SSH defaults bar */}
+            <Ec2SshSettings ssh={ssh} setSsh={setSsh} />
+        </div>
+    );
+}
 
 function usePersistedState<T>(key: string, initialValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
     const [state, setState] = useState<T>(() => {
@@ -820,6 +1344,7 @@ export const CloudWatchPanel: React.FC = () => {
         { id: 'settings', label: 'Configuración' },
         { id: 'logs', label: 'Logs' },
         { id: 'metrics', label: 'Métricas' },
+        { id: 'ec2', label: 'EC2' },
     ];
 
     return (
@@ -851,6 +1376,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tab === 'logs' && isConfigured && <LogsTab cfg={cfg} />}
                 {tab === 'metrics' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
                 {tab === 'metrics' && isConfigured && <MetricsTab cfg={cfg} />}
+                {tab === 'ec2' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
+                {tab === 'ec2' && isConfigured && <Ec2Tab cfg={cfg} />}
             </div>
         </div>
     );
