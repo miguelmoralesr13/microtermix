@@ -74,6 +74,8 @@ interface DebugLog {
 
 const GLOBAL_KEY = 'nexus-sonar-global-config';
 const METRICS_CACHE_KEY = 'nexus-sonar-metrics-cache';
+const STORAGE_SONAR_PATH = 'nexus-sonar-selected-path';
+const STORAGE_SONAR_TAB = 'nexus-sonar-active-tab';
 const DEFAULT_GLOBAL: GlobalSonarConfig = { serverUrl: 'https://sonarcloud.io', token: '', authType: 'basic' };
 
 function loadGlobalConfig(): GlobalSonarConfig {
@@ -216,12 +218,17 @@ export const SonarPanel: React.FC = () => {
     const projects = state.projects;
 
     // ── Selection
-    const [selectedPath, setSelectedPath] = useState<string>(() =>
-        projects.length > 0 ? projects[0].path as string : ''
-    );
+    const [selectedPath, setSelectedPath] = useState<string>(() => {
+        const saved = localStorage.getItem(STORAGE_SONAR_PATH);
+        if (saved && projects.some(p => p.path === saved)) return saved;
+        return projects.length > 0 ? projects[0].path as string : '';
+    });
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath(projects[0].path as string);
     }, [projects, selectedPath]);
+    useEffect(() => {
+        if (selectedPath) localStorage.setItem(STORAGE_SONAR_PATH, selectedPath);
+    }, [selectedPath]);
 
     // ── Config
     const [globalConfig, setGlobalConfig] = useState<GlobalSonarConfig>(loadGlobalConfig);
@@ -281,7 +288,11 @@ export const SonarPanel: React.FC = () => {
     }, [rules]);
 
     // ── UI — errores separados por sección para evitar contaminación entre tabs
-    const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'rules' | 'issues'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'rules' | 'issues'>(() => {
+        const saved = localStorage.getItem(STORAGE_SONAR_TAB);
+        return (saved === 'overview' || saved === 'analysis' || saved === 'rules' || saved === 'issues') ? saved : 'overview';
+    });
+    useEffect(() => { localStorage.setItem(STORAGE_SONAR_TAB, activeTab); }, [activeTab]);
     const [metricsError, setMetricsError] = useState<string | null>(null);
     const [issuesError, setIssuesError] = useState<string | null>(null);
     const [rulesError, setRulesError] = useState<string | null>(null);

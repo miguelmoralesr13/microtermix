@@ -65,6 +65,9 @@ interface CoverageSummary {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+const STORAGE_TESTS_PATH = 'nexus-tests-selected-path';
+const STORAGE_TESTS_TAB = 'nexus-tests-active-tab';
+
 function configStorageKey(projectPath: string): string {
     return `nexus-test-config-${projectPath.replace(/[/\\:]/g, '_')}`;
 }
@@ -192,12 +195,17 @@ export const TestsPanel: React.FC = () => {
     const { state, executeProjectScript, updateProcessStatus } = useWorkspace();
     const projects = state.projects;
 
-    const [selectedPath, setSelectedPath] = useState<string>(() =>
-        projects.length > 0 ? projects[0].path as string : ''
-    );
+    const [selectedPath, setSelectedPath] = useState<string>(() => {
+        const saved = localStorage.getItem(STORAGE_TESTS_PATH);
+        if (saved && projects.some(p => p.path === saved)) return saved;
+        return projects.length > 0 ? projects[0].path as string : '';
+    });
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath(projects[0].path as string);
     }, [projects, selectedPath]);
+    useEffect(() => {
+        if (selectedPath) localStorage.setItem(STORAGE_TESTS_PATH, selectedPath);
+    }, [selectedPath]);
 
     const [config, setConfig] = useState<TestConfig>(() =>
         selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG }
@@ -210,7 +218,11 @@ export const TestsPanel: React.FC = () => {
     const [coverageError, setCoverageError] = useState<string | null>(null);
 
     // In-app report viewer
-    const [activeTab, setActiveTab] = useState<'execution' | 'report'>('execution');
+    const [activeTab, setActiveTab] = useState<'execution' | 'report'>(() => {
+        const saved = localStorage.getItem(STORAGE_TESTS_TAB);
+        return saved === 'report' ? 'report' : 'execution';
+    });
+    useEffect(() => { localStorage.setItem(STORAGE_TESTS_TAB, activeTab); }, [activeTab]);
     const [coverageServerPort, setCoverageServerPort] = useState<number | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
 

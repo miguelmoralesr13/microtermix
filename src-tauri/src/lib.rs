@@ -9,6 +9,7 @@ mod cloudwatch;
 mod http_client;
 mod ec2;
 mod ssm;
+mod crypto;
 
 use std::fs;
 use std::path::Path;
@@ -42,6 +43,11 @@ pub use crate::ec2::{
     spawn_interactive, spawn_pty_process, write_stdin_line,
 };
 pub use crate::ssm::{ssm_start_session, ssm_check_plugin};
+pub use crate::crypto::{
+    crypto_generate_keys, crypto_encrypt, crypto_decrypt,
+    crypto_encrypt_json_fields, crypto_decrypt_json_all,
+    CryptoKeyPair,
+};
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -230,6 +236,11 @@ pub fn run() {
             write_stdin_line,
             ssm_start_session,
             ssm_check_plugin,
+            crypto_generate_keys,
+            crypto_encrypt,
+            crypto_decrypt,
+            crypto_encrypt_json_fields,
+            crypto_decrypt_json_all,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

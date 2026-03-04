@@ -16,6 +16,8 @@ import { GitInitPanel } from './GitInitPanel';
 
 const STORAGE_SIDEBAR = 'nexus-git-sidebar-width';
 const STORAGE_STAGING = 'nexus-git-staging-width';
+const STORAGE_GIT_TAB = 'nexus-git-active-tab';
+const STORAGE_GIT_SUBTAB = 'nexus-git-active-subtab';
 const MIN_PANEL = 150;
 const MAX_PANEL = 800;
 const DEFAULT_SIDEBAR = 230;
@@ -23,10 +25,15 @@ const DEFAULT_STAGING = 280;
 
 export const GitPanel: React.FC = () => {
     const { state } = useWorkspace();
-    const [activeGitTab, setActiveGitTab] = useState<string | null>(
-        state.projects.length > 0 ? state.projects[0].path as string : null
-    );
-    const [activeSubTab, setActiveSubTab] = useState<'git' | 'remote'>('git');
+    const [activeGitTab, setActiveGitTab] = useState<string | null>(() => {
+        const saved = localStorage.getItem(STORAGE_GIT_TAB);
+        if (saved && state.projects.some(p => p.path === saved)) return saved;
+        return state.projects.length > 0 ? state.projects[0].path as string : null;
+    });
+    const [activeSubTab, setActiveSubTab] = useState<'git' | 'remote'>(() => {
+        const saved = localStorage.getItem(STORAGE_GIT_SUBTAB);
+        return saved === 'remote' ? 'remote' : 'git';
+    });
 
     const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR);
     const [stagingWidth, setStagingWidth] = useState(DEFAULT_STAGING);
@@ -46,6 +53,12 @@ export const GitPanel: React.FC = () => {
     useEffect(() => {
         localStorage.setItem(STORAGE_STAGING, String(stagingWidth));
     }, [stagingWidth]);
+    useEffect(() => {
+        if (activeGitTab) localStorage.setItem(STORAGE_GIT_TAB, activeGitTab);
+    }, [activeGitTab]);
+    useEffect(() => {
+        localStorage.setItem(STORAGE_GIT_SUBTAB, activeSubTab);
+    }, [activeSubTab]);
 
     useEffect(() => {
         if (!activeGitTab) {

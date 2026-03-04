@@ -38,3 +38,12 @@ portable-pty = "0.8"
 tower = "0.4"
 regex = "1"
 tauri-plugin-http = "2"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+rsa = { version = "0.9", features = ["sha2", "pem"] }
+ecies = { version = "0.2", default-features = false, features = ["pure"] }
+rand = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+hmac = "0.12"
+pkcs8 = { version = "0.10", features = ["pem"] }

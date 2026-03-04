@@ -2399,9 +2399,15 @@ function BoardView() {
 
 // ── Main JiraPanel ─────────────────────────────────────────────────────────────
 
+const STORAGE_JIRA_TAB = 'nexus-jira-active-tab';
+
 export const JiraPanel: React.FC = () => {
-    const [tab, setTab] = useState<Tab>('board');
+    const [tab, setTab] = useState<Tab>(() => {
+        const saved = localStorage.getItem(STORAGE_JIRA_TAB);
+        return (saved === 'board' || saved === 'stories' || saved === 'create' || saved === 'settings') ? saved : 'board';
+    });
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+    useEffect(() => { localStorage.setItem(STORAGE_JIRA_TAB, tab); }, [tab]);
 
     const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
         { id: 'board', label: 'Board', icon: <Layers size={14} /> },
