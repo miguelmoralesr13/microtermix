@@ -62,14 +62,27 @@ fn clean_path_str(p: &std::path::Path) -> String {
     if s.starts_with(r"\\?\") { s[4..].to_string() } else { s }
 }
 
-/// Returns the path to the bundled `session-manager-plugin` executable.
-fn plugin_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+/// Returns the path to the `session-manager-plugin` executable.
+/// If `custom_path` is provided and exists, it takes precedence.
+fn plugin_path_finder(app: &tauri::AppHandle, custom_path: Option<&str>) -> Result<std::path::PathBuf, String> {
+    if let Some(p) = custom_path {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            let path = std::path::PathBuf::from(trimmed);
+            if path.exists() {
+                return Ok(path);
+            } else {
+                return Err(format!("El plugin custom no existe en la ruta especificada:\n{}", trimmed));
+            }
+        }
+    }
+
     let triple_name = plugin_exe_name_triple();
     let plain_name  = plugin_exe_name();
 
     let mut candidates: Vec<std::path::PathBuf> = Vec::new();
 
-    // 0. CWD-based binaries/ dir — works perfectly during `tauri dev`
+    // 1. CWD-based binaries/ dir — works perfectly during `tauri dev`
     //    (CWD is the workspace root when running `npm run tauri dev`)
     let cwd = std::env::current_dir().unwrap_or_default();
     candidates.push(cwd.join("src-tauri").join("binaries").join(&triple_name));
@@ -105,11 +118,11 @@ fn plugin_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
-/// Check that the bundled session-manager-plugin is accessible and working.
+/// Check that the session-manager-plugin is accessible and working.
 /// Returns the version string on success.
 #[tauri::command]
-pub fn ssm_check_plugin(app: tauri::AppHandle) -> Result<String, String> {
-    let path = plugin_path(&app)?;
+pub fn ssm_check_plugin(app: tauri::AppHandle, plugin_path: Option<String>) -> Result<String, String> {
+    let path = plugin_path_finder(&app, plugin_path.as_deref())?;
     let out = std::process::Command::new(&path)
         .arg("--version")
         .output()
@@ -135,6 +148,7 @@ pub async fn ssm_start_session(
     credentials: Ec2Credentials,
     instance_id: String,
     service_id: String,
+    plugin_path: Option<String>,
 ) -> Result<(), String> {
     use tauri::Emitter;
 
@@ -148,8 +162,8 @@ pub async fn ssm_start_session(
     }
     stdins_arc.lock().await.remove(&service_id);
 
-    // Find the bundled plugin
-    let plugin_exe = plugin_path(&app)?;
+    // Find the plugin
+    let plugin_exe = plugin_path_finder(&app, plugin_path.as_deref())?;
 
     // Call StartSession API
     let ssm  = ssm_client(&credentials).await;

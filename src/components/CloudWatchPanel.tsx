@@ -21,6 +21,7 @@ import {
     cwGetLogEvents,
     cwListMetrics,
     cwGetMetricData,
+    ssmCheckPlugin,
 } from '../services/cloudwatchApi';
 
 type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2';
@@ -463,6 +464,7 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
                 credentials,
                 instanceId: inst.instance_id,
                 serviceId,
+                pluginPath: cfg.ssmPluginPath ?? null,
             });
             setSshSession({ serviceId, inst, sshCmd: `SSM → ${inst.instance_id}`, connected: true });
         } catch (e) {
@@ -615,9 +617,9 @@ function parseAwsCredentialBlock(text: string): Partial<CwCredentials> {
         const key = line.slice(0, eq).trim().toLowerCase();
         const value = line.slice(eq + 1).trim();
         if (!value) continue;
-        if (key === 'aws_access_key_id')     result.accessKeyId     = value;
+        if (key === 'aws_access_key_id') result.accessKeyId = value;
         if (key === 'aws_secret_access_key') result.secretAccessKey = value;
-        if (key === 'aws_session_token')     result.sessionToken    = value;
+        if (key === 'aws_session_token') result.sessionToken = value;
         if (key === 'region' || key === 'aws_default_region') result.region = value;
     }
     return result;
@@ -642,6 +644,7 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
         setResult(null);
         try {
             await cwGetLogGroups(draft, '');
+            await ssmCheckPlugin(draft.ssmPluginPath);
             setResult('ok');
         } catch (e: any) {
             setResult('error');
@@ -741,6 +744,7 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
             {field('Access Key ID', 'accessKeyId', 'AKIAIOSFODNN7EXAMPLE')}
             {field('Secret Access Key', 'secretAccessKey', '••••••••••••••••••••', true)}
             {field('Session Token (opcional)', 'sessionToken', 'dejar vacío si no usas STS')}
+            {field('Ruta Session Manager Plugin (Opcional)', 'ssmPluginPath', 'Ej: C:\\...\\session-manager-plugin.exe o vacío para autodetectar')}
 
             <div className="flex items-center gap-3 pt-2">
                 <button

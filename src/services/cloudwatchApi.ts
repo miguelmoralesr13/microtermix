@@ -7,6 +7,7 @@ export interface CwCredentials {
     secretAccessKey: string;
     region: string;
     sessionToken?: string;
+    ssmPluginPath?: string;
 }
 
 export interface CwLogGroup {
@@ -73,6 +74,10 @@ function toRust(cfg: CwCredentials) {
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
+
+export function ssmCheckPlugin(pluginPath?: string): Promise<string> {
+    return invoke('ssm_check_plugin', { pluginPath: pluginPath ?? null });
+}
 
 export function cwGetLogGroups(cfg: CwCredentials, prefix?: string): Promise<CwLogGroup[]> {
     return invoke('cw_get_log_groups', { credentials: toRust(cfg), prefix: prefix ?? null });
