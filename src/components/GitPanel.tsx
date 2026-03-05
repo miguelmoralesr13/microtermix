@@ -1,116 +1,77 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Settings, Github, Gitlab, Server as Bitbucket } from 'lucide-react';
+import { Settings, Github, Gitlab, Server as Bitbucket, RefreshCw } from 'lucide-react';
 import { GitConfigModal } from './GitConfigModal';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
 import { GitDiffViewer } from './GitDiffViewer';
 import { GitConflictResolver } from './GitConflictResolver';
 import { GitConsole } from './GitConsole';
-import { GitSidebar, BranchFilter } from './GitSidebar';
+import { GitSidebar } from './GitSidebar';
 import { ResizableDivider } from './ResizableDivider';
 import { CommitDiffModal } from './CommitDiffModal';
 import { GithubPanel } from './GithubPanel';
 import { GitInitPanel } from './GitInitPanel';
+import { useGitStore, defaultRepoData } from '../stores/gitStore';
 
-const STORAGE_SIDEBAR = 'nexus-git-sidebar-width';
-const STORAGE_STAGING = 'nexus-git-staging-width';
-const STORAGE_GIT_TAB = 'nexus-git-active-tab';
-const STORAGE_GIT_SUBTAB = 'nexus-git-active-subtab';
 const MIN_PANEL = 150;
 const MAX_PANEL = 800;
-const DEFAULT_SIDEBAR = 230;
-const DEFAULT_STAGING = 280;
 
 export const GitPanel: React.FC = () => {
     const { state } = useWorkspace();
-    const [activeGitTab, setActiveGitTab] = useState<string | null>(() => {
-        const saved = localStorage.getItem(STORAGE_GIT_TAB);
-        if (saved && state.projects.some(p => p.path === saved)) return saved;
-        return state.projects.length > 0 ? state.projects[0].path as string : null;
-    });
-    const [activeSubTab, setActiveSubTab] = useState<'git' | 'remote'>(() => {
-        const saved = localStorage.getItem(STORAGE_GIT_SUBTAB);
-        return saved === 'remote' ? 'remote' : 'git';
-    });
 
-    const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR);
-    const [stagingWidth, setStagingWidth] = useState(DEFAULT_STAGING);
+    const ui = useGitStore(s => s.ui);
+    const setUi = useGitStore(s => s.setUi);
+    const fetchRepo = useGitStore(s => s.fetchRepo);
+    const fetchAll = useGitStore(s => s.fetchAll);
+    const fetchStatus = useGitStore(s => s.fetchStatus);
+
+    const invalidate = useGitStore(s => s.invalidate);
+    const ensureRepo = useGitStore(s => s.ensureRepo);
+    const repoData = useGitStore(s => s.repos[ui.activeTab ?? ''] ?? defaultRepoData());
+
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
-
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-    const [statusRefreshKey, setStatusRefreshKey] = useState(0);
-    const [branchRefreshKey, setBranchRefreshKey] = useState(0);
-    const [timelineRefreshKey, setTimelineRefreshKey] = useState(0);
-    const [branchFilter, setBranchFilter] = useState<BranchFilter>('all');
-    const [isGitRepo, setIsGitRepo] = useState<'not_initialized' | 'empty_repo' | 'initialized' | null>(null);
 
     useEffect(() => {
-        localStorage.setItem(STORAGE_SIDEBAR, String(sidebarWidth));
-    }, [sidebarWidth]);
-    useEffect(() => {
-        localStorage.setItem(STORAGE_STAGING, String(stagingWidth));
-    }, [stagingWidth]);
-    useEffect(() => {
-        if (activeGitTab) localStorage.setItem(STORAGE_GIT_TAB, activeGitTab);
-    }, [activeGitTab]);
-    useEffect(() => {
-        localStorage.setItem(STORAGE_GIT_SUBTAB, activeSubTab);
-    }, [activeSubTab]);
-
-    useEffect(() => {
-        if (!activeGitTab) {
-            setIsGitRepo(null);
-            return;
-        }
-        const checkRepo = async () => {
-            try {
-                const isInsideRes: any = await invoke('git_execute', { projectPath: activeGitTab, args: ['rev-parse', '--is-inside-work-tree'] });
-                if (isInsideRes.success && isInsideRes.stdout.trim() === 'true') {
-                    const headRes: any = await invoke('git_execute', { projectPath: activeGitTab, args: ['rev-parse', 'HEAD'] });
-                    if (!headRes.success) {
-                        setIsGitRepo('empty_repo');
-                    } else {
-                        setIsGitRepo('initialized');
-                    }
-                } else {
-                    setIsGitRepo('not_initialized');
-                }
-            } catch (e) {
-                setIsGitRepo('not_initialized');
+        if (!ui.activeTab) return;
+        ensureRepo(ui.activeTab);
+        fetchRepo(ui.activeTab).then(() => {
+            const repo = useGitStore.getState().repos[ui.activeTab!];
+            if (repo?.isGitRepo === 'initialized') {
+                fetchAll(ui.activeTab!, false);
             }
-        };
-        checkRepo();
-    }, [activeGitTab]);
+        });
+    }, [ui.activeTab]);
 
     const handleTabChange = (path: string) => {
-        setActiveGitTab(path);
-        setActiveDiffFile(null); // Clear diff when switching repos
+        setUi({ activeTab: path });
+        setActiveDiffFile(null);
         setSelectedCommit(null);
+        ensureRepo(path);
+        fetchRepo(path).then(() => {
+            const repo = useGitStore.getState().repos[path];
+            if (repo?.isGitRepo === 'initialized') {
+                fetchAll(path, false);
+            }
+        });
     };
 
     const handleStatusRefresh = () => {
-        setStatusRefreshKey(prev => prev + 1);
+        if (ui.activeTab) { invalidate(ui.activeTab, 'status'); fetchStatus(ui.activeTab, true); }
     };
-
-    const handleTimelineRefresh = () => {
-        setTimelineRefreshKey(prev => prev + 1);
-    };
-
     const handleBranchRefresh = () => {
-        setBranchRefreshKey(prev => prev + 1);
-        setStatusRefreshKey(prev => prev + 1); // Branch operations often affect working tree status
-        setTimelineRefreshKey(prev => prev + 1); // Branch operations affect the commit graph
+        if (ui.activeTab) { invalidate(ui.activeTab); fetchAll(ui.activeTab, true); }
     };
 
     const resizeSidebar = useCallback((delta: number) => {
-        setSidebarWidth(w => Math.min(MAX_PANEL, Math.max(MIN_PANEL, w + delta)));
-    }, []);
+        setUi({ sidebarWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, ui.sidebarWidth + delta)) });
+    }, [ui.sidebarWidth, setUi]);
+
     const resizeStaging = useCallback((delta: number) => {
-        setStagingWidth(w => Math.min(MAX_PANEL, Math.max(MIN_PANEL, w - delta)));
-    }, []);
+        setUi({ stagingWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, ui.stagingWidth - delta)) });
+    }, [ui.stagingWidth, setUi]);
 
     return (
         <div className="flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
@@ -124,7 +85,7 @@ export const GitPanel: React.FC = () => {
                             <button
                                 key={project.path as string}
                                 onClick={() => handleTabChange(project.path as string)}
-                                className={`px-4 py-2 text-xs font-bold transition-colors border-r border-slate-800 ${activeGitTab === project.path ? 'bg-slate-900 text-nexus-accent border-t-2 border-t-nexus-accent' : 'bg-slate-950 text-slate-500 hover:bg-slate-900 hover:text-slate-300 border-t-2 border-transparent'}`}
+                                className={`px-4 py-2 text-xs font-bold transition-colors border-r border-slate-800 ${ui.activeTab === project.path ? 'bg-slate-900 text-nexus-accent border-t-2 border-t-nexus-accent' : 'bg-slate-950 text-slate-500 hover:bg-slate-900 hover:text-slate-300 border-t-2 border-transparent'}`}
                             >
                                 {project.name}
                             </button>
@@ -132,18 +93,18 @@ export const GitPanel: React.FC = () => {
                     )}
                 </div>
                 <div className="flex items-center space-x-1 pl-4">
-                    {activeGitTab && (
+                    {ui.activeTab && (
                         <>
                             <div className="flex bg-slate-800 rounded p-0.5 space-x-0.5 mr-2">
                                 <button
-                                    onClick={() => setActiveSubTab('git')}
-                                    className={`px-3 py-1 text-xs font-bold rounded transition-colors ${activeSubTab === 'git' ? 'bg-slate-900 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
+                                    onClick={() => setUi({ activeSubTab: 'git' })}
+                                    className={`px-3 py-1 text-xs font-bold rounded transition-colors ${ui.activeSubTab === 'git' ? 'bg-slate-900 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
                                 >
                                     Git
                                 </button>
                                 <button
-                                    onClick={() => setActiveSubTab('remote')}
-                                    className={`px-3 py-1 text-xs font-bold rounded transition-colors flex items-center ${activeSubTab === 'remote' ? 'bg-slate-900 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
+                                    onClick={() => setUi({ activeSubTab: 'remote' })}
+                                    className={`px-3 py-1 text-xs font-bold rounded transition-colors flex items-center ${ui.activeSubTab === 'remote' ? 'bg-slate-900 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
                                 >
                                     {state.gitConfig.provider === 'gitlab' ? (
                                         <Gitlab size={12} className="mr-1" />
@@ -160,6 +121,11 @@ export const GitPanel: React.FC = () => {
                             </div>
                         </>
                     )}
+                    {repoData && Object.values(repoData.loading).some(Boolean) && (
+                        <span className="flex items-center gap-1 text-[10px] text-slate-500 animate-pulse mr-2">
+                            <RefreshCw size={10} className="animate-spin" /> Actualizando...
+                        </span>
+                    )}
                     <button
                         onClick={() => setIsConfigModalOpen(true)}
                         className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
@@ -172,25 +138,33 @@ export const GitPanel: React.FC = () => {
 
             {/* Main Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col relative">
-                {!activeGitTab ? (
+                {!ui.activeTab ? (
                     <div className="flex-1 flex items-center justify-center text-slate-500 p-8 text-center text-sm">
                         Select a repository tab to manage Git operations.
                     </div>
-                ) : (isGitRepo === 'not_initialized' || isGitRepo === 'empty_repo') ? (
+                ) : (repoData.isGitRepo === 'not_initialized' || repoData.isGitRepo === 'empty_repo') ? (
                     <GitInitPanel
-                        projectPath={activeGitTab}
-                        initialStep={isGitRepo === 'empty_repo' ? 2 : 1}
+                        projectPath={ui.activeTab}
+                        initialStep={repoData.isGitRepo === 'empty_repo' ? 2 : 1}
                         onInitialized={() => {
-                            setIsGitRepo('initialized');
+                            if (ui.activeTab) {
+                                invalidate(ui.activeTab);
+                                fetchRepo(ui.activeTab).then(() => {
+                                    const repo = useGitStore.getState().repos[ui.activeTab!];
+                                    if (repo?.isGitRepo === 'initialized') {
+                                        fetchAll(ui.activeTab!, true);
+                                    }
+                                });
+                            }
                             handleStatusRefresh();
                         }}
                     />
                 ) : (
                     <>
-                        {activeSubTab === 'remote' ? (
+                        {ui.activeSubTab === 'remote' ? (
                             <div className="flex-1 flex flex-col w-full min-h-0 bg-slate-900 overflow-hidden">
                                 {state.gitConfig.provider === 'github' ? (
-                                    <GithubPanel projectPath={activeGitTab} />
+                                    <GithubPanel projectPath={ui.activeTab} />
                                 ) : state.gitConfig.provider === 'none' ? (
                                     <div className="flex-1 flex items-center justify-center flex-col text-slate-500 p-8 text-center">
                                         <Settings size={32} className="mb-4 text-slate-600" />
@@ -206,13 +180,10 @@ export const GitPanel: React.FC = () => {
                         ) : (
                             <div className="flex-1 flex w-full min-h-0">
                                 {/* Left: Branches and Stash (resizable) */}
-                                <div style={{ width: sidebarWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
+                                <div style={{ width: ui.sidebarWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
                                     <GitSidebar
-                                        projectPath={activeGitTab}
-                                        refreshKey={branchRefreshKey}
+                                        projectPath={ui.activeTab}
                                         onRefreshRequest={handleBranchRefresh}
-                                        branchFilter={branchFilter}
-                                        onBranchFilterChange={setBranchFilter}
                                     />
                                 </div>
 
@@ -223,14 +194,14 @@ export const GitPanel: React.FC = () => {
                                     {activeDiffFile ? (
                                         activeDiffFile.mode === 'conflicted' ? (
                                             <GitConflictResolver
-                                                projectPath={activeGitTab}
+                                                projectPath={ui.activeTab}
                                                 file={activeDiffFile.file}
                                                 onClose={() => setActiveDiffFile(null)}
                                                 onRefreshRequest={handleStatusRefresh}
                                             />
                                         ) : (
                                             <GitDiffViewer
-                                                projectPath={activeGitTab}
+                                                projectPath={ui.activeTab}
                                                 file={activeDiffFile.file}
                                                 mode={activeDiffFile.mode}
                                                 targetLine={activeDiffFile.line}
@@ -240,8 +211,7 @@ export const GitPanel: React.FC = () => {
                                         )
                                     ) : (
                                         <GitTimeline
-                                            projectPath={activeGitTab}
-                                            refreshKey={timelineRefreshKey}
+                                            projectPath={ui.activeTab}
                                             onCommitSelect={(hash, message, author, date) =>
                                                 setSelectedCommit({ hash, message, author, date })
                                             }
@@ -252,12 +222,9 @@ export const GitPanel: React.FC = () => {
                                 <ResizableDivider direction="horizontal" onResize={resizeStaging} className="bg-slate-900" />
 
                                 {/* Right: Staging & Commit (resizable) */}
-                                <div style={{ width: stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
+                                <div style={{ width: ui.stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
                                     <GitStagingPanel
-                                        projectPath={activeGitTab}
-                                        refreshKey={statusRefreshKey}
-                                        onStatusRefresh={handleStatusRefresh}
-                                        onTimelineRefresh={handleTimelineRefresh}
+                                        projectPath={ui.activeTab}
                                         onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode, line })}
                                     />
                                 </div>
@@ -276,9 +243,9 @@ export const GitPanel: React.FC = () => {
             )}
 
             {/* Commit Diff Modal */}
-            {selectedCommit && activeGitTab && (
+            {selectedCommit && ui.activeTab && (
                 <CommitDiffModal
-                    projectPath={activeGitTab}
+                    projectPath={ui.activeTab}
                     commitHash={selectedCommit.hash}
                     commitMessage={selectedCommit.message}
                     commitAuthor={selectedCommit.author}

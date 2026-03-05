@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useGitStore, defaultRepoData, RawCommit } from '../stores/gitStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -20,16 +21,6 @@ const LANE_COLORS = [
 const laneColor = (col: number) => LANE_COLORS[Math.min(col, LANE_COLORS.length - 1)];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface RawCommit {
-    hash: string;
-    shortHash: string;
-    parents: string[];
-    author: string;
-    date: string;
-    message: string;
-    refs: string;
-}
 
 interface GraphNode extends RawCommit {
     col: number;
@@ -50,7 +41,6 @@ interface ParsedRef {
 
 interface GitTimelineProps {
     projectPath: string;
-    refreshKey?: number;
     onCommitSelect?: (hash: string, message: string, author: string, date: string) => void;
 }
 
@@ -156,24 +146,27 @@ function computeGraph(commits: RawCommit[]): { nodes: GraphNode[], edges: GraphE
 
 type Filter = 'all' | 'mine' | 'merges' | 'tags';
 
-export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKey, onCommitSelect }) => {
+export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitSelect }) => {
     const { state } = useWorkspace();
-    const [rawCommits, setRawCommits] = useState<RawCommit[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const repo = useGitStore(s => s.repos[projectPath] ?? defaultRepoData());
+    const fetchTimeline = useGitStore(s => s.fetchTimeline);
+    const invalidate = useGitStore(s => s.invalidate);
+
+    const { commits: rawCommits, localHashes: localHashesArr } = repo.timeline;
+    const loading = repo.loading.timeline;
+    const error = repo.errors?.timeline || null;
+    const localHashes = useMemo(() => new Set(localHashesArr), [localHashesArr]);
+
     const [selectedHash, setSelectedHash] = useState<string | null>(null);
     const [searchText, setSearchText] = useState('');
     const [filter, setFilter] = useState<Filter>('all');
     const [currentUser, setCurrentUser] = useState('');
-    // Local-only (unpushed) commit tracking
-    const [localHashes, setLocalHashes] = useState<Set<string>>(new Set());
-    // Inline edit state
     const [editingHash, setEditingHash] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [editSaving, setEditSaving] = useState(false);
-    // Delete confirmation state
     const [deletingHash, setDeletingHash] = useState<string | null>(null);
     const [deleteWorking, setDeleteWorking] = useState(false);
+    const [commitStatuses, setCommitStatuses] = useState<Record<string, 'pending' | 'success' | 'failure' | 'error' | null>>({});
 
     // Load git user
     useEffect(() => {
@@ -183,62 +176,14 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
         }).catch(() => { });
     }, [projectPath]);
 
-    const [commitStatuses, setCommitStatuses] = useState<Record<string, 'pending' | 'success' | 'failure' | 'error' | null>>({});
-
-    const loadTimeline = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        let parsed: RawCommit[] = [];
-        try {
-            const result: any = await invoke('git_execute', {
-                projectPath,
-                args: ['log', 'HEAD', '--date-order',
-                    '--pretty=format:%H|%p|%an|%ar|%s|%D', '-n', '100']
-            });
-            if (!result?.success) {
-                setError(result?.stderr || 'Failed to load history.');
-            } else {
-                parsed = result.stdout
-                    .split('\n').filter((l: string) => l.trim())
-                    .map((line: string) => {
-                        const parts = line.split('|');
-                        const hash = parts[0] ?? '';
-                        const parentsRaw = parts[1] ?? '';
-                        const author = parts[2] ?? '';
-                        const date = parts[3] ?? '';
-                        const message = parts[4] ?? '';
-                        const refs = parts.slice(5).join('|');
-                        const parents = parentsRaw.trim().split(' ').filter(Boolean).map(p => p.slice(0, 7));
-                        return { hash, shortHash: hash.slice(0, 7), parents, author, date, message, refs };
-                    });
-                setRawCommits(parsed);
-            }
-        } catch (e: any) {
-            setError(e?.toString() || 'Error');
-        } finally {
-            setLoading(false);
-        }
-
-        // Load unpushed commits
-        try {
-            const res: any = await invoke('git_execute', { projectPath, args: ['log', '@{u}..HEAD', '--pretty=format:%H'] });
-            if (res?.success && res.stdout?.trim()) {
-                const hashes = new Set<string>(res.stdout.trim().split('\n').filter(Boolean));
-                setLocalHashes(hashes);
-            } else {
-                setLocalHashes(new Set());
-            }
-        } catch {
-            setLocalHashes(new Set());
-        }
-
-        // Fetch GitHub CI Statuses — deferred so the timeline renders first before network calls start
-        if (parsed.length > 0) {
+    // Fetch GitHub CI Statuses — deferred so the timeline renders first before network calls start
+    useEffect(() => {
+        if (rawCommits.length > 0) {
             const token = state.gitConfig.token;
             if (token && state.gitConfig.provider === 'github') {
                 // Only check top 5 commits to reduce concurrent fetch calls
-                const topHashes = parsed.slice(0, 5).map(c => c.hash);
-                setTimeout(() => {
+                const topHashes = rawCommits.slice(0, 5).map(c => c.hash);
+                const timer = setTimeout(() => {
                     import('../services/githubApi').then(({ fetchGithubCommitStatus }) => {
                         Promise.allSettled(
                             topHashes.map(h => fetchGithubCommitStatus(projectPath, token, h).then(res => ({ hash: h, state: res?.state || null })))
@@ -255,12 +200,10 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
                         });
                     });
                 }, 1500);
+                return () => clearTimeout(timer);
             }
         }
-
-    }, [projectPath, state.gitConfig.token, state.gitConfig.provider]);
-
-    useEffect(() => { if (projectPath) loadTimeline(); }, [loadTimeline, refreshKey]);
+    }, [rawCommits, projectPath, state.gitConfig.token, state.gitConfig.provider]);
 
     const { nodes, edges } = useMemo(() => computeGraph(rawCommits), [rawCommits]);
     const totalCols = useMemo(() => Math.min(Math.max(...nodes.map(n => n.col), 0) + 1, MAX_COLS), [nodes]);
@@ -280,14 +223,15 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
                 alert('Error al editar el mensaje:\n' + (res?.stderr ?? ''));
             } else {
                 setEditingHash(null);
-                await loadTimeline();
+                invalidate(projectPath, 'timeline');
+                await fetchTimeline(projectPath, true);
             }
         } catch (e: any) {
             alert('Error al editar: ' + (e?.toString() ?? ''));
         } finally {
             setEditSaving(false);
         }
-    }, [editValue, projectPath, loadTimeline]);
+    }, [editValue, projectPath, fetchTimeline, invalidate]);
 
 
     // ── Delete commit ──────────────────────────────────────────────────────────
@@ -311,13 +255,14 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
             }
             setDeletingHash(null);
             setSelectedHash(null);
-            await loadTimeline();
+            invalidate(projectPath, 'timeline');
+            await fetchTimeline(projectPath, true);
         } catch (e: any) {
             alert('Error al eliminar: ' + (e?.toString() ?? ''));
         } finally {
             setDeleteWorking(false);
         }
-    }, [nodes, projectPath, loadTimeline]);
+    }, [nodes, projectPath, fetchTimeline, invalidate]);
 
     const searchLower = searchText.trim().toLowerCase();
 
@@ -349,7 +294,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
     if (error) return (
         <div className="flex-1 flex flex-col items-center justify-center text-nexus-danger gap-3 p-8 text-sm text-center">
             {error}
-            <button onClick={loadTimeline} className="text-xs px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700">Reintentar</button>
+            <button onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="text-xs px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700">Reintentar</button>
         </div>
     );
 
@@ -381,7 +326,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, refreshKe
                             {f.icon}{f.label}
                         </button>
                     ))}
-                    <button onClick={loadTimeline} className="ml-auto p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors" title="Refrescar">
+                    <button onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="ml-auto p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors" title="Refrescar">
                         <RefreshCw size={12} />
                     </button>
                 </div>
