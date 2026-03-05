@@ -744,7 +744,7 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
             {field('Access Key ID', 'accessKeyId', 'AKIAIOSFODNN7EXAMPLE')}
             {field('Secret Access Key', 'secretAccessKey', '••••••••••••••••••••', true)}
             {field('Session Token (opcional)', 'sessionToken', 'dejar vacío si no usas STS')}
-            {field('Ruta Session Manager Plugin (Opcional)', 'ssmPluginPath', 'Ej: C:\\...\\session-manager-plugin.exe o vacío para autodetectar')}
+            {field('Ruta Session Manager Plugin (Opcional)', 'ssmPluginPath', 'Vacío = autodetectar. Ej Win: C:\\...\\session-manager-plugin.exe  Linux: /usr/local/sessionmanagerplugin/bin/session-manager-plugin')}
 
             <div className="flex items-center gap-3 pt-2">
                 <button
