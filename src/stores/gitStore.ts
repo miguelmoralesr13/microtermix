@@ -75,7 +75,7 @@ interface GitStore {
 
     fetchRepo: (path: string) => Promise<void>;
     fetchBranches: (path: string, force?: boolean) => Promise<void>;
-    fetchStatus: (path: string, force?: boolean) => Promise<void>;
+    fetchStatus: (path: string, force?: boolean, onlyStatusStr?: boolean) => Promise<void>;
     fetchTimeline: (path: string, force?: boolean) => Promise<void>;
     fetchAll: (path: string, force?: boolean) => Promise<void>;
     invalidate: (path: string, slice?: 'branches' | 'status' | 'timeline') => void;
@@ -254,17 +254,24 @@ export const useGitStore = create<GitStore>()(
                     }
                 },
 
-                fetchStatus: async (path, force = false) => {
+                fetchStatus: async (path, force = false, onlyStatusStr = false) => {
                     const repo = get().repos[path] ?? defaultRepoData();
                     if (!force && !isStale(repo, 'status')) return;
 
                     patchRepo(set, path, r => ({ loading: { ...r.loading, status: true } }));
                     try {
-                        const [statusRes, branchRes, mergeRes]: any[] = await Promise.all([
-                            invoke('git_execute', { projectPath: path, args: ['status', '-s', '-u'] }),
-                            invoke('git_execute', { projectPath: path, args: ['branch', '--show-current'] }),
-                            invoke('git_execute', { projectPath: path, args: ['rev-parse', '-q', '--verify', 'MERGE_HEAD'] }),
-                        ]);
+                        let statusRes: any, branchRes: any = { success: true, stdout: repo.status.currentBranch }, mergeRes: any = { success: repo.status.isMergeInProgress };
+
+                        if (onlyStatusStr) {
+                            // Fast path: only fetch git status to reduce latency on rapid UI toggles
+                            statusRes = await invoke('git_execute', { projectPath: path, args: ['status', '-s', '-u'] });
+                        } else {
+                            [statusRes, branchRes, mergeRes] = await Promise.all([
+                                invoke('git_execute', { projectPath: path, args: ['status', '-s', '-u'] }),
+                                invoke('git_execute', { projectPath: path, args: ['branch', '--show-current'] }),
+                                invoke('git_execute', { projectPath: path, args: ['rev-parse', '-q', '--verify', 'MERGE_HEAD'] }),
+                            ]);
+                        }
 
                         if (!statusRes.success) {
                             patchRepo(set, path, r => ({
@@ -274,7 +281,7 @@ export const useGitStore = create<GitStore>()(
                         }
 
                         const files = parseStatusLines(statusRes.stdout);
-                        const currentBranch = branchRes.success ? branchRes.stdout.trim() : '';
+                        const currentBranch = branchRes.success ? (branchRes.stdout as string).trim() : '';
                         const isMergeInProgress = mergeRes.success;
 
                         patchRepo(set, path, r => ({

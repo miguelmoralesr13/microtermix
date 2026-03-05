@@ -248,7 +248,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
             }
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
+            fetchStatus(projectPath, false, true);
         } finally {
         }
     }, [projectPath, fetchStatus, invalidate]);
@@ -261,7 +261,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
             }
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
+            fetchStatus(projectPath, false, true);
         } finally {
         }
     }, [projectPath, fetchStatus, invalidate]);
@@ -276,7 +276,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 return next;
             });
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
+            fetchStatus(projectPath, false, true);
         } finally {
         }
     }, [projectPath, fetchStatus, invalidate]);
@@ -299,7 +299,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             }
             setSelectedForRollback(new Set());
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
+            fetchStatus(projectPath, false, true);
         } finally {
         }
     }, [selectedForRollback, projectPath, fetchStatus, invalidate]);
@@ -315,9 +315,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             } else {
                 setCommitMessage('');
                 invalidate(projectPath, 'status');
-                fetchStatus(projectPath, true);
+                fetchStatus(projectPath, false);
                 invalidate(projectPath, 'timeline');
-                fetchTimeline(projectPath, true);
+                fetchTimeline(projectPath, false);
             }
         } finally {
             setIsCommitting(false);
@@ -332,9 +332,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 setError(res.stderr || 'Failed to abort merge');
             }
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
+            fetchStatus(projectPath, false);
             invalidate(projectPath, 'timeline');
-            fetchTimeline(projectPath, true);
+            fetchTimeline(projectPath, false);
         } finally {
         }
     }, [projectPath, invalidate, fetchStatus, fetchTimeline]);

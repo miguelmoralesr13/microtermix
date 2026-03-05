@@ -29,11 +29,27 @@ export const GitConsole: React.FC = () => {
 
     useEffect(() => {
         const unlisten = listen<GitLogPayload>('git-log', (event) => {
+            const stdout = event.payload.stdout || '';
+            const stderr = event.payload.stderr || '';
+
+            const MAX_LEN = 1000;
+            const truncatedStdout = stdout.length > MAX_LEN
+                ? stdout.substring(0, MAX_LEN) + `\n... [Recortado: ${stdout.length - MAX_LEN} caracteres adicionales]`
+                : stdout;
+
+            const truncatedStderr = stderr.length > MAX_LEN
+                ? stderr.substring(0, MAX_LEN) + `\n... [Recortado: ${stderr.length - MAX_LEN} caracteres adicionales]`
+                : stderr;
+
             setLogs(prev => [...prev, {
                 id: Date.now() + Math.random(),
                 timestamp: new Date(),
-                payload: event.payload
-            }].slice(-500));
+                payload: {
+                    ...event.payload,
+                    stdout: truncatedStdout,
+                    stderr: truncatedStderr
+                }
+            }].slice(-100)); // Mantener solo los últimos 100 logs para evitar lag
         });
 
         return () => {
