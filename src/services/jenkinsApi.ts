@@ -111,6 +111,30 @@ export interface JenkinsProgressiveLog {
     moreData: boolean;
 }
 
+// ── API Request Logger ────────────────────────────────────────────────────────
+
+export interface JenkinsApiLogEntry {
+    id: number;
+    time: string;
+    method: string;
+    path: string;
+    url: string;
+    status?: number;
+    durationMs?: number;
+    ok: boolean;
+    error?: string;
+}
+
+type JenkinsLogListener = (e: JenkinsApiLogEntry) => void;
+let _listeners: JenkinsLogListener[] = [];
+let _seq = 0;
+
+export const jenkinsApiLog = {
+    on(fn: JenkinsLogListener)  { _listeners.push(fn); },
+    off(fn: JenkinsLogListener) { _listeners = _listeners.filter(l => l !== fn); },
+    emit(e: JenkinsApiLogEntry) { _listeners.forEach(l => l(e)); },
+};
+
 // ── localStorage ──────────────────────────────────────────────────────────────
 
 const CFG_KEY = 'nexus-jenkins-cfg';
@@ -139,16 +163,32 @@ function baseUrl(cfg: JenkinsConfig): string {
 
 async function jGet<T>(cfg: JenkinsConfig, path: string): Promise<T> {
     const url = `${baseUrl(cfg)}${path}`;
-    const res = await tauriFetch(url, {
-        method: 'GET',
-        headers: { Authorization: authHeader(cfg), 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) throw new Error(`Jenkins ${res.status}: ${path}`);
+    const id = ++_seq;
+    const time = new Date().toLocaleTimeString('en-GB');
+    const t0 = Date.now();
+    let res: Awaited<ReturnType<typeof tauriFetch>>;
+    try {
+        res = await tauriFetch(url, {
+            method: 'GET',
+            headers: { Authorization: authHeader(cfg), 'Content-Type': 'application/json' },
+        });
+    } catch (e: any) {
+        jenkinsApiLog.emit({ id, time, method: 'GET', path, url, durationMs: Date.now() - t0, ok: false, error: e?.message });
+        throw e;
+    }
+    const durationMs = Date.now() - t0;
+    if (!res.ok) {
+        jenkinsApiLog.emit({ id, time, method: 'GET', path, url, status: res.status, durationMs, ok: false, error: `HTTP ${res.status}` });
+        throw new Error(`Jenkins ${res.status}: ${path}`);
+    }
+    jenkinsApiLog.emit({ id, time, method: 'GET', path, url, status: res.status, durationMs, ok: true });
     return res.json() as Promise<T>;
 }
 
 async function jPost(cfg: JenkinsConfig, path: string): Promise<void> {
     const url = `${baseUrl(cfg)}${path}`;
+    const id = ++_seq;
+    const time = new Date().toLocaleTimeString('en-GB');
     const crumbRes = await tauriFetch(`${baseUrl(cfg)}/crumbIssuer/api/json`, {
         method: 'GET',
         headers: { Authorization: authHeader(cfg) },
@@ -158,10 +198,20 @@ async function jPost(cfg: JenkinsConfig, path: string): Promise<void> {
         const crumb = await crumbRes.json() as { crumbRequestField: string; crumb: string };
         headers[crumb.crumbRequestField] = crumb.crumb;
     }
-    const res = await tauriFetch(url, { method: 'POST', headers });
+    const t0 = Date.now();
+    let res: Awaited<ReturnType<typeof tauriFetch>>;
+    try {
+        res = await tauriFetch(url, { method: 'POST', headers });
+    } catch (e: any) {
+        jenkinsApiLog.emit({ id, time, method: 'POST', path, url, durationMs: Date.now() - t0, ok: false, error: e?.message });
+        throw e;
+    }
+    const durationMs = Date.now() - t0;
     if (!res.ok && res.status !== 201 && res.status !== 302) {
+        jenkinsApiLog.emit({ id, time, method: 'POST', path, url, status: res.status, durationMs, ok: false, error: `HTTP ${res.status}` });
         throw new Error(`Jenkins POST ${res.status}: ${path}`);
     }
+    jenkinsApiLog.emit({ id, time, method: 'POST', path, url, status: res.status, durationMs, ok: true });
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
     JenkinsConfig, JenkinsJobSummary, JenkinsBuildSummary, JenkinsFavorite,
+    JenkinsApiLogEntry, jenkinsApiLog,
     PipelineRun, PipelineStage, StageStatus,
     loadJenkinsConfig, saveJenkinsConfig,
     loadFavorites, saveFavorites, jobToFavorite, normalizeUrl,
@@ -525,6 +526,7 @@ function JobRow({
     favorites,
     onToggleFavorite,
     search,
+    alwaysPoll = false,
 }: {
     job: JenkinsJobSummary;
     cfg: JenkinsConfig;
@@ -534,6 +536,7 @@ function JobRow({
     favorites: Map<string, JenkinsFavorite>;
     onToggleFavorite: (job: JenkinsJobSummary) => void;
     search: string;
+    alwaysPoll?: boolean;
 }) {
     // Auto-expand when a search query matches a child but not the top name directly
     const childMatchesSearch =
@@ -563,19 +566,19 @@ function JobRow({
     const lb = liveJob.lastBuild;
     const jobPath = jobApiPath(liveJob.url, cfg.baseUrl);
 
-    // Per-job polling: only runs when this row is expanded.
-    // Rate: 8s if building, 20s if idle. Stops when collapsed.
+    // Per-job polling: runs when expanded OR alwaysPoll (favorites).
+    // Rate: 8s if building, 20s if idle. Stops when collapsed (unless alwaysPoll).
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     useEffect(() => {
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-        if (!expanded || folder) return; // folders have no status to poll
+        if ((!expanded && !alwaysPoll) || folder) return;
         const rate = isBuilding(liveJob) ? 8_000 : 20_000;
         pollIntervalRef.current = setInterval(async () => {
             const fresh = await jenkinsGetJobStatus(cfg, jobPath);
             if (fresh) setLiveJob(fresh);
         }, rate);
         return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
-    }, [expanded, folder, isBuilding(liveJob), jobPath, cfg]);
+    }, [expanded, alwaysPoll, folder, isBuilding(liveJob), jobPath, cfg]);
 
     const loadContent = async () => {
         setLoading(true);
@@ -999,7 +1002,7 @@ function JobsTab({
                             </div>
                         )}
                         {filteredFavs.map(job => (
-                            <JobRow key={job.url} job={job} {...jobRowProps} />
+                            <JobRow key={job.url} job={job} {...jobRowProps} alwaysPoll />
                         ))}
                     </>
                 )}
@@ -1028,7 +1031,7 @@ function JobsTab({
                                     <div className="flex-1 h-px bg-slate-800" />
                                 </div>
                                 {favList.map(job => (
-                                    <JobRow key={job.url} job={job} {...jobRowProps} />
+                                    <JobRow key={job.url} job={job} {...jobRowProps} alwaysPoll />
                                 ))}
                                 <div className="flex items-center gap-2 mb-2 mt-3">
                                     <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">All Jobs</span>
@@ -1059,6 +1062,17 @@ export const JenkinsPanel: React.FC = () => {
     const [tab, setTab] = useState<Tab>('jobs');
     const [cfg, setCfg] = useState<JenkinsConfig>(() => loadJenkinsConfig());
     const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
+
+    // ── API Console ───────────────────────────────────────────────────────────
+    const [apiLog, setApiLog] = useState<JenkinsApiLogEntry[]>([]);
+    const [consoleOpen, setConsoleOpen] = useState(false);
+    const [expandedEntry, setExpandedEntry] = useState<number | null>(null);
+
+    useEffect(() => {
+        const handler = (e: JenkinsApiLogEntry) => setApiLog(prev => [e, ...prev].slice(0, 100));
+        jenkinsApiLog.on(handler);
+        return () => jenkinsApiLog.off(handler);
+    }, []);
 
     const handleConfigSaved = () => {
         setCfg(loadJenkinsConfig());
@@ -1127,6 +1141,66 @@ export const JenkinsPanel: React.FC = () => {
                 {tab === 'settings' && (
                     <div className="flex-1 flex flex-col overflow-hidden">
                         <SettingsTab onSaved={handleConfigSaved} />
+                    </div>
+                )}
+            </div>
+
+            {/* ── API Console ──────────────────────────────────────────────── */}
+            <div className="shrink-0 border-t border-slate-800 bg-slate-950">
+                <div
+                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-900/40 select-none"
+                    onClick={() => setConsoleOpen(v => !v)}
+                >
+                    <ChevronRight size={10} className={`text-slate-600 transition-transform ${consoleOpen ? 'rotate-90' : ''}`} />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">API Log</span>
+                    <span className="text-[9px] text-slate-700 font-mono">{apiLog.length} req</span>
+                    {apiLog.some(e => !e.ok) && (
+                        <span className="text-[9px] text-red-500 font-mono">{apiLog.filter(e => !e.ok).length} err</span>
+                    )}
+                    {apiLog.length > 0 && (
+                        <button
+                            onClick={ev => { ev.stopPropagation(); setApiLog([]); setExpandedEntry(null); }}
+                            className="ml-auto text-[10px] text-slate-600 hover:text-slate-400"
+                        >Clear</button>
+                    )}
+                </div>
+
+                {consoleOpen && (
+                    <div className="h-40 overflow-y-auto">
+                        {apiLog.length === 0 ? (
+                            <p className="text-[10px] text-slate-700 py-3 px-3 font-mono">Waiting for requests…</p>
+                        ) : apiLog.map(entry => (
+                            <div key={entry.id} className="border-b border-slate-900">
+                                <div
+                                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-900/60 group"
+                                    onClick={() => setExpandedEntry(expandedEntry === entry.id ? null : entry.id)}
+                                >
+                                    <span className={`shrink-0 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                                        entry.method === 'GET'  ? 'bg-sky-500/20 text-sky-400' :
+                                        entry.method === 'POST' ? 'bg-violet-500/20 text-violet-400' :
+                                                                  'bg-amber-500/20 text-amber-400'
+                                    }`}>{entry.method}</span>
+                                    {entry.status !== undefined && (
+                                        <span className={`shrink-0 font-mono text-[9px] font-bold ${entry.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {entry.status}
+                                        </span>
+                                    )}
+                                    <span className="flex-1 font-mono text-[10px] text-slate-400 truncate">{entry.path}</span>
+                                    {entry.durationMs !== undefined && (
+                                        <span className="shrink-0 text-[9px] text-slate-600 font-mono">{entry.durationMs}ms</span>
+                                    )}
+                                    <span className="shrink-0 text-[9px] text-slate-700 font-mono">{entry.time}</span>
+                                </div>
+                                {expandedEntry === entry.id && (
+                                    <div className="bg-slate-950 px-3 pb-2">
+                                        {entry.error && (
+                                            <p className="text-[10px] text-red-400 font-mono bg-red-500/5 p-1.5 rounded mt-1">{entry.error}</p>
+                                        )}
+                                        <p className="text-[9px] text-slate-600 font-mono mt-1 break-all">{entry.url}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>

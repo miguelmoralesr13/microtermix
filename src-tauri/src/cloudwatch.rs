@@ -118,12 +118,12 @@ where
 #[tauri::command]
 pub async fn cw_get_log_groups(
     credentials: CwCredentials,
-    prefix: Option<String>,
+    pattern: Option<String>,
 ) -> Result<Vec<LogGroup>, String> {
     let client = logs_client(&credentials).await;
     let mut req = client.describe_log_groups().limit(50);
-    if let Some(p) = prefix.filter(|s| !s.is_empty()) {
-        req = req.log_group_name_prefix(p);
+    if let Some(p) = pattern.filter(|s| !s.is_empty()) {
+        req = req.log_group_name_pattern(p);
     }
     let resp = req.send().await.map_err(format_logs_err)?;
     Ok(resp.log_groups().iter()

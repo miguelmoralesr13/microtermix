@@ -40,7 +40,7 @@ pub use crate::cloudwatch::{
 pub use crate::http_client::make_http_request;
 pub use crate::ec2::{
     ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
-    spawn_interactive, spawn_pty_process, write_stdin_line,
+    spawn_interactive, spawn_pty_process, spawn_pty_shell, resize_pty, write_stdin_line,
 };
 pub use crate::ssm::{ssm_start_session, ssm_check_plugin};
 pub use crate::crypto::{
@@ -233,6 +233,8 @@ pub fn run() {
             ec2_reboot_instance,
             ec2_open_terminal,
             spawn_interactive,
+            spawn_pty_shell,
+            resize_pty,
             write_stdin_line,
             ssm_start_session,
             ssm_check_plugin,

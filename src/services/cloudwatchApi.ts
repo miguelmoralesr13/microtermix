@@ -79,8 +79,8 @@ export function ssmCheckPlugin(pluginPath?: string): Promise<string> {
     return invoke('ssm_check_plugin', { pluginPath: pluginPath ?? null });
 }
 
-export function cwGetLogGroups(cfg: CwCredentials, prefix?: string): Promise<CwLogGroup[]> {
-    return invoke('cw_get_log_groups', { credentials: toRust(cfg), prefix: prefix ?? null });
+export function cwGetLogGroups(cfg: CwCredentials, pattern?: string): Promise<CwLogGroup[]> {
+    return invoke('cw_get_log_groups', { credentials: toRust(cfg), pattern: pattern ?? null });
 }
 
 export function cwGetLogStreams(cfg: CwCredentials, logGroup: string, prefix?: string): Promise<CwLogStream[]> {

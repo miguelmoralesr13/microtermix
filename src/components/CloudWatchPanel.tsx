@@ -440,7 +440,7 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
         setConnectingId({ id: inst.instance_id, type: 'ssh' });
         const serviceId = `ec2::ssh::${inst.instance_id}`;
         try {
-            await invoke('spawn_interactive', { serviceId, command: sshCmd, envs: null });
+            await invoke('spawn_pty_shell', { serviceId, command: sshCmd, envs: null });
             setSshSession({ serviceId, inst, sshCmd, connected: true });
         } catch (e) {
             alert(`No se pudo iniciar SSH: ${e}`);
@@ -954,7 +954,6 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
     });
 
     const filteredStreams = allStreams
-        .filter(s => streamFavorites.includes(s.name) || streamSearch.trim() === '' || s.name.toLowerCase().includes(streamSearch.toLowerCase()))
         .sort((a, b) => {
             const aFav = streamFavorites.includes(a.name);
             const bFav = streamFavorites.includes(b.name);
@@ -1004,7 +1003,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                         <button
                             onClick={() => fetchGroups(groupSearch.trim())}
                             disabled={loadingGroups}
-                            title="Buscar en AWS CloudWatch"
+                            title="Buscar grupos en AWS CloudWatch"
                             className="px-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded border border-slate-700 transition-colors"
                         >
                             <RefreshCw size={12} className={loadingGroups ? 'animate-spin' : ''} />
@@ -1053,7 +1052,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                                         value={streamSearch}
                                         onChange={e => setStreamSearch(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && fetchStreams(selectedGroup, streamSearch.trim())}
-                                        placeholder="Filtrar o buscar (Enter)…"
+                                        placeholder="Buscar streams (Enter)…"
                                         className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
                                     />
                                     {streamSearch && (
@@ -1068,7 +1067,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                                 <button
                                     onClick={() => fetchStreams(selectedGroup, streamSearch.trim())}
                                     disabled={loadingStreams}
-                                    title="Profundizar búsqueda en AWS"
+                                    title="Buscar streams en AWS"
                                     className="px-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded border border-slate-700 transition-colors"
                                 >
                                     <RefreshCw size={12} className={loadingStreams ? 'animate-spin' : ''} />

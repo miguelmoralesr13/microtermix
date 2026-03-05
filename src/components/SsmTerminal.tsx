@@ -48,9 +48,14 @@ export const SsmTerminal: React.FC<SsmTerminalProps> = ({ serviceId, onClose }) 
         termRef.current = term;
         fitRef.current = fit;
 
+        const syncSize = () => {
+            fit.fit();
+            invoke('resize_pty', { serviceId, rows: term.rows, cols: term.cols }).catch(() => {});
+        };
+
         // Use requestAnimationFrame so layout is committed before fit+focus
         requestAnimationFrame(() => {
-            fit.fit();
+            syncSize();
             term.focus();
             term.writeln('\x1b[32m[Sesión SSM lista — escribe tu primer comando]\x1b[0m\r');
         });
@@ -76,8 +81,8 @@ export const SsmTerminal: React.FC<SsmTerminalProps> = ({ serviceId, onClose }) 
             return true;
         });
 
-        // Resize observer — keep terminal fitted to its container
-        const resizeObs = new ResizeObserver(() => fitRef.current?.fit());
+        // Resize observer — refit and sync PTY size on every container resize
+        const resizeObs = new ResizeObserver(() => syncSize());
         resizeObs.observe(containerRef.current!);
 
         // Subscribe to raw output from the process

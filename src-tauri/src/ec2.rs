@@ -541,8 +541,9 @@ pub async fn spawn_pty_process(
     use tauri::Emitter;
     use tokio::sync::mpsc;
 
-    let procs_arc  = state.processes.clone();
-    let stdins_arc = state.stdin_senders.clone();
+    let procs_arc    = state.processes.clone();
+    let stdins_arc   = state.stdin_senders.clone();
+    let resizers_arc = state.pty_resizers.clone();
 
     // Kill any existing session with the same id
     {
@@ -550,11 +551,12 @@ pub async fn spawn_pty_process(
         if let Some(notify) = procs.remove(&service_id) { notify.notify_waiters(); }
     }
     stdins_arc.lock().await.remove(&service_id);
+    resizers_arc.lock().await.remove(&service_id);
 
-    // Open PTY
+    // Open PTY with a sane default — will be resized immediately by the frontend
     let pty_system = native_pty_system();
     let pair = pty_system
-        .openpty(PtySize { rows: 24, cols: 220, pixel_width: 0, pixel_height: 0 })
+        .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
         .map_err(|e| format!("PTY open failed: {e}"))?;
 
     // Build the command (portable-pty uses its own CommandBuilder)
@@ -603,6 +605,28 @@ pub async fn spawn_pty_process(
         }
     });
 
+    // ── PTY resize handler ────────────────────────────────────────────────────
+    // Frontend sends (rows, cols) via resize_pty; we forward to the master.
+    let (resize_tx, mut resize_rx) = mpsc::unbounded_channel::<(u16, u16)>();
+    resizers_arc.lock().await.insert(service_id.clone(), resize_tx);
+
+    let pty_reader = pair.master.try_clone_reader()
+        .map_err(|e| format!("PTY reader error: {e}"))?;
+
+    // Move master into a blocking thread that handles resize commands
+    let master = pair.master;
+    let (resize_sync_tx, resize_sync_rx) = std::sync::mpsc::channel::<(u16, u16)>();
+    tokio::spawn(async move {
+        while let Some(size) = resize_rx.recv().await {
+            if resize_sync_tx.send(size).is_err() { break; }
+        }
+    });
+    std::thread::spawn(move || {
+        for (rows, cols) in resize_sync_rx {
+            let _ = master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 });
+        }
+    });
+
     // ── stdout reader (PTY master → pty-output events) ────────────────────────
     let notify = std::sync::Arc::new(tokio::sync::Notify::new());
     procs_arc.lock().await.insert(service_id.clone(), notify.clone());
@@ -615,9 +639,6 @@ pub async fn spawn_pty_process(
         let n     = notify.clone();
 
         // PTY read is blocking — run in a dedicated OS thread
-        let pty_reader = pair.master.try_clone_reader()
-            .map_err(|e| format!("PTY reader error: {e}"))?;
-
         std::thread::spawn(move || {
             use std::io::Read;
             let mut r = pty_reader;
@@ -681,12 +702,195 @@ pub async fn spawn_pty_process(
             rt.block_on(async {
                 procs_arc.lock().await.remove(&sid);
                 stdins_arc.lock().await.remove(&sid);
+                resizers_arc.lock().await.remove(&sid);
                 let _ = app2.emit("service-stopped", sid);
             });
         });
     }
 
     Ok(())
+}
+
+/// Spawns a shell command inside a real PTY so the child sees an interactive
+/// terminal. Identical interface to `spawn_interactive` but with PTY support,
+/// enabling arrow-key history, Ctrl+C, and proper interactive programs.
+#[tauri::command]
+pub async fn spawn_pty_shell(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    service_id: String,
+    command: String,
+    envs: Option<std::collections::HashMap<String, String>>,
+) -> Result<(), String> {
+    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use tauri::Emitter;
+    use tokio::sync::mpsc;
+
+    let procs_arc    = state.processes.clone();
+    let stdins_arc   = state.stdin_senders.clone();
+    let resizers_arc = state.pty_resizers.clone();
+
+    {
+        let mut procs = procs_arc.lock().await;
+        if let Some(notify) = procs.remove(&service_id) { notify.notify_waiters(); }
+    }
+    stdins_arc.lock().await.remove(&service_id);
+    resizers_arc.lock().await.remove(&service_id);
+
+    let pty_system = native_pty_system();
+    let pair = pty_system
+        .openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
+        .map_err(|e| format!("PTY open failed: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = CommandBuilder::new("cmd");
+        c.arg("/C");
+        c.arg(&command);
+        c
+    };
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut c = CommandBuilder::new("sh");
+        c.arg("-c");
+        c.arg(&command);
+        c
+    };
+
+    if let Some(ref env_map) = envs {
+        for (k, v) in env_map { cmd.env(k, v); }
+    }
+
+    let mut child = pair.slave.spawn_command(cmd)
+        .map_err(|e| format!("Failed to spawn: {e}"))?;
+    let slave = pair.slave;
+
+    let (async_tx, mut async_rx) = mpsc::unbounded_channel::<String>();
+    stdins_arc.lock().await.insert(service_id.clone(), async_tx);
+
+    let (sync_tx, sync_rx) = std::sync::mpsc::channel::<String>();
+    tokio::spawn(async move {
+        while let Some(data) = async_rx.recv().await {
+            if sync_tx.send(data).is_err() { break; }
+        }
+    });
+
+    let pty_writer = pair.master.take_writer()
+        .map_err(|e| format!("PTY writer error: {e}"))?;
+    std::thread::spawn(move || {
+        use std::io::Write;
+        let mut w = pty_writer;
+        for data in sync_rx {
+            if w.write_all(data.as_bytes()).is_err() || w.flush().is_err() { break; }
+        }
+    });
+
+    // ── PTY resize handler ────────────────────────────────────────────────────
+    let (resize_tx, mut resize_rx) = mpsc::unbounded_channel::<(u16, u16)>();
+    resizers_arc.lock().await.insert(service_id.clone(), resize_tx);
+
+    let pty_reader = pair.master.try_clone_reader()
+        .map_err(|e| format!("PTY reader error: {e}"))?;
+
+    let master = pair.master;
+    let (resize_sync_tx, resize_sync_rx) = std::sync::mpsc::channel::<(u16, u16)>();
+    tokio::spawn(async move {
+        while let Some(size) = resize_rx.recv().await {
+            if resize_sync_tx.send(size).is_err() { break; }
+        }
+    });
+    std::thread::spawn(move || {
+        for (rows, cols) in resize_sync_rx {
+            let _ = master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 });
+        }
+    });
+
+    let notify = std::sync::Arc::new(tokio::sync::Notify::new());
+    procs_arc.lock().await.insert(service_id.clone(), notify.clone());
+
+    {
+        let app2  = app.clone();
+        let sid   = service_id.clone();
+        let stop  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop2 = stop.clone();
+        let n     = notify.clone();
+
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut r = pty_reader;
+            let mut buf = vec![0u8; 4096];
+            loop {
+                if stop2.load(std::sync::atomic::Ordering::Relaxed) { break; }
+                match r.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n_bytes) => {
+                        let chunk = String::from_utf8_lossy(&buf[..n_bytes]).to_string();
+                        let _ = app2.emit("pty-output", serde_json::json!({
+                            "serviceId": sid,
+                            "data": chunk,
+                        }));
+                    }
+                }
+            }
+        });
+
+        tokio::spawn(async move {
+            n.notified().await;
+            stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+    }
+
+    {
+        let app2    = app.clone();
+        let sid     = service_id.clone();
+        let killed  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let killed2 = killed.clone();
+        let n = notify.clone();
+        tokio::spawn(async move {
+            n.notified().await;
+            killed2.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+        tokio::task::spawn_blocking(move || {
+            let rt     = tokio::runtime::Handle::current();
+            let _slave = slave;
+            loop {
+                if killed.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = child.kill();
+                    break;
+                }
+                match child.try_wait() {
+                    Ok(Some(_)) | Err(_) => break,
+                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
+                }
+            }
+            drop(_slave);
+            rt.block_on(async {
+                procs_arc.lock().await.remove(&sid);
+                stdins_arc.lock().await.remove(&sid);
+                resizers_arc.lock().await.remove(&sid);
+                let _ = app2.emit("service-stopped", sid);
+            });
+        });
+    }
+
+    Ok(())
+}
+
+/// Resizes the PTY associated with a running session to match the xterm.js display size.
+/// Must be called after fit() and on every terminal resize to avoid cursor corruption.
+#[tauri::command]
+pub async fn resize_pty(
+    state: tauri::State<'_, crate::AppState>,
+    service_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<(), String> {
+    let resizers = state.pty_resizers.lock().await;
+    if let Some(tx) = resizers.get(&service_id) {
+        tx.send((rows, cols)).map_err(|e| e.to_string())
+    } else {
+        Ok(()) // no PTY running, silently ignore
+    }
 }
 
 /// Sends a line of text to the stdin of a running interactive process.
