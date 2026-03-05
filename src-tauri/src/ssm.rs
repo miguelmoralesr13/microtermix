@@ -1,12 +1,12 @@
-/// AWS Systems Manager Session Manager — uses the bundled session-manager-plugin
-/// sidecar binary. No need for the user to install anything; the plugin binary is
-/// shipped alongside the app in src-tauri/binaries/.
+/// AWS Systems Manager Session Manager — requires the `session-manager-plugin`
+/// binary to be installed on the system or its path configured by the user.
 ///
-/// Cross-platform binary naming (Tauri target-triple convention):
-///   Windows : binaries/session-manager-plugin-x86_64-pc-windows-msvc.exe
-///   Linux   : binaries/session-manager-plugin-x86_64-unknown-linux-gnu
-///   macOS   : binaries/session-manager-plugin-x86_64-apple-darwin   (Intel)
-///             binaries/session-manager-plugin-aarch64-apple-darwin   (Apple Silicon)
+/// Default system paths searched (after the user-configured path):
+///   Windows : C:\Program Files\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe
+///   Linux   : /usr/local/sessionmanagerplugin/bin/session-manager-plugin
+///   macOS   : /usr/local/sessionmanagerplugin/bin/session-manager-plugin
+///
+/// Install from: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
 use crate::ec2::Ec2Credentials;
 use tauri::Manager;
 
@@ -30,41 +30,20 @@ async fn ssm_client(c: &Ec2Credentials) -> aws_sdk_ssm::Client {
     aws_sdk_ssm::Client::new(&cfg)
 }
 
-// ── Helper: locate the bundled plugin ─────────────────────────────────────────
-
-fn plugin_exe_name_triple() -> String {
-    // Tauri names sidecar binaries with the target triple, e.g.
-    //   session-manager-plugin-x86_64-pc-windows-msvc.exe
-    let os   = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-    let triple = match (os, arch) {
-        ("windows", "x86_64")  => "x86_64-pc-windows-msvc",
-        ("linux",   "x86_64")  => "x86_64-unknown-linux-gnu",
-        ("linux",   "aarch64") => "aarch64-unknown-linux-gnu",
-        ("macos",   "x86_64")  => "x86_64-apple-darwin",
-        ("macos",   "aarch64") => "aarch64-apple-darwin",
-        _                      => "x86_64-pc-windows-msvc",
-    };
-    if cfg!(target_os = "windows") {
-        format!("session-manager-plugin-{triple}.exe")
-    } else {
-        format!("session-manager-plugin-{triple}")
-    }
-}
-
-fn plugin_exe_name() -> &'static str {
-    if cfg!(target_os = "windows") { "session-manager-plugin.exe" } else { "session-manager-plugin" }
-}
-
 /// Strips the Windows extended-path prefix `\\?\` that cmd.exe cannot handle.
 fn clean_path_str(p: &std::path::Path) -> String {
     let s = p.display().to_string();
     if s.starts_with(r"\\?\") { s[4..].to_string() } else { s }
 }
 
-/// Returns the path to the `session-manager-plugin` executable.
-/// If `custom_path` is provided and exists, it takes precedence.
-fn plugin_path_finder(app: &tauri::AppHandle, custom_path: Option<&str>) -> Result<std::path::PathBuf, String> {
+/// Locates the `session-manager-plugin` executable.
+///
+/// Search order:
+///   1. User-configured path (required if not installed system-wide)
+///   2. Default AWS installation paths per OS
+///   3. PATH (via `which`/`where`)
+fn plugin_path_finder(_app: &tauri::AppHandle, custom_path: Option<&str>) -> Result<std::path::PathBuf, String> {
+    // 1. User-configured path takes priority
     if let Some(p) = custom_path {
         let trimmed = p.trim();
         if !trimmed.is_empty() {
@@ -72,48 +51,59 @@ fn plugin_path_finder(app: &tauri::AppHandle, custom_path: Option<&str>) -> Resu
             if path.exists() {
                 return Ok(path);
             } else {
-                return Err(format!("El plugin custom no existe en la ruta especificada:\n{}", trimmed));
+                return Err(format!(
+                    "La ruta configurada no existe:\n  {}\n\nRevisa la configuración en CloudWatch → Settings.",
+                    trimmed
+                ));
             }
         }
     }
 
-    let triple_name = plugin_exe_name_triple();
-    let plain_name  = plugin_exe_name();
+    // 2. Default AWS installation paths per OS
+    #[cfg(target_os = "windows")]
+    let system_candidates: Vec<std::path::PathBuf> = vec![
+        r"C:\Program Files\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe".into(),
+        r"C:\Program Files (x86)\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe".into(),
+    ];
 
-    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+    #[cfg(not(target_os = "windows"))]
+    let system_candidates: Vec<std::path::PathBuf> = vec![
+        "/usr/local/sessionmanagerplugin/bin/session-manager-plugin".into(),
+        "/usr/bin/session-manager-plugin".into(),
+        "/usr/local/bin/session-manager-plugin".into(),
+    ];
 
-    // 1. CWD-based binaries/ dir — works perfectly during `tauri dev`
-    //    (CWD is the workspace root when running `npm run tauri dev`)
-    let cwd = std::env::current_dir().unwrap_or_default();
-    candidates.push(cwd.join("src-tauri").join("binaries").join(&triple_name));
-    candidates.push(cwd.join("src-tauri").join("binaries").join(plain_name));
-
-    // 1. Tauri resource dir (production — after bundling)
-    if let Ok(res_dir) = app.path().resource_dir() {
-        candidates.push(res_dir.join("binaries").join(&triple_name));
-        candidates.push(res_dir.join("binaries").join(plain_name));
-        candidates.push(res_dir.join(&triple_name));
-        candidates.push(res_dir.join(plain_name));
-    }
-
-    // 2. Next to the current exe
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join(&triple_name));
-            candidates.push(dir.join(plain_name));
-        }
-    }
-
-    for p in &candidates {
+    for p in &system_candidates {
         if p.exists() {
             return Ok(p.clone());
         }
     }
 
-    Err(format!(
-        "session-manager-plugin no encontrado. Rutas buscadas:\n{}\n\nDescárgalo desde: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html",
-        candidates.iter().map(|p| format!("  • {}", p.display())).collect::<Vec<_>>().join("\n")
-    ))
+    // 3. Search PATH
+    #[cfg(target_os = "windows")]
+    let which_result = std::process::Command::new("where")
+        .arg("session-manager-plugin")
+        .output();
+    #[cfg(not(target_os = "windows"))]
+    let which_result = std::process::Command::new("which")
+        .arg("session-manager-plugin")
+        .output();
+
+    if let Ok(out) = which_result {
+        if out.status.success() {
+            let path_str = String::from_utf8_lossy(&out.stdout).trim().lines().next().unwrap_or("").to_string();
+            if !path_str.is_empty() {
+                return Ok(std::path::PathBuf::from(path_str));
+            }
+        }
+    }
+
+    Err(
+        "session-manager-plugin no encontrado.\n\n\
+        Instálalo desde:\n  https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html\n\n\
+        O configura la ruta manualmente en CloudWatch → Settings → Ruta Session Manager Plugin."
+            .to_string(),
+    )
 }
 
 // ── Tauri commands ────────────────────────────────────────────────────────────

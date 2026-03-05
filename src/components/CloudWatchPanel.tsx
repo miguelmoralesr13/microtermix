@@ -100,7 +100,7 @@ function formatLaunchTime(iso: string | null): string {
 
 // ── EC2 Instance Row ──────────────────────────────────────────────────────────
 
-function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConnect, connecting }: {
+function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConnect, connecting, ssmAvailable }: {
     inst: Ec2Instance;
     ssh: SshDefaults;
     onAction: (action: 'start' | 'stop' | 'reboot', id: string) => void;
@@ -108,6 +108,7 @@ function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConne
     onSshConnect: (inst: Ec2Instance, cmd: string) => void;
     onSsmConnect: (inst: Ec2Instance) => void;
     connecting: string | null; // which connect mode is active: 'ssh' | 'ssm'
+    ssmAvailable: boolean | null; // null=checking, false=not found
 }) {
     const [expanded, setExpanded] = useState(false);
     const displayName = inst.name ?? inst.instance_id;
@@ -173,9 +174,9 @@ function Ec2InstanceRow({ inst, ssh, onAction, pending, onSshConnect, onSsmConne
                                 </button>
                                 <button
                                     onClick={() => onSsmConnect(inst)}
-                                    disabled={!!connecting}
+                                    disabled={!!connecting || ssmAvailable === false}
                                     className="px-2.5 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 flex items-center gap-1.5 disabled:opacity-40"
-                                    title="Conectar via AWS SSM Session Manager (sin puerto 22)">
+                                    title={ssmAvailable === false ? 'session-manager-plugin no encontrado. Configura la ruta en Settings.' : 'Conectar via AWS SSM Session Manager (sin puerto 22)'}>
                                     {connecting === 'ssm' ? <Loader size={12} className="animate-spin" /> : <Terminal size={12} />} SSM
                                 </button>
                             </>}
@@ -398,6 +399,7 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
     const [ssh, setSsh] = useState<SshDefaults>(loadSshDefaults);
     const [sshSession, setSshSession] = useState<SshSession | null>(null);
     const [connectingId, setConnectingId] = useState<{ id: string, type: 'ssh' | 'ssm' } | null>(null);
+    const [pluginAvailable, setPluginAvailable] = useState<boolean | null>(null);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetchInstances = useCallback(async () => {
@@ -418,6 +420,12 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
         pollRef.current = setInterval(fetchInstances, 30_000);
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }, [fetchInstances]);
+
+    useEffect(() => {
+        ssmCheckPlugin(cfg.ssmPluginPath)
+            .then(() => setPluginAvailable(true))
+            .catch(() => setPluginAvailable(false));
+    }, [cfg.ssmPluginPath]);
 
     async function handleAction(action: 'start' | 'stop' | 'reboot', id: string) {
         setPendingMap(p => ({ ...p, [id]: action }));
@@ -549,7 +557,8 @@ function Ec2Tab({ cfg }: { cfg: CwCredentials }) {
                             <Ec2InstanceRow key={inst.instance_id} inst={inst} ssh={ssh}
                                 onAction={handleAction} pending={pendingMap[inst.instance_id] ?? null}
                                 onSshConnect={handleSshConnect} onSsmConnect={handleSsmConnect}
-                                connecting={connectingId?.id === inst.instance_id ? connectingId.type : null} />
+                                connecting={connectingId?.id === inst.instance_id ? connectingId.type : null}
+                                ssmAvailable={pluginAvailable} />
                         ))}
                     </div>
                 )}
@@ -625,6 +634,14 @@ function parseAwsCredentialBlock(text: string): Partial<CwCredentials> {
     return result;
 }
 
+type OsTab = 'windows' | 'linux' | 'macos';
+function detectOs(): OsTab {
+    const p = navigator.platform ?? '';
+    if (p.startsWith('Win')) return 'windows';
+    if (p.includes('Mac')) return 'macos';
+    return 'linux';
+}
+
 function SettingsTab({ onSaved }: { onSaved: () => void }) {
     const [draft, setDraft] = useState<CwCredentials>(() => loadCwConfig());
     const [testing, setTesting] = useState(false);
@@ -633,6 +650,7 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
     const [showPaste, setShowPaste] = useState(false);
     const [pasteText, setPasteText] = useState('');
     const [pasteApplied, setPasteApplied] = useState(false);
+    const [osTab, setOsTab] = useState<OsTab>(detectOs);
 
     const handleSave = () => {
         saveCwConfig(draft);
@@ -745,6 +763,54 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
             {field('Secret Access Key', 'secretAccessKey', '••••••••••••••••••••', true)}
             {field('Session Token (opcional)', 'sessionToken', 'dejar vacío si no usas STS')}
             {field('Ruta Session Manager Plugin (Opcional)', 'ssmPluginPath', 'Vacío = autodetectar. Ej Win: C:\\...\\session-manager-plugin.exe  Linux: /usr/local/sessionmanagerplugin/bin/session-manager-plugin')}
+
+            {/* SSM Plugin download instructions */}
+            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs">
+                <p className="text-slate-400 mb-2 font-medium">Instalar session-manager-plugin:</p>
+                <div className="flex gap-1 mb-3">
+                    {(['windows', 'linux', 'macos'] as OsTab[]).map(os => (
+                        <button key={os} onClick={() => setOsTab(os)}
+                            className={`px-2.5 py-0.5 rounded text-[11px] capitalize transition-colors ${osTab === os ? 'bg-nexus-neon/15 text-nexus-neon border border-nexus-neon/30' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}>
+                            {os === 'macos' ? 'macOS' : os.charAt(0).toUpperCase() + os.slice(1)}
+                        </button>
+                    ))}
+                </div>
+                {osTab === 'windows' && (
+                    <div className="space-y-2">
+                        <p className="text-slate-400">Descarga e instala el <span className="text-slate-200">.exe</span> de AWS:</p>
+                        <code className="block bg-slate-950 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 break-all">
+                            https://s3.amazonaws.com/session-manager-downloads/plugin/latest/windows/SessionManagerPluginSetup.exe
+                        </code>
+                        <p className="text-slate-500">O con winget:</p>
+                        <code className="block bg-slate-950 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300">
+                            winget install --id Amazon.SessionManagerPlugin
+                        </code>
+                        <p className="text-slate-500 mt-1">Ruta por defecto tras instalar:<br />
+                            <span className="text-slate-400 font-mono">C:\Program Files\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe</span>
+                        </p>
+                    </div>
+                )}
+                {osTab === 'linux' && (
+                    <div className="space-y-2">
+                        <p className="text-slate-400">Debian / Ubuntu:</p>
+                        <code className="block bg-slate-950 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 whitespace-pre">{`curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o smp.deb\nsudo dpkg -i smp.deb`}</code>
+                        <p className="text-slate-400 mt-1">RHEL / Fedora:</p>
+                        <code className="block bg-slate-950 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 whitespace-pre">{`curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/linux_64bit/session-manager-plugin.rpm" -o smp.rpm\nsudo rpm -i smp.rpm`}</code>
+                        <p className="text-slate-500 mt-1">Ruta por defecto: <span className="text-slate-400 font-mono">/usr/local/sessionmanagerplugin/bin/session-manager-plugin</span></p>
+                    </div>
+                )}
+                {osTab === 'macos' && (
+                    <div className="space-y-2">
+                        <p className="text-slate-400">Instalar con el paquete .pkg:</p>
+                        <code className="block bg-slate-950 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300 whitespace-pre">{`curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/mac/sessionmanager-bundle.zip" -o smp.zip\nunzip smp.zip && sudo ./sessionmanager-bundle/install -i /usr/local/sessionmanagerplugin -b /usr/local/bin/session-manager-plugin`}</code>
+                        <p className="text-slate-500 mt-1">O con Homebrew:</p>
+                        <code className="block bg-slate-950 rounded px-2 py-1.5 font-mono text-[11px] text-slate-300">
+                            brew install --cask session-manager-plugin
+                        </code>
+                        <p className="text-slate-500 mt-1">Ruta por defecto: <span className="text-slate-400 font-mono">/usr/local/sessionmanagerplugin/bin/session-manager-plugin</span></p>
+                    </div>
+                )}
+            </div>
 
             <div className="flex items-center gap-3 pt-2">
                 <button
