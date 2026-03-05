@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitBranch, GitMerge, FileArchive, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud } from 'lucide-react';
 import { PushPreviewModal } from './PushPreviewModal';
+import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 
-export type BranchFilter = 'all' | 'local' | 'remote';
+export type { BranchFilter } from '../stores/gitStore';
 
 interface GitSidebarProps {
     projectPath: string;
     onRefreshRequest?: () => void;
-    refreshKey?: number;
-    branchFilter?: BranchFilter;
-    onBranchFilterChange?: (filter: BranchFilter) => void;
 }
 
-export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRequest, refreshKey, branchFilter = 'all', onBranchFilterChange }) => {
-    const [localBranches, setLocalBranches] = useState<{ name: string, active: boolean }[]>([]);
-    const [remoteBranches, setRemoteBranches] = useState<string[]>([]);
-    const [stashes, setStashes] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRequest }) => {
+    const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
+    const branchFilter = useGitStore(s => s.ui.branchFilter);
+    const setUi = useGitStore(s => s.setUi);
+
+    const { local: localBranches, remote: remoteBranches, stashes } = repo.branches;
+    const loading = repo.loading.branches;
 
     const [showLocal, setShowLocal] = useState(true);
     const [showRemote, setShowRemote] = useState(false);
@@ -35,45 +35,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         [remoteBranches, searchLower]
     );
 
-    const loadSidebarData = async () => {
-        setLoading(true);
-        try {
-            // Local Branches
-            const localRes: any = await invoke('git_execute', { projectPath, args: ['branch'] });
-            if (localRes.success) {
-                const locals = localRes.stdout.split('\n').filter((l: string) => l.trim().length > 0).map((l: string) => ({
-                    active: l.startsWith('*'),
-                    name: l.replace('*', '').trim()
-                }));
-                setLocalBranches(locals);
-            }
-
-            // Remote Branches
-            const remoteRes: any = await invoke('git_execute', { projectPath, args: ['branch', '-r'] });
-            if (remoteRes.success) {
-                const remotes = remoteRes.stdout.split('\n')
-                    .filter((l: string) => l.trim().length > 0 && !l.includes('->'))
-                    .map((l: string) => l.trim());
-                setRemoteBranches(remotes);
-            }
-
-            // Stashes
-            const stashRes: any = await invoke('git_execute', { projectPath, args: ['stash', 'list'] });
-            if (stashRes.success) {
-                const stashList = stashRes.stdout.split('\n').filter((l: string) => l.trim().length > 0);
-                setStashes(stashList);
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        if (projectPath) loadSidebarData();
-    }, [projectPath, refreshKey]);
-
     const handleCheckout = async (branch: string, isRemote: boolean) => {
-        setLoading(true);
         try {
             let checkoutBranch = branch;
             if (isRemote) {
@@ -85,35 +47,30 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             }
 
             await invoke('git_execute', { projectPath, args: ['checkout', checkoutBranch] });
-            if (onRefreshRequest) onRefreshRequest();
-            else await loadSidebarData();
-        } finally {
-            setLoading(false);
+            onRefreshRequest?.();
+        } catch {
+            // no-op
         }
     };
 
     const handleStashSave = async () => {
-        setLoading(true);
         try {
             await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Stashed via Nexus'] });
-            if (onRefreshRequest) onRefreshRequest();
-            else await loadSidebarData();
-        } finally {
-            setLoading(false);
+            onRefreshRequest?.();
+        } catch {
+            // no-op
         }
     };
 
     const handleStashPop = async (stashId: string) => {
-        setLoading(true);
         try {
             const idMatch = stashId.match(/stash@\{\d+\}/);
             if (idMatch) {
                 await invoke('git_execute', { projectPath, args: ['stash', 'pop', idMatch[0]] });
-                if (onRefreshRequest) onRefreshRequest();
-                else await loadSidebarData();
+                onRefreshRequest?.();
             }
-        } finally {
-            setLoading(false);
+        } catch {
+            // no-op
         }
     };
 
@@ -121,36 +78,31 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         if (!branchName || localBranches.some(b => b.name === branchName && b.active)) return;
         const force = false; // use -d by default; user can retry with -D if needed
         if (!confirm(`Delete local branch "${branchName}"? ${force ? ' (Force)' : ''}`)) return;
-        setLoading(true);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['branch', force ? '-D' : '-d', branchName] });
             if (result?.success !== false) {
-                if (onRefreshRequest) onRefreshRequest();
-                else await loadSidebarData();
+                onRefreshRequest?.();
             } else {
                 const msg = result?.stderr || 'Could not delete branch. Not fully merged? Try force delete.';
                 if (confirm(`${msg}\n\nForce delete anyway?`)) {
                     await invoke('git_execute', { projectPath, args: ['branch', '-D', branchName] });
-                    if (onRefreshRequest) onRefreshRequest();
-                    else await loadSidebarData();
+                    onRefreshRequest?.();
                 }
             }
-        } finally {
-            setLoading(false);
+        } catch {
+            // no-op
         }
     };
 
     const handlePull = async () => {
-        setLoading(true);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['pull'] });
             if (!result.success) {
                 alert(`Pull Failed:\n\n${result.stderr || result.stdout}`);
             }
-            if (onRefreshRequest) onRefreshRequest();
-            else await loadSidebarData();
-        } finally {
-            setLoading(false);
+            onRefreshRequest?.();
+        } catch {
+            // no-op
         }
     };
 
@@ -162,7 +114,6 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         }
         if (!confirm(`Merge '${mergeTarget}' into your current branch?`)) return;
 
-        setLoading(true);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['merge', mergeTarget] });
             if (!result.success) {
@@ -173,10 +124,9 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                     alert(`Merge Failed:\n\n${result.stderr || result.stdout}`);
                 }
             }
-            if (onRefreshRequest) onRefreshRequest();
-            else await loadSidebarData();
-        } finally {
-            setLoading(false);
+            onRefreshRequest?.();
+        } catch {
+            // no-op
         }
     };
 
@@ -223,25 +173,23 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                             >
                                 <UploadCloud size={14} className="rotate-0" />
                             </button>
-                            <button onClick={loadSidebarData} className={`p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ${loading ? 'animate-spin' : ''}`} title="Refresh">
+                            <button onClick={() => onRefreshRequest?.()} className={`p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ${loading ? 'animate-spin' : ''}`} title="Refresh">
                                 <RefreshCw size={14} />
                             </button>
                         </div>
                     </div>
                     {/* Branch filter: All | Local | Remote */}
-                    {onBranchFilterChange && (
-                        <div className="flex rounded bg-slate-800/80 p-0.5">
-                            {(['all', 'local', 'remote'] as const).map((f) => (
-                                <button
-                                    key={f}
-                                    onClick={() => onBranchFilterChange(f)}
-                                    className={`flex-1 py-1 px-2 text-[10px] font-medium rounded capitalize transition-colors ${branchFilter === f ? 'bg-nexus-neon text-nexus-darker' : 'text-slate-400 hover:text-slate-200'}`}
-                                >
-                                    {f === 'all' ? 'All' : f === 'local' ? 'Local' : 'Remote'}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                    <div className="flex rounded bg-slate-800/80 p-0.5">
+                        {(['all', 'local', 'remote'] as const).map((f) => (
+                            <button
+                                key={f}
+                                onClick={() => setUi({ branchFilter: f })}
+                                className={`flex-1 py-1 px-2 text-[10px] font-medium rounded capitalize transition-colors ${branchFilter === f ? 'bg-nexus-neon text-nexus-darker' : 'text-slate-400 hover:text-slate-200'}`}
+                            >
+                                {f === 'all' ? 'All' : f === 'local' ? 'Local' : 'Remote'}
+                            </button>
+                        ))}
+                    </div>
                     {/* Branch search */}
                     <div className="relative">
                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" size={12} />

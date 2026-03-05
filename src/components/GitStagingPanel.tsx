@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
-import { useGitStore, defaultRepoData } from '../stores/gitStore';
+import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 
 interface GitStatusEntry {
     file: string;
@@ -209,7 +209,7 @@ function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest }) => {
-    const repo = useGitStore(s => s.repos[projectPath] ?? defaultRepoData());
+    const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
     const fetchStatus = useGitStore(s => s.fetchStatus);
     const fetchTimeline = useGitStore(s => s.fetchTimeline);
     const invalidate = useGitStore(s => s.invalidate);

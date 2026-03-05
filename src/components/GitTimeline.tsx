@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { useGitStore, defaultRepoData, RawCommit } from '../stores/gitStore';
+import { useGitStore, EMPTY_REPO_DATA, RawCommit } from '../stores/gitStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ type Filter = 'all' | 'mine' | 'merges' | 'tags';
 
 export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitSelect }) => {
     const { state } = useWorkspace();
-    const repo = useGitStore(s => s.repos[projectPath] ?? defaultRepoData());
+    const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
     const fetchTimeline = useGitStore(s => s.fetchTimeline);
     const invalidate = useGitStore(s => s.invalidate);
 

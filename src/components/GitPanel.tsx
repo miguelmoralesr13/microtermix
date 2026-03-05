@@ -12,7 +12,7 @@ import { ResizableDivider } from './ResizableDivider';
 import { CommitDiffModal } from './CommitDiffModal';
 import { GithubPanel } from './GithubPanel';
 import { GitInitPanel } from './GitInitPanel';
-import { useGitStore, defaultRepoData } from '../stores/gitStore';
+import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 
 const MIN_PANEL = 150;
 const MAX_PANEL = 800;
@@ -28,7 +28,7 @@ export const GitPanel: React.FC = () => {
 
     const invalidate = useGitStore(s => s.invalidate);
     const ensureRepo = useGitStore(s => s.ensureRepo);
-    const repoData = useGitStore(s => s.repos[ui.activeTab ?? ''] ?? defaultRepoData());
+    const repoData = useGitStore(s => s.repos[ui.activeTab ?? ''] ?? EMPTY_REPO_DATA);
 
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);

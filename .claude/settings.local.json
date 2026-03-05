@@ -10,7 +10,9 @@
       "Bash(cargo build:*)",
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(python:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

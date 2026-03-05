@@ -8,7 +8,7 @@
 ///
 /// Install from: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
 use crate::ec2::Ec2Credentials;
-use tauri::Manager;
+
 
 // ── SSM SDK client (StartSession API only) ────────────────────────────────────
 
