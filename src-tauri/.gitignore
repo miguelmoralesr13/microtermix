@@ -10,7 +10,7 @@
 .env
 .env.*
 !.env.example
-
+package-lock.json
 # Backup files
 *.rs.bk
 
