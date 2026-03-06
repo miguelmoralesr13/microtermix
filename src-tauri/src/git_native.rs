@@ -1,5 +1,6 @@
 use git2::{Repository, StatusOptions, BranchType};
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 
 // ── Return types ──────────────────────────────────────────────────────────────
 
@@ -88,59 +89,54 @@ fn format_relative(secs: i64) -> String {
     }
 }
 
-/// Build a refs decoration string for a commit (branches/tags that point to it).
-fn build_refs_for_commit(repo: &Repository, oid: git2::Oid) -> String {
-    let mut refs: Vec<String> = Vec::new();
+/// Build a map of oid → ref labels once, instead of scanning all refs per commit.
+/// This is O(branches + tags) vs the old O(commits × branches).
+fn build_refs_map(repo: &Repository) -> HashMap<git2::Oid, Vec<String>> {
+    let mut map: HashMap<git2::Oid, Vec<String>> = HashMap::new();
 
-    // Check local branches
+    // Local branches
     if let Ok(branches) = repo.branches(Some(BranchType::Local)) {
         for b in branches.flatten() {
             if let Ok(ref_obj) = b.0.get().peel_to_commit() {
-                if ref_obj.id() == oid {
-                    if let Ok(Some(name)) = b.0.name() {
-                        // Check if this is HEAD
-                        let is_head = b.0.is_head();
-                        if is_head {
-                            refs.push(format!("HEAD -> {}", name));
-                        } else {
-                            refs.push(name.to_string());
-                        }
-                    }
+                if let Ok(Some(name)) = b.0.name() {
+                    let label = if b.0.is_head() {
+                        format!("HEAD -> {}", name)
+                    } else {
+                        name.to_string()
+                    };
+                    map.entry(ref_obj.id()).or_default().push(label);
                 }
             }
         }
     }
 
-    // Check remote branches
+    // Remote branches (skip remote HEAD symrefs)
     if let Ok(branches) = repo.branches(Some(BranchType::Remote)) {
         for b in branches.flatten() {
             if let Ok(ref_obj) = b.0.get().peel_to_commit() {
-                if ref_obj.id() == oid {
-                    if let Ok(Some(name)) = b.0.name() {
-                        refs.push(name.to_string());
+                if let Ok(Some(name)) = b.0.name() {
+                    if !name.ends_with("/HEAD") {
+                        map.entry(ref_obj.id()).or_default().push(name.to_string());
                     }
                 }
             }
         }
     }
 
-    // Check tags
+    // Tags
     let _ = repo.tag_foreach(|tag_oid, name_bytes| {
         if let Ok(name) = std::str::from_utf8(name_bytes) {
             let tag_name = name.trim_start_matches("refs/tags/");
-            // Try to resolve tag to commit
             if let Ok(obj) = repo.find_object(tag_oid, None) {
                 if let Ok(commit) = obj.peel_to_commit() {
-                    if commit.id() == oid {
-                        refs.push(format!("tag: {}", tag_name));
-                    }
+                    map.entry(commit.id()).or_default().push(format!("tag: {}", tag_name));
                 }
             }
         }
         true
     });
 
-    refs.join(", ")
+    map
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────────
@@ -281,21 +277,37 @@ fn status_to_xy(s: git2::Status) -> (char, char) {
     (x, y)
 }
 
-/// Return the last 100 commits on HEAD and the set of local (unpushed) commit hashes.
+/// Return ALL local (unpushed) commits + up to 100 pushed commits from HEAD.
+/// local_hashes contains the full hashes of every unpushed commit (no limit).
 pub fn git_log_native_impl(project_path: String) -> Result<LogResult, String> {
     let repo = repo_open(&project_path)?;
 
-    // Walk commits from HEAD
+    // Build refs map once — O(branches + tags), not O(commits × branches)
+    let refs_map = build_refs_map(&repo);
+
+    // Collect all local (unpushed) oids into a set — no limit
+    let local_oid_set = collect_local_oids(&repo);
+    let local_hashes: Vec<String> = local_oid_set.iter().map(|o| format!("{}", o)).collect();
+
+    // Walk HEAD: include every local commit + up to 100 pushed commits
     let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
     revwalk.push_head().map_err(|e| e.to_string())?;
     revwalk.set_sorting(git2::Sort::TIME).map_err(|e| e.to_string())?;
 
     let mut commits: Vec<CommitEntry> = Vec::new();
-    for (i, oid_res) in revwalk.enumerate() {
-        if i >= 100 { break; }
-        let oid = oid_res.map_err(|e| e.to_string())?;
-        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    let mut pushed_count: usize = 0;
+    const MAX_PUSHED: usize = 100;
 
+    for oid_res in revwalk {
+        let oid = oid_res.map_err(|e| e.to_string())?;
+        let is_local = local_oid_set.contains(&oid);
+
+        if !is_local {
+            if pushed_count >= MAX_PUSHED { break; }
+            pushed_count += 1;
+        }
+
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
         let hash = format!("{}", oid);
         let short_hash = hash[..7.min(hash.len())].to_string();
 
@@ -309,45 +321,42 @@ pub fn git_log_native_impl(project_path: String) -> Result<LogResult, String> {
         let author = commit.author().name().unwrap_or("").to_string();
         let date = format_relative(commit.author().when().seconds());
         let message = commit.summary().unwrap_or("").to_string();
-        let refs = build_refs_for_commit(&repo, oid);
+        let refs = refs_map.get(&oid).map(|v| v.join(", ")).unwrap_or_default();
 
         commits.push(CommitEntry { hash, short_hash, parents, author, date, message, refs });
     }
 
-    // Unpushed commits: commits reachable from HEAD but not from the upstream
-    let local_hashes = collect_local_hashes(&repo);
-
     Ok(LogResult { commits, local_hashes })
 }
 
-/// Return full hashes of commits that are in HEAD but not in the upstream (unpushed).
-fn collect_local_hashes(repo: &Repository) -> Vec<String> {
-    // Find upstream for current branch
+/// Collect all oids reachable from HEAD but not from upstream (unpushed).
+/// If no upstream is configured, treats ALL commits as local.
+fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
     let upstream_oid = repo
-        .head()
-        .ok()
+        .head().ok()
         .and_then(|h| h.shorthand().map(|s| s.to_string()))
-        .and_then(|branch_name| repo.find_branch(&branch_name, BranchType::Local).ok())
+        .and_then(|name| repo.find_branch(&name, BranchType::Local).ok())
         .and_then(|b| b.upstream().ok())
         .and_then(|u| u.get().peel_to_commit().ok())
         .map(|c| c.id());
 
-    let upstream_oid = match upstream_oid {
-        Some(oid) => oid,
-        None => return Vec::new(), // No upstream configured
-    };
-
     let mut revwalk = match repo.revwalk() {
         Ok(r) => r,
-        Err(_) => return Vec::new(),
+        Err(_) => return HashSet::new(),
     };
 
-    if revwalk.push_head().is_err() { return Vec::new(); }
-    if revwalk.hide(upstream_oid).is_err() { return Vec::new(); }
+    if revwalk.push_head().is_err() { return HashSet::new(); }
+
+    if let Some(upstream) = upstream_oid {
+        // Only commits not reachable from upstream
+        if revwalk.hide(upstream).is_err() { return HashSet::new(); }
+    }
+    // If no upstream: all commits are "local" — we limit this to avoid huge sets
+    // on repos with no remote by capping at 500
     let _ = revwalk.set_sorting(git2::Sort::TIME);
 
     revwalk
         .filter_map(|r| r.ok())
-        .map(|oid| format!("{}", oid))
+        .take(if upstream_oid.is_none() { 500 } else { usize::MAX })
         .collect()
 }

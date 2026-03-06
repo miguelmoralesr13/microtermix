@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
@@ -217,6 +217,16 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const { files, currentBranch, isMergeInProgress } = repo.status;
     const loading = repo.loading.status;
 
+    // Debounced status refresh — batches rapid staging/unstaging bursts into one fetch
+    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const refreshStatus = useCallback(() => {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        debounceTimer.current = setTimeout(() => {
+            invalidate(projectPath, 'status');
+            fetchStatus(projectPath, true);
+        }, 300);
+    }, [projectPath, invalidate, fetchStatus]);
+
     const [commitMessage, setCommitMessage] = useState('');
     const [isCommitting, setIsCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -241,45 +251,33 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     // which is triggered whenever the sidebar tab mounts or refresh is requested.
 
     const handleStageToggleAll = useCallback(async (stage: boolean) => {
-        try {
-            if (stage) {
-                await invoke('git_execute', { projectPath, args: ['add', '.'] });
-            } else {
-                await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
-            }
-            invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
-        } finally {
+        if (stage) {
+            await invoke('git_execute', { projectPath, args: ['add', '.'] });
+        } else {
+            await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
         }
-    }, [projectPath, fetchStatus, invalidate]);
+        refreshStatus();
+    }, [projectPath, refreshStatus]);
 
     const handleToggleNode = useCallback(async (node: ArrayTreeNode) => {
-        try {
-            if (node.checkState === 'checked') {
-                await invoke('git_execute', { projectPath, args: ['restore', '--staged', node.fullPath] });
-            } else {
-                await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
-            }
-            invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
-        } finally {
+        if (node.checkState === 'checked') {
+            await invoke('git_execute', { projectPath, args: ['restore', '--staged', node.fullPath] });
+        } else {
+            await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
         }
-    }, [projectPath, fetchStatus, invalidate]);
+        refreshStatus();
+    }, [projectPath, refreshStatus]);
 
     const handleDiscardNode = useCallback(async (node: ArrayTreeNode) => {
-        try {
-            await invoke('git_execute', { projectPath, args: ['restore', node.fullPath] });
-            await invoke('git_execute', { projectPath, args: ['clean', '-fd', node.fullPath] });
-            setSelectedForRollback((prev) => {
-                const next = new Set(prev);
-                next.delete(node.fullPath);
-                return next;
-            });
-            invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
-        } finally {
-        }
-    }, [projectPath, fetchStatus, invalidate]);
+        await invoke('git_execute', { projectPath, args: ['restore', node.fullPath] });
+        await invoke('git_execute', { projectPath, args: ['clean', '-fd', node.fullPath] });
+        setSelectedForRollback((prev) => {
+            const next = new Set(prev);
+            next.delete(node.fullPath);
+            return next;
+        });
+        refreshStatus();
+    }, [projectPath, refreshStatus]);
 
     const toggleSelectedForRollback = useCallback((path: string) => {
         setSelectedForRollback((prev) => {
@@ -292,17 +290,13 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
 
     const handleDiscardSelected = useCallback(async () => {
         if (selectedForRollback.size === 0) return;
-        try {
-            for (const path of selectedForRollback) {
-                await invoke('git_execute', { projectPath, args: ['restore', path] });
-                await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
-            }
-            setSelectedForRollback(new Set());
-            invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
-        } finally {
+        for (const path of selectedForRollback) {
+            await invoke('git_execute', { projectPath, args: ['restore', path] });
+            await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
         }
-    }, [selectedForRollback, projectPath, fetchStatus, invalidate]);
+        setSelectedForRollback(new Set());
+        refreshStatus();
+    }, [selectedForRollback, projectPath, refreshStatus]);
 
     const handleCommit = useCallback(async () => {
         if (!commitMessage.trim() || !isAnythingStaged) return;

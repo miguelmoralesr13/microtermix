@@ -160,6 +160,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     const [selectedHash, setSelectedHash] = useState<string | null>(null);
     const [searchText, setSearchText] = useState('');
     const [filter, setFilter] = useState<Filter>('all');
+    const [timelineView, setTimelineView] = useState<'local' | 'all'>('local');
     const [currentUser, setCurrentUser] = useState('');
     const [editingHash, setEditingHash] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -205,7 +206,13 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         }
     }, [rawCommits, projectPath, state.gitConfig.token, state.gitConfig.provider]);
 
-    const { nodes, edges } = useMemo(() => computeGraph(rawCommits), [rawCommits]);
+    const visibleCommits = useMemo(() =>
+        timelineView === 'local'
+            ? rawCommits.filter(c => localHashes.has(c.hash))
+            : rawCommits,
+        [timelineView, rawCommits, localHashes]);
+
+    const { nodes, edges } = useMemo(() => computeGraph(visibleCommits), [visibleCommits]);
     const totalCols = useMemo(() => Math.min(Math.max(...nodes.map(n => n.col), 0) + 1, MAX_COLS), [nodes]);
     const svgW = totalCols * COL_W + 8;
 
@@ -316,6 +323,22 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                     )}
                 </div>
                 <div className="flex items-center gap-1.5">
+                    {/* View toggle: Locales / Todos */}
+                    <button onClick={() => setTimelineView('local')}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${timelineView === 'local'
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                            : 'text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'}`}
+                    >
+                        Locales {localHashes.size > 0 && <span className="ml-0.5 opacity-70">({localHashes.size})</span>}
+                    </button>
+                    <button onClick={() => setTimelineView('all')}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${timelineView === 'all'
+                            ? 'bg-slate-600/40 text-slate-200 border-slate-500'
+                            : 'text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'}`}
+                    >
+                        Todos
+                    </button>
+                    <div className="w-px h-3 bg-slate-700 mx-0.5" />
                     {filters.map(f => (
                         <button key={f.id} onClick={() => setFilter(f.id)}
                             className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${filter === f.id
