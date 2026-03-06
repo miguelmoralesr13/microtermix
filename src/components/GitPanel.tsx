@@ -12,6 +12,7 @@ import { ResizableDivider } from './ResizableDivider';
 import { CommitDiffModal } from './CommitDiffModal';
 import { GithubPanel } from './GithubPanel';
 import { GitInitPanel } from './GitInitPanel';
+import { GitConflictModal } from './GitConflictModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 
 const MIN_PANEL = 150;
@@ -33,6 +34,7 @@ export const GitPanel: React.FC = () => {
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+    const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
 
     useEffect(() => {
         if (!ui.activeTab) return;
@@ -65,6 +67,18 @@ export const GitPanel: React.FC = () => {
         if (ui.activeTab) { invalidate(ui.activeTab); fetchAll(ui.activeTab, true); }
     };
 
+    const handleRefreshAll = useCallback(() => {
+        if (!ui.activeTab) return;
+        invalidate(ui.activeTab);
+        fetchAll(ui.activeTab, true);
+    }, [ui.activeTab, invalidate, fetchAll]);
+
+    useEffect(() => {
+        if (!repoData.status.isMergeInProgress) {
+            setIsConflictModalOpen(false);
+        }
+    }, [repoData.status.isMergeInProgress]);
+
     const resizeSidebar = useCallback((delta: number) => {
         setUi({ sidebarWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, ui.sidebarWidth + delta)) });
     }, [ui.sidebarWidth, setUi]);
@@ -74,7 +88,7 @@ export const GitPanel: React.FC = () => {
     }, [ui.stagingWidth, setUi]);
 
     return (
-        <div className="flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
+        <div className="relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
             {/* Header / Tabs */}
             <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4">
                 <div className="flex items-end overflow-x-auto scrollbar-hide">
@@ -226,6 +240,7 @@ export const GitPanel: React.FC = () => {
                                     <GitStagingPanel
                                         projectPath={ui.activeTab}
                                         onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode, line })}
+                                        onOpenConflictModal={() => setIsConflictModalOpen(true)}
                                     />
                                 </div>
                             </div>
@@ -251,6 +266,15 @@ export const GitPanel: React.FC = () => {
                     commitAuthor={selectedCommit.author}
                     commitDate={selectedCommit.date}
                     onClose={() => setSelectedCommit(null)}
+                />
+            )}
+
+            {isConflictModalOpen && repoData.status.isMergeInProgress && ui.activeTab && (
+                <GitConflictModal
+                    projectPath={ui.activeTab}
+                    conflictedFiles={repoData.status.files.filter(f => f.isConflicted).map(f => f.file)}
+                    onClose={() => setIsConflictModalOpen(false)}
+                    onRefreshAll={handleRefreshAll}
                 />
             )}
         </div>

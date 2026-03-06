@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { Check, X, GitMerge, AlertCircle, Save, RefreshCw } from 'lucide-react';
@@ -6,8 +6,10 @@ import { Check, X, GitMerge, AlertCircle, Save, RefreshCw } from 'lucide-react';
 interface GitConflictResolverProps {
     projectPath: string;
     file: string;
-    onClose: () => void;
+    onClose?: () => void;
     onRefreshRequest?: () => void;
+    onSaved?: () => void;          // modal calls this after write+git add
+    showCloseButton?: boolean;     // false when embedded in modal (default true)
 }
 
 interface ConflictBlock {
@@ -21,138 +23,132 @@ interface ConflictBlock {
     incomingContent: string;
     resolved: boolean;
     resolution?: 'current' | 'incoming' | 'both' | 'manual';
-    markerStyleIds: string[];
 }
 
-export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projectPath, file, onClose, onRefreshRequest }) => {
+const EXT_TO_MONACO_LANG: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
+    json: 'json', css: 'css', scss: 'scss', html: 'html', xml: 'xml',
+    md: 'markdown', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+    rs: 'rust', go: 'go', py: 'python', sh: 'shell', bash: 'shell',
+    c: 'c', cpp: 'cpp', h: 'c', java: 'java', kt: 'kotlin',
+};
+
+const getMonacoLanguage = (file: string): string => {
+    const ext = file.split('.').pop()?.toLowerCase() ?? '';
+    return EXT_TO_MONACO_LANG[ext] ?? 'plaintext';
+};
+
+// Pure module-level parser — no props/state dependencies, safe to call anywhere
+const parseConflictBlocks = (text: string): ConflictBlock[] => {
+    const lines = text.split('\n');
+    const foundConflicts: ConflictBlock[] = [];
+    let inConflict = false;
+    let c: Partial<ConflictBlock> = {};
+    lines.forEach((line, index) => {
+        const lineNum = index + 1;
+        if (line.startsWith('<<<<<<<')) {
+            inConflict = true;
+            c = { id: `conflict-${lineNum}`, startLine: lineNum, currentHeaderLine: lineNum, currentContent: '', incomingContent: '', resolved: false };
+        } else if (line.startsWith('=======') && inConflict) {
+            c.dividerLine = lineNum;
+        } else if (line.startsWith('>>>>>>>') && inConflict) {
+            c.endLine = lineNum;
+            c.incomingHeaderLine = lineNum;
+            foundConflicts.push(c as ConflictBlock);
+            inConflict = false;
+            c = {};
+        } else if (inConflict) {
+            if (!c.dividerLine) { c.currentContent += line + '\n'; }
+            else { c.incomingContent += line + '\n'; }
+        }
+    });
+    return foundConflicts;
+};
+
+export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projectPath, file, onClose, onRefreshRequest, onSaved, showCloseButton }) => {
     const [fileContent, setFileContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [conflicts, setConflicts] = useState<ConflictBlock[]>([]);
+    const [activeConflictIdx, setActiveConflictIdx] = useState(0);
     const monaco = useMonaco();
     const editorRef = useRef<any>(null);
+    const decorationIdsRef = useRef<string[]>([]);
 
-    const loadContent = async () => {
+    const parseConflicts = (text: string) => {
+        setConflicts(parseConflictBlocks(text));
+    };
+
+    const loadContent = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             const content: string = await invoke('read_file_content', { base: projectPath, file }) ?? '';
             setFileContent(content);
-            parseConflicts(content);
+            setConflicts(parseConflictBlocks(content));
         } catch (e: any) {
             setError(e?.toString?.() || 'Failed to read file');
         } finally {
             setLoading(false);
         }
-    };
+    }, [projectPath, file]);
 
     useEffect(() => {
         loadContent();
-    }, [projectPath, file]);
+    }, [loadContent]);
 
-    const parseConflicts = (text: string) => {
-        const lines = text.split('\n');
-        const foundConflicts: ConflictBlock[] = [];
+    useEffect(() => {
+        setActiveConflictIdx(0);
+    }, [file]);
 
-        let inConflict = false;
-        let c: Partial<ConflictBlock> = {};
-
-        lines.forEach((line, index) => {
-            const lineNum = index + 1;
-            if (line.startsWith('<<<<<<<')) {
-                inConflict = true;
-                c = {
-                    id: `conflict-${lineNum}`,
-                    startLine: lineNum,
-                    currentHeaderLine: lineNum,
-                    currentContent: '',
-                    incomingContent: '',
-                    resolved: false,
-                    markerStyleIds: []
-                };
-            } else if (line.startsWith('=======') && inConflict) {
-                c.dividerLine = lineNum;
-            } else if (line.startsWith('>>>>>>>') && inConflict) {
-                c.endLine = lineNum;
-                c.incomingHeaderLine = lineNum;
-                foundConflicts.push(c as ConflictBlock);
-                inConflict = false;
-                c = {};
-            } else if (inConflict) {
-                // Collect content
-                if (!c.dividerLine) {
-                    c.currentContent += line + '\n';
-                } else {
-                    c.incomingContent += line + '\n';
-                }
-            }
-        });
-
-        setConflicts(foundConflicts);
-    };
-
-    // Apply decorations (CodeLens-like buttons) when Monaco mounts or conflicts change
+    // Apply decorations when Monaco mounts or conflicts change
     useEffect(() => {
         if (!monaco || !editorRef.current || conflicts.length === 0) return;
-
         const decorations = conflicts.flatMap(c => {
             if (c.resolved) return [];
             return [
-                // Highlight Current side
                 {
                     range: new monaco.Range(c.currentHeaderLine, 1, c.dividerLine! - 1, 1),
-                    options: {
-                        isWholeLine: true,
-                        className: 'bg-emerald-900/40',
-                        marginClassName: 'bg-emerald-500/50',
-                    }
+                    options: { isWholeLine: true, className: 'bg-emerald-900/40', marginClassName: 'bg-emerald-500/50' }
                 },
-                // Highlight Incoming side
                 {
                     range: new monaco.Range(c.dividerLine! + 1, 1, c.endLine, 1),
-                    options: {
-                        isWholeLine: true,
-                        className: 'bg-blue-900/40',
-                        marginClassName: 'bg-blue-500/50',
-                    }
+                    options: { isWholeLine: true, className: 'bg-blue-900/40', marginClassName: 'bg-blue-500/50' }
                 },
-                // Color the marker lines themselves
                 {
                     range: new monaco.Range(c.currentHeaderLine, 1, c.currentHeaderLine, 1),
-                    options: { isWholeLine: true, className: 'text-emerald-400 font-bold bg-emerald-950', }
+                    options: { isWholeLine: true, className: 'text-emerald-400 font-bold bg-emerald-950' }
                 },
                 {
                     range: new monaco.Range(c.dividerLine!, 1, c.dividerLine!, 1),
-                    options: { isWholeLine: true, className: 'text-slate-400 font-bold bg-slate-800', }
+                    options: { isWholeLine: true, className: 'text-slate-400 font-bold bg-slate-800' }
                 },
                 {
                     range: new monaco.Range(c.endLine, 1, c.endLine, 1),
-                    options: { isWholeLine: true, className: 'text-blue-400 font-bold bg-blue-950', }
+                    options: { isWholeLine: true, className: 'text-blue-400 font-bold bg-blue-950' }
                 }
             ];
         });
-
-        // Store active decoration IDs so we can clear them later
-        const oldIds = conflicts.flatMap(c => c.markerStyleIds || []);
-        const newIds = editorRef.current.deltaDecorations(oldIds, decorations);
-
-        // Update state with new IDs without triggering a re-render loop
-        setConflicts(conflicts.map(c => ({ ...c, markerStyleIds: newIds })));
-    }, [monaco, conflicts.length]); // Intentionally not depending on full 'conflicts' array to avoid loop
+        decorationIdsRef.current = editorRef.current.deltaDecorations(decorationIdsRef.current, decorations);
+    }, [monaco, conflicts]);
 
     const handleEditorMount = (editor: any) => {
         editorRef.current = editor;
     };
 
+    const scrollToConflict = (idx: number) => {
+        const c = conflicts[idx];
+        if (!c || !editorRef.current) return;
+        editorRef.current.revealLineInCenter(c.startLine);
+        setActiveConflictIdx(idx);
+    };
+
     const resolveConflict = (block: ConflictBlock, choice: 'current' | 'incoming' | 'both') => {
         const text = editorRef.current.getValue();
         const lines = text.split('\n');
-
-        // Replace the conflict block with the chosen content
         const before = lines.slice(0, block.startLine - 1);
         const after = lines.slice(block.endLine);
-
         let resolvedLines: string[] = [];
         if (choice === 'current') {
             resolvedLines = block.currentContent.replace(/\n$/, '').split('\n');
@@ -164,12 +160,13 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 ...block.incomingContent.replace(/\n$/, '').split('\n')
             ];
         }
-
         const newText = [...before, ...resolvedLines, ...after].join('\n');
-
-        // Mark as resolved in state by replacing the text entirely and triggering a re-parse
+        const newConflicts = parseConflictBlocks(newText);
+        // Update Monaco model imperatively so decorations are applied against the correct content
+        editorRef.current.setValue(newText);
         setFileContent(newText);
-        parseConflicts(newText);
+        setConflicts(newConflicts);
+        setActiveConflictIdx(prev => Math.max(0, Math.min(prev, newConflicts.length - 1)));
     };
 
     const handleSaveAndAdd = async () => {
@@ -178,16 +175,15 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
         setError(null);
         try {
             const finalContent = editorRef.current.getValue();
-
-            // 1. Save file to disk
             await invoke('write_file_content', { base: projectPath, file, content: finalContent });
-
-            // 2. git add to mark as resolved
             const addResult: any = await invoke('git_execute', { projectPath, args: ['add', file] });
-            if (!addResult.success) throw new Error(addResult.stderr || "Failed to stage resolved file");
-
-            onRefreshRequest?.();
-            onClose();
+            if (!addResult.success) throw new Error(addResult.stderr || 'Failed to stage resolved file');
+            if (onSaved) {
+                onSaved();
+            } else {
+                onRefreshRequest?.();
+                onClose?.();
+            }
         } catch (e: any) {
             setError(e?.toString?.() || 'Failed to save and resolve');
         } finally {
@@ -202,9 +198,11 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-slate-800 shrink-0">
                 <div className="flex items-center">
-                    <button onClick={onClose} className="p-1 mr-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors">
-                        <X size={16} />
-                    </button>
+                    {(showCloseButton ?? true) && (
+                        <button onClick={onClose} className="p-1 mr-2 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors">
+                            <X size={16} />
+                        </button>
+                    )}
                     <GitMerge size={16} className="text-orange-500 mr-2" />
                     <div>
                         <h3 className="text-sm font-bold text-slate-200">Resolve Conflict</h3>
@@ -231,7 +229,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                         className="flex items-center px-3 py-1.5 bg-nexus-success hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-bold rounded transition-colors"
                     >
                         {saving ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
-                        Mark as Resolved
+                        Guardar y marcar resuelto →
                     </button>
                 </div>
             </div>
@@ -242,32 +240,60 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 </div>
             )}
 
-            {/* Actions for current conflict (overlay) */}
-            {conflicts.length > 0 && (
-                <div className="bg-slate-900 border-b border-slate-800 p-2 flex gap-2 overflow-x-auto shrink-0">
-                    <div className="text-xs text-slate-400 flex items-center px-2 border-r border-slate-800">
-                        Quick Resolve First Conflict:
+            {/* Per-conflict nav + preview bar */}
+            {conflicts.length > 0 && (() => {
+                const active = conflicts[activeConflictIdx];
+                if (!active) return null;
+                return (
+                    <div className="bg-slate-900 border-b border-slate-800 shrink-0">
+                        {/* Conflict navigator */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60">
+                            <span className="text-xs text-slate-400 font-medium">
+                                Conflicto {activeConflictIdx + 1} de {conflicts.length}
+                            </span>
+                            <button
+                                onClick={() => scrollToConflict(Math.max(0, activeConflictIdx - 1))}
+                                disabled={activeConflictIdx === 0}
+                                className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >← Anterior</button>
+                            <button
+                                onClick={() => scrollToConflict(Math.min(conflicts.length - 1, activeConflictIdx + 1))}
+                                disabled={activeConflictIdx === conflicts.length - 1}
+                                className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            >Siguiente →</button>
+                        </div>
+                        {/* Preview + action buttons */}
+                        <div className="flex gap-2 px-3 py-2 overflow-x-auto">
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[9px] font-bold text-emerald-400 mb-0.5 uppercase tracking-wide">HEAD (actual)</div>
+                                <pre className="text-[10px] text-emerald-300 bg-emerald-950/40 rounded px-2 py-1 max-h-16 overflow-auto font-mono whitespace-pre-wrap border border-emerald-900/30">
+                                    {active.currentContent || '(vacío)'}
+                                </pre>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-[9px] font-bold text-blue-400 mb-0.5 uppercase tracking-wide">Incoming</div>
+                                <pre className="text-[10px] text-blue-300 bg-blue-950/40 rounded px-2 py-1 max-h-16 overflow-auto font-mono whitespace-pre-wrap border border-blue-900/30">
+                                    {active.incomingContent || '(vacío)'}
+                                </pre>
+                            </div>
+                            <div className="flex flex-col gap-1 justify-center shrink-0">
+                                <button onClick={() => resolveConflict(active, 'current')}
+                                    className="text-[10px] px-3 py-1 bg-emerald-950 border border-emerald-900 text-emerald-400 rounded hover:bg-emerald-900 transition-colors whitespace-nowrap">
+                                    Aceptar actual
+                                </button>
+                                <button onClick={() => resolveConflict(active, 'incoming')}
+                                    className="text-[10px] px-3 py-1 bg-blue-950 border border-blue-900 text-blue-400 rounded hover:bg-blue-900 transition-colors whitespace-nowrap">
+                                    Aceptar incoming
+                                </button>
+                                <button onClick={() => resolveConflict(active, 'both')}
+                                    className="text-[10px] px-3 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition-colors whitespace-nowrap">
+                                    Aceptar ambos
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    <button
-                        onClick={() => resolveConflict(conflicts[0], 'current')}
-                        className="text-xs px-3 py-1 bg-emerald-950 border border-emerald-900 text-emerald-400 rounded hover:bg-emerald-900 transition-colors"
-                    >
-                        Accept Current (HEAD)
-                    </button>
-                    <button
-                        onClick={() => resolveConflict(conflicts[0], 'incoming')}
-                        className="text-xs px-3 py-1 bg-blue-950 border border-blue-900 text-blue-400 rounded hover:bg-blue-900 transition-colors"
-                    >
-                        Accept Incoming
-                    </button>
-                    <button
-                        onClick={() => resolveConflict(conflicts[0], 'both')}
-                        className="text-xs px-3 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition-colors"
-                    >
-                        Accept Both
-                    </button>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Editor */}
             <div className="flex-1 min-h-0 relative">
@@ -278,7 +304,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 ) : null}
                 <Editor
                     height="100%"
-                    language="typescript" // Should ideally be dynamic based on extension
+                    language={getMonacoLanguage(file)}
                     theme="vs-dark"
                     value={fileContent}
                     onChange={(val) => {

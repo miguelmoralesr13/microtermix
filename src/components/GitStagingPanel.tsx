@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
-import { GitCommit, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
+import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 
 interface GitStatusEntry {
@@ -25,6 +25,7 @@ interface ArrayTreeNode {
 interface GitStagingPanelProps {
     projectPath: string;
     onDiffRequest?: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
+    onOpenConflictModal?: () => void;
 }
 
 // ── File tree node — defined OUTSIDE GitStagingPanel so React never remounts it ──
@@ -208,7 +209,7 @@ function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest }) => {
+export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onOpenConflictModal }) => {
     const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
     const fetchStatus = useGitStore(s => s.fetchStatus);
     const fetchTimeline = useGitStore(s => s.fetchTimeline);
@@ -236,6 +237,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const tree = useMemo(() => buildTree(files), [files]);
     const totalFiles = files.length;
     const isAnythingStaged = useMemo(() => files.some(f => f.isStaged), [files]);
+    const conflictedFilesCount = useMemo(() => files.filter(f => f.isConflicted).length, [files]);
     const masterCheckState = useMemo(() => {
         if (totalFiles === 0) return 'unchecked';
         const fullyStagedCount = files.filter(f => f.isStaged && !f.isUnstaged).length;
@@ -324,12 +326,14 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
             if (!res.success) {
                 setError(res.stderr || 'Failed to abort merge');
+            } else {
+                invalidate(projectPath, 'status');
+                fetchStatus(projectPath, false);
+                invalidate(projectPath, 'timeline');
+                fetchTimeline(projectPath, false);
             }
-            invalidate(projectPath, 'status');
-            fetchStatus(projectPath, false);
-            invalidate(projectPath, 'timeline');
-            fetchTimeline(projectPath, false);
-        } finally {
+        } catch (e: any) {
+            setError(e?.message ?? 'Failed to abort merge');
         }
     }, [projectPath, invalidate, fetchStatus, fetchTimeline]);
 
@@ -405,16 +409,27 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             {/* Commit Box */}
             <div className="p-4 border-t border-slate-800 bg-slate-900/30">
                 {isMergeInProgress && (
-                    <div className="mb-3 p-2 bg-orange-500/10 border border-orange-500/20 rounded flex items-center justify-between">
-                        <span className="text-xs font-bold text-orange-400 flex items-center">
-                            <AlertTriangle size={12} className="mr-1" /> Merge in Progress
-                        </span>
-                        <button
-                            onClick={handleAbortMerge}
-                            className="text-[10px] font-bold px-2 py-1 bg-red-950 text-red-400 border border-red-900 rounded hover:bg-red-900 transition-colors"
-                        >
-                            Abort Merge
-                        </button>
+                    <div className="mb-3 p-2.5 bg-orange-500/10 border border-orange-500/20 rounded-lg flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-orange-400 flex items-center gap-1">
+                                <AlertTriangle size={12} /> Merge in Progress
+                            </span>
+                            <button
+                                onClick={handleAbortMerge}
+                                className="text-[10px] font-bold px-2 py-1 bg-red-950 text-red-400 border border-red-900 rounded hover:bg-red-900 transition-colors"
+                            >
+                                Abort
+                            </button>
+                        </div>
+                        {conflictedFilesCount > 0 && (
+                            <button
+                                onClick={onOpenConflictModal}
+                                className="w-full py-1.5 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-300 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5"
+                            >
+                                <GitMerge size={12} />
+                                Resolver conflictos ({conflictedFilesCount} {conflictedFilesCount === 1 ? 'archivo' : 'archivos'})
+                            </button>
+                        )}
                     </div>
                 )}
                 <textarea
