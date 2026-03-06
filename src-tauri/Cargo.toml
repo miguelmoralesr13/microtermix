@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 imara-diff = { version = "0.2", features = ["unified_diff"] }
+git2 = { version = "0.19", default-features = false }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }

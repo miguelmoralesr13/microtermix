@@ -248,7 +248,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
             }
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, false, true);
+            fetchStatus(projectPath, true);
         } finally {
         }
     }, [projectPath, fetchStatus, invalidate]);
@@ -261,7 +261,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
             }
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, false, true);
+            fetchStatus(projectPath, true);
         } finally {
         }
     }, [projectPath, fetchStatus, invalidate]);
@@ -276,7 +276,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 return next;
             });
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, false, true);
+            fetchStatus(projectPath, true);
         } finally {
         }
     }, [projectPath, fetchStatus, invalidate]);
@@ -299,7 +299,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             }
             setSelectedForRollback(new Set());
             invalidate(projectPath, 'status');
-            fetchStatus(projectPath, false, true);
+            fetchStatus(projectPath, true);
         } finally {
         }
     }, [selectedForRollback, projectPath, fetchStatus, invalidate]);

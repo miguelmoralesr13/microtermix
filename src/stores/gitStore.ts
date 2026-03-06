@@ -75,7 +75,7 @@ interface GitStore {
 
     fetchRepo: (path: string) => Promise<void>;
     fetchBranches: (path: string, force?: boolean) => Promise<void>;
-    fetchStatus: (path: string, force?: boolean, onlyStatusStr?: boolean) => Promise<void>;
+    fetchStatus: (path: string, force?: boolean) => Promise<void>;
     fetchTimeline: (path: string, force?: boolean) => Promise<void>;
     fetchAll: (path: string, force?: boolean) => Promise<void>;
     invalidate: (path: string, slice?: 'branches' | 'status' | 'timeline') => void;
@@ -192,12 +192,10 @@ export const useGitStore = create<GitStore>()(
                 fetchRepo: async (path) => {
                     patchRepo(set, path, r => ({ loading: { ...r.loading, repo: true } }));
                     try {
-                        const [workTreeRes, headRes]: any[] = await Promise.all([
-                            invoke('git_execute', { projectPath: path, args: ['rev-parse', '--is-inside-work-tree'] }),
-                            invoke('git_execute', { projectPath: path, args: ['rev-parse', 'HEAD'] }),
-                        ]);
-                        if (workTreeRes.success && workTreeRes.stdout.trim() === 'true') {
-                            patchRepo(set, path, { isGitRepo: headRes.success ? 'initialized' : 'empty_repo' });
+                        const res: { isGitRepo: boolean; hasCommits: boolean } =
+                            await invoke('git_is_repo_native', { projectPath: path });
+                        if (res.isGitRepo) {
+                            patchRepo(set, path, { isGitRepo: res.hasCommits ? 'initialized' : 'empty_repo' });
                         } else {
                             patchRepo(set, path, { isGitRepo: 'not_initialized' });
                         }
@@ -214,80 +212,43 @@ export const useGitStore = create<GitStore>()(
 
                     patchRepo(set, path, r => ({ loading: { ...r.loading, branches: true } }));
                     try {
-                        const [localRes, remoteRes, stashRes]: any[] = await Promise.all([
-                            invoke('git_execute', { projectPath: path, args: ['branch', '--no-color'] }),
-                            invoke('git_execute', { projectPath: path, args: ['branch', '-r'] }),
-                            invoke('git_execute', { projectPath: path, args: ['stash', 'list'] }),
-                        ]);
-
-                        if (!localRes.success && !remoteRes.success) {
-                            patchRepo(set, path, r => ({
-                                errors: { ...r.errors, branches: localRes.stderr },
-                            }));
-                            return;
-                        }
-
-                        const local = localRes.success
-                            ? localRes.stdout.split('\n').filter((l: string) => l.trim()).map((l: string) => ({
-                                active: l.startsWith('*'),
-                                name: l.replace('*', '').trim(),
-                            }))
-                            : [];
-
-                        const remote = remoteRes.success
-                            ? remoteRes.stdout.split('\n')
-                                .filter((l: string) => l.trim() && !l.includes('->'))
-                                .map((l: string) => l.trim())
-                            : [];
-
-                        const stashes = stashRes.success
-                            ? stashRes.stdout.split('\n').filter((l: string) => l.trim())
-                            : [];
+                        const res: { local: { name: string; active: boolean }[]; remote: string[]; stashes: string[] } =
+                            await invoke('git_branches_native', { projectPath: path });
 
                         patchRepo(set, path, r => ({
-                            branches: { local, remote, stashes },
+                            branches: { local: res.local, remote: res.remote, stashes: res.stashes },
                             errors: { ...r.errors, branches: undefined },
                             lastFetched: { ...r.lastFetched, branches: Date.now() },
+                        }));
+                    } catch (e: any) {
+                        patchRepo(set, path, r => ({
+                            errors: { ...r.errors, branches: String(e) },
                         }));
                     } finally {
                         patchRepo(set, path, r => ({ loading: { ...r.loading, branches: false } }));
                     }
                 },
 
-                fetchStatus: async (path, force = false, onlyStatusStr = false) => {
+                fetchStatus: async (path, force = false) => {
                     const repo = get().repos[path] ?? defaultRepoData();
                     if (!force && !isStale(repo, 'status')) return;
 
                     patchRepo(set, path, r => ({ loading: { ...r.loading, status: true } }));
                     try {
-                        let statusRes: any, branchRes: any = { success: true, stdout: repo.status.currentBranch }, mergeRes: any = { success: repo.status.isMergeInProgress };
-
-                        if (onlyStatusStr) {
-                            // Fast path: only fetch git status to reduce latency on rapid UI toggles
-                            statusRes = await invoke('git_execute', { projectPath: path, args: ['status', '-s', '-u'] });
-                        } else {
-                            [statusRes, branchRes, mergeRes] = await Promise.all([
-                                invoke('git_execute', { projectPath: path, args: ['status', '-s', '-u'] }),
-                                invoke('git_execute', { projectPath: path, args: ['branch', '--show-current'] }),
-                                invoke('git_execute', { projectPath: path, args: ['rev-parse', '-q', '--verify', 'MERGE_HEAD'] }),
-                            ]);
-                        }
-
-                        if (!statusRes.success) {
-                            patchRepo(set, path, r => ({
-                                errors: { ...r.errors, status: statusRes.stderr },
-                            }));
-                            return;
-                        }
-
-                        const files = parseStatusLines(statusRes.stdout);
-                        const currentBranch = branchRes.success ? (branchRes.stdout as string).trim() : '';
-                        const isMergeInProgress = mergeRes.success;
+                        const res: {
+                            files: GitStatusEntry[];
+                            currentBranch: string;
+                            isMergeInProgress: boolean;
+                        } = await invoke('git_status_native', { projectPath: path });
 
                         patchRepo(set, path, r => ({
-                            status: { files, currentBranch, isMergeInProgress },
+                            status: { files: res.files, currentBranch: res.currentBranch, isMergeInProgress: res.isMergeInProgress },
                             errors: { ...r.errors, status: undefined },
                             lastFetched: { ...r.lastFetched, status: Date.now() },
+                        }));
+                    } catch (e: any) {
+                        patchRepo(set, path, r => ({
+                            errors: { ...r.errors, status: String(e) },
                         }));
                     } finally {
                         patchRepo(set, path, r => ({ loading: { ...r.loading, status: false } }));
@@ -300,34 +261,17 @@ export const useGitStore = create<GitStore>()(
 
                     patchRepo(set, path, r => ({ loading: { ...r.loading, timeline: true } }));
                     try {
-                        const [logRes, unpushedRes]: any[] = await Promise.all([
-                            invoke('git_execute', {
-                                projectPath: path,
-                                args: ['log', 'HEAD', '--date-order',
-                                    '--pretty=format:%H|%p|%an|%ar|%s|%D', '-n', '100'],
-                            }),
-                            invoke('git_execute', {
-                                projectPath: path,
-                                args: ['log', '@{u}..HEAD', '--pretty=format:%H'],
-                            }),
-                        ]);
-
-                        if (!logRes.success) {
-                            patchRepo(set, path, r => ({
-                                errors: { ...r.errors, timeline: logRes.stderr },
-                            }));
-                            return;
-                        }
-
-                        const commits = parseCommitLog(logRes.stdout);
-                        const localHashes = unpushedRes.success && unpushedRes.stdout.trim()
-                            ? unpushedRes.stdout.trim().split('\n').filter(Boolean)
-                            : [];
+                        const res: { commits: RawCommit[]; localHashes: string[] } =
+                            await invoke('git_log_native', { projectPath: path });
 
                         patchRepo(set, path, r => ({
-                            timeline: { commits, localHashes },
+                            timeline: { commits: res.commits, localHashes: res.localHashes },
                             errors: { ...r.errors, timeline: undefined },
                             lastFetched: { ...r.lastFetched, timeline: Date.now() },
+                        }));
+                    } catch (e: any) {
+                        patchRepo(set, path, r => ({
+                            errors: { ...r.errors, timeline: String(e) },
                         }));
                     } finally {
                         patchRepo(set, path, r => ({ loading: { ...r.loading, timeline: false } }));

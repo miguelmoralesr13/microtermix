@@ -210,6 +210,65 @@ pub async fn git_execute_impl(
     })
 }
 
+#[derive(Serialize)]
+pub struct GitStatusResult {
+    pub status_output: String,  // stdout of `git status -s -u`
+    pub status_success: bool,
+    pub status_stderr: String,
+    pub current_branch: String,
+    pub is_merge_in_progress: bool,
+}
+
+/// Runs git status, branch, and merge-head ALL in parallel in Rust (single IPC call).
+pub async fn git_get_status_impl(
+    project_path: String,
+) -> Result<GitStatusResult, String> {
+    let path1 = project_path.clone();
+    let path2 = project_path.clone();
+    let path3 = project_path.clone();
+
+    let status_fut = tokio::spawn(async move {
+        let mut cmd = AsyncCommand::new("git");
+        cmd.args(&["status", "-s", "-u"]);
+        cmd.current_dir(&path1);
+        #[cfg(target_os = "windows")]
+        { cmd.creation_flags(0x08000000); }
+        cmd.output().await
+    });
+
+    let branch_fut = tokio::spawn(async move {
+        let mut cmd = AsyncCommand::new("git");
+        cmd.args(&["branch", "--show-current"]);
+        cmd.current_dir(&path2);
+        #[cfg(target_os = "windows")]
+        { cmd.creation_flags(0x08000000); }
+        cmd.output().await
+    });
+
+    let merge_fut = tokio::spawn(async move {
+        let mut cmd = AsyncCommand::new("git");
+        cmd.args(&["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+        cmd.current_dir(&path3);
+        #[cfg(target_os = "windows")]
+        { cmd.creation_flags(0x08000000); }
+        cmd.output().await
+    });
+
+    let (status_res, branch_res, merge_res) = tokio::join!(status_fut, branch_fut, merge_fut);
+
+    let status_out = status_res.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+    let branch_out = branch_res.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+    let merge_out  = merge_res.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+
+    Ok(GitStatusResult {
+        status_output: String::from_utf8_lossy(&status_out.stdout).to_string(),
+        status_success: status_out.status.success(),
+        status_stderr: String::from_utf8_lossy(&status_out.stderr).to_string(),
+        current_branch: String::from_utf8_lossy(&branch_out.stdout).trim().to_string(),
+        is_merge_in_progress: merge_out.status.success(),
+    })
+}
+
 /// Reword the message of any local commit (HEAD or older) non-interactively.
 pub async fn git_reword_commit_impl(
     app_handle: AppHandle,

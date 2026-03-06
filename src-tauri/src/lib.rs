@@ -1,4 +1,5 @@
 mod git_diff;
+mod git_native;
 mod state;
 mod projects;
 mod processes;
@@ -144,6 +145,15 @@ async fn git_execute(
     git_diff::git_execute_impl(app_handle, project_path, args).await
 }
 
+/// Runs `git status -s -u`, `git branch --show-current`, and `git rev-parse MERGE_HEAD`
+/// in parallel in a single IPC call to minimize IPC overhead on Windows.
+#[tauri::command]
+async fn git_get_status(
+    project_path: String,
+) -> Result<git_diff::GitStatusResult, String> {
+    git_diff::git_get_status_impl(project_path).await
+}
+
 /// Reword the message of any local commit (HEAD or older) non-interactively.
 /// Strategy:
 ///   1. Write the new message to a temp file.
@@ -169,6 +179,26 @@ async fn git_apply_patch(
     target: Option<String>,
 ) -> Result<GitResult, String> {
     git_diff::git_apply_patch_impl(app_handle, project_path, patch_content, reverse, target).await
+}
+
+#[tauri::command]
+fn git_is_repo_native(project_path: String) -> git_native::IsRepoResult {
+    git_native::git_is_repo_native_impl(project_path)
+}
+
+#[tauri::command]
+fn git_branches_native(project_path: String) -> Result<git_native::BranchesResult, String> {
+    git_native::git_branches_native_impl(project_path)
+}
+
+#[tauri::command]
+fn git_status_native(project_path: String) -> Result<git_native::StatusResult, String> {
+    git_native::git_status_native_impl(project_path)
+}
+
+#[tauri::command]
+fn git_log_native(project_path: String) -> Result<git_native::LogResult, String> {
+    git_native::git_log_native_impl(project_path)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -205,8 +235,13 @@ pub fn run() {
             compute_diff_hunks,
             apply_rejected_hunks,
             git_execute,
+            git_get_status,
             git_apply_patch,
             git_reword_commit,
+            git_is_repo_native,
+            git_branches_native,
+            git_status_native,
+            git_log_native,
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,
