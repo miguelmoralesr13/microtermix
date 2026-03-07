@@ -248,7 +248,6 @@ export const ServiceManager: React.FC = () => {
                 selectedProjects,
                 multiScript,
                 globalEnvName,
-                state.gitConfig,
                 vitePreviewOpen,
                 activeTerminalTab,
                 state.projects.map(p => p.path as string),
@@ -276,7 +275,6 @@ export const ServiceManager: React.FC = () => {
                     selectedProjects,
                     multiScript,
                     globalEnvName,
-                    state.gitConfig,
                     vitePreviewOpen,
                     activeTerminalTab,
                     state.projects.map(p => p.path as string),
@@ -292,7 +290,7 @@ export const ServiceManager: React.FC = () => {
         return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
     }, [
         selectedProjects, multiScript, globalEnvName, vitePreviewOpen,
-        activeTerminalTab, state.currentPath, state.gitConfig, state.savedCommands, state.savedCommandSteps
+        activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps
     ]);
 
     const handleLoadWorkspaceConfig = async () => {
