@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Settings, RefreshCw } from 'lucide-react';
+import { Settings, RefreshCw, Github, Gitlab } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
 import { GitDiffViewer } from './GitDiffViewer';
@@ -12,6 +13,13 @@ import { CommitDiffModal } from './CommitDiffModal';
 import { GitInitPanel } from './GitInitPanel';
 import { GitConflictModal } from './GitConflictModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
+
+function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
+    if (!remoteUrl) return null;
+    if (remoteUrl.includes('github.com')) return 'github';
+    if (remoteUrl.toLowerCase().includes('gitlab')) return 'gitlab';
+    return null;
+}
 
 const MIN_PANEL = 150;
 const MAX_PANEL = 800;
@@ -28,10 +36,17 @@ export const GitPanel: React.FC = () => {
     const ensureRepo = useGitStore(s => s.ensureRepo);
     const repoData = useGitStore(s => s.repos[ui.activeTab ?? ''] ?? EMPTY_REPO_DATA);
 
+    const accounts = useGitStore(s => s.accounts);
+    const repoAccounts = useGitStore(s => s.repoAccounts);
+    const setRepoAccount = useGitStore(s => s.setRepoAccount);
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
-    const [_isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+    const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+    const [detectedAccounts, setDetectedAccounts] = useState<typeof accounts>([]);
+    const activeAccount = ui.activeTab ? getActiveAccount(ui.activeTab) : undefined;
 
     useEffect(() => {
         if (!ui.activeTab) return;
@@ -76,6 +91,28 @@ export const GitPanel: React.FC = () => {
         }
     }, [repoData.status.isMergeInProgress]);
 
+    useEffect(() => {
+        if (!ui.activeTab) { setDetectedAccounts([]); return; }
+        if (repoAccounts[ui.activeTab]) { setDetectedAccounts([]); return; }
+        if (accounts.length === 0) { setDetectedAccounts([]); return; }
+
+        invoke<{ success: boolean; stdout: string }>('git_execute', {
+            projectPath: ui.activeTab,
+            args: ['remote', 'get-url', 'origin'],
+        }).then(res => {
+            if (!res.success) { setDetectedAccounts([]); return; }
+            const provider = detectProviderFromUrl(res.stdout.trim());
+            if (!provider) { setDetectedAccounts([]); return; }
+            const matches = accounts.filter(a => a.provider === provider);
+            if (matches.length === 1) {
+                setRepoAccount(ui.activeTab!, matches[0].id);
+                setDetectedAccounts([]);
+            } else {
+                setDetectedAccounts(matches);
+            }
+        }).catch(() => setDetectedAccounts([]));
+    }, [ui.activeTab, repoAccounts, accounts]);
+
     const resizeSidebar = useCallback((delta: number) => {
         setUi({ sidebarWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, ui.sidebarWidth + delta)) });
     }, [ui.sidebarWidth, setUi]);
@@ -109,6 +146,26 @@ export const GitPanel: React.FC = () => {
                             <RefreshCw size={10} className="animate-spin" /> Actualizando...
                         </span>
                     )}
+                    {/* Badge de cuenta activa */}
+                    {ui.activeTab && (
+                        <button
+                            onClick={() => setIsAccountModalOpen(true)}
+                            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 transition-colors mr-1 text-slate-300"
+                            title="Gestionar cuentas"
+                        >
+                            {activeAccount ? (
+                                <>
+                                    {activeAccount.provider === 'github'
+                                        ? <Github size={11} className="text-slate-400" />
+                                        : <Gitlab size={11} className="text-slate-400" />
+                                    }
+                                    <span>{activeAccount.alias}</span>
+                                </>
+                            ) : (
+                                <span className="text-slate-500">+ Cuenta</span>
+                            )}
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsAccountModalOpen(true)}
                         className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
@@ -118,6 +175,22 @@ export const GitPanel: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Banner auto-detección: múltiples cuentas coinciden */}
+            {detectedAccounts.length > 1 && ui.activeTab && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-nexus-accent/10 border-b border-nexus-accent/30 text-xs text-slate-300 shrink-0">
+                    <span>Se detectaron {detectedAccounts.length} cuentas para este repo. Selecciona:</span>
+                    {detectedAccounts.map(a => (
+                        <button
+                            key={a.id}
+                            onClick={() => { setRepoAccount(ui.activeTab!, a.id); setDetectedAccounts([]); }}
+                            className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium"
+                        >
+                            {a.alias}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Main Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col relative">
@@ -212,6 +285,9 @@ export const GitPanel: React.FC = () => {
                     onClose={() => setSelectedCommit(null)}
                 />
             )}
+
+            {/* AccountManagerModal — placeholder until Task 7 */}
+            {isAccountModalOpen && null}
 
             {isConflictModalOpen && repoData.status.isMergeInProgress && ui.activeTab && (
                 <GitConflictModal
