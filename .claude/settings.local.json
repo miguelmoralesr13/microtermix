@@ -12,7 +12,8 @@
       "Bash(npx tsc:*)",
       "Bash(cargo check:*)",
       "Bash(python:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(winget upgrade:*)"
     ]
   }
 }

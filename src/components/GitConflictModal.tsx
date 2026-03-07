@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { GitMerge, AlertTriangle, Check, RefreshCw } from 'lucide-react';
+import { GitMerge, AlertTriangle, Check, RefreshCw, X } from 'lucide-react';
 import { GitConflictResolver } from './GitConflictResolver';
 
 interface GitConflictModalProps {
@@ -38,8 +38,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
         });
     };
 
-    const handleAbort = async () => {
-        if (!window.confirm('¿Abortar el merge? Se perderán todos los cambios del merge en progreso.')) return;
+    const handleAbortClick = async () => {
         setAborting(true);
         setError(null);
         try {
@@ -94,14 +93,23 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                             </span>
                         </div>
                     </div>
-                    <button
-                        onClick={handleAbort}
-                        disabled={aborting}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950 hover:bg-red-900 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 border border-red-900 text-xs font-bold rounded transition-colors"
-                    >
-                        {aborting ? <RefreshCw size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
-                        Abort Merge
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={onClose}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded transition-colors"
+                        >
+                            <X size={12} />
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleAbortClick}
+                            disabled={aborting}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950 hover:bg-red-900 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 border border-red-900 text-xs font-bold rounded transition-colors"
+                        >
+                            {aborting ? <RefreshCw size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
+                            Abort Merge
+                        </button>
+                    </div>
                 </div>
 
                 {error && (

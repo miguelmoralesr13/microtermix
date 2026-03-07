@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor, { useMonaco } from '@monaco-editor/react';
-import { Check, X, GitMerge, AlertCircle, Save, RefreshCw } from 'lucide-react';
+import { Check, X, GitMerge, AlertCircle, Save, RefreshCw, Undo, RotateCcw } from 'lucide-react';
 
 interface GitConflictResolverProps {
     projectPath: string;
@@ -72,6 +72,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
     const [error, setError] = useState<string | null>(null);
     const [conflicts, setConflicts] = useState<ConflictBlock[]>([]);
     const [activeConflictIdx, setActiveConflictIdx] = useState(0);
+    const [isEditorReady, setIsEditorReady] = useState(false);
     const monaco = useMonaco();
     const editorRef = useRef<any>(null);
     const decorationIdsRef = useRef<string[]>([]);
@@ -104,7 +105,16 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
 
     // Apply decorations when Monaco mounts or conflicts change
     useEffect(() => {
-        if (!monaco || !editorRef.current || conflicts.length === 0) return;
+        if (!monaco || !editorRef.current || !isEditorReady) return;
+        
+        const editor = editorRef.current;
+        const totalLines = editor.getModel()?.getLineCount() || 0;
+
+        if (conflicts.length === 0) {
+            editor.setHiddenAreas([]);
+            return;
+        }
+
         const decorations = conflicts.flatMap(c => {
             if (c.resolved) return [];
             return [
@@ -130,22 +140,44 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 }
             ];
         });
-        decorationIdsRef.current = editorRef.current.deltaDecorations(decorationIdsRef.current, decorations);
-    }, [monaco, conflicts]);
+        decorationIdsRef.current = editor.deltaDecorations(decorationIdsRef.current, decorations);
+
+        // Hide lines outside the active conflict
+        const active = conflicts[activeConflictIdx];
+        if (active && totalLines > 0) {
+            const CONTEXT_LINES = 8;
+            const showStart = Math.max(1, active.startLine - CONTEXT_LINES);
+            const showEnd = Math.min(totalLines, active.endLine + CONTEXT_LINES);
+
+            const hiddenAreas = [];
+            if (showStart > 1) {
+                hiddenAreas.push(new monaco.Range(1, 1, showStart - 1, 1));
+            }
+            if (showEnd < totalLines) {
+                hiddenAreas.push(new monaco.Range(showEnd + 1, 1, totalLines, 1));
+            }
+            editor.setHiddenAreas(hiddenAreas);
+            // Re-center around the conflict
+            editor.revealLineInCenterIfOutsideViewport(active.startLine);
+        } else {
+            editor.setHiddenAreas([]);
+        }
+
+    }, [monaco, conflicts, activeConflictIdx, isEditorReady]);
 
     const handleEditorMount = (editor: any) => {
         editorRef.current = editor;
+        setIsEditorReady(true);
     };
 
     const scrollToConflict = (idx: number) => {
-        const c = conflicts[idx];
-        if (!c || !editorRef.current) return;
-        editorRef.current.revealLineInCenter(c.startLine);
         setActiveConflictIdx(idx);
     };
 
     const resolveConflict = (block: ConflictBlock, choice: 'current' | 'incoming' | 'both') => {
-        const text = editorRef.current.getValue();
+        if (!editorRef.current) return;
+        const editor = editorRef.current;
+        const text = editor.getValue();
         const lines = text.split('\n');
         const before = lines.slice(0, block.startLine - 1);
         const after = lines.slice(block.endLine);
@@ -161,12 +193,31 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
             ];
         }
         const newText = [...before, ...resolvedLines, ...after].join('\n');
+        
+        // Preserve undo stack by using executeEdits
+        const fullRange = editor.getModel().getFullModelRange();
+        editor.pushUndoStop();
+        editor.executeEdits('resolver', [{
+            range: fullRange,
+            text: newText,
+            forceMoveMarkers: true
+        }]);
+        editor.pushUndoStop();
+
         const newConflicts = parseConflictBlocks(newText);
-        // Update Monaco model imperatively so decorations are applied against the correct content
-        editorRef.current.setValue(newText);
         setFileContent(newText);
         setConflicts(newConflicts);
         setActiveConflictIdx(prev => Math.max(0, Math.min(prev, newConflicts.length - 1)));
+    };
+
+    const handleUndo = () => {
+        if (editorRef.current) {
+            editorRef.current.trigger('keyboard', 'undo', null);
+        }
+    };
+
+    const handleResetContent = () => {
+        loadContent();
     };
 
     const handleSaveAndAdd = async () => {
@@ -211,6 +262,15 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <div className="flex bg-slate-800/80 rounded border border-slate-700/50 px-1 py-1 gap-1 h-full">
+                        <button onClick={handleUndo} title="Deshacer última acción (Ctrl+Z)" className="px-2 text-slate-400 hover:text-white hover:bg-slate-700/60 rounded transition-colors flex items-center gap-1.5 text-[10px] font-bold">
+                            <Undo size={12} /> Deshacer
+                        </button>
+                        <button onClick={handleResetContent} title="Restaurar a original" className="px-2 text-slate-400 hover:text-white hover:bg-slate-700/60 rounded transition-colors flex items-center gap-1.5 text-[10px] font-bold">
+                            <RotateCcw size={12} /> Reiniciar archivo
+                        </button>
+                    </div>
+
                     {remainingConflicts > 0 ? (
                         <span className="text-xs font-bold text-orange-400 flex items-center bg-orange-500/10 px-2 py-1 rounded border border-orange-500/20">
                             <AlertCircle size={12} className="mr-1" />

@@ -51,7 +51,7 @@ App.tsx
 - `gitConfig` – provider/URL/token for GitHub/GitLab/Bitbucket
 - `savedCommands`, `savedCommandSteps` – named reusable shell commands
 
-**`ServiceManager`** orchestrates the layout: a sidebar nav + one of 7 content panels based on `activeView`:
+**`ServiceManager`** orchestrates the layout: a sidebar nav + one of 13 content panels based on `activeView`:
 
 | View | Panel | Purpose |
 |---|---|---|
@@ -62,6 +62,14 @@ App.tsx
 | `processes` | ProcessesPanel | Netstat-based listening ports viewer |
 | `proxy` | ProxyPanel | Axum-based reverse proxy |
 | `fileServer` | FileServerPanel | Axum-based static file server |
+| `tests` | TestsPanel | Run and view test results |
+| `sonar` | SonarPanel | SonarQube integration |
+| `cloudwatch` | CloudWatchPanel | AWS CloudWatch logs viewer |
+| `http` | HttpPanel | HTTP client with Postman import and collection sidebar |
+| `jenkins` | JenkinsPanel | Jenkins CI/CD integration |
+| `lib-cipher` | LibCipherPanel | Encryption/decryption utilities |
+
+**Git state** is managed by a separate Zustand store at `src/stores/gitStore.ts` (with `persist` + `devtools` middleware), keyed by repo path. It holds branches, status files, timeline commits, and loading/error states per repo. Stale times: status 30s, branches/timeline 60s. Git panel components read from this store rather than `WorkspaceContext`.
 
 ### Backend (`src-tauri/src/`)
 
@@ -91,22 +99,53 @@ App.tsx
 ### Frontend Component Structure
 
 ```
-src/components/
-├── layout/
-│   ├── Sidebar.tsx        # Icon nav (7 views)
-│   └── Header.tsx         # Workspace path + config save/load
-├── services/
-│   ├── ProjectListPane.tsx
-│   ├── MultiExecutionBar.tsx
-│   ├── TerminalTabsBar.tsx
-│   └── TerminalArea.tsx
-├── ui/                    # Button, Checkbox, IconButton, Select
-├── GitPanel.tsx + Git*.tsx  # Full git workflow UI
-├── JiraPanel.tsx
-├── ProxyPanel.tsx
-├── FileServerPanel.tsx
-├── CommandsPanel.tsx
-└── ServiceManager.tsx     # Top-level workspace layout
+src/
+├── components/
+│   ├── layout/
+│   │   ├── Sidebar.tsx        # Icon nav (13 views)
+│   │   └── Header.tsx         # Workspace path + config save/load
+│   ├── services/
+│   │   ├── ProjectListPane.tsx
+│   │   ├── MultiExecutionBar.tsx
+│   │   ├── TerminalTabsBar.tsx
+│   │   ├── TerminalArea.tsx
+│   │   └── CommandBuilderModal.tsx
+│   ├── http/                  # Full HTTP client
+│   │   ├── HttpPanel.tsx
+│   │   ├── CollectionSidebar.tsx
+│   │   ├── RequestUrlBar.tsx
+│   │   ├── RequestConfigPanel.tsx
+│   │   ├── ResponsePanel.tsx
+│   │   ├── PostmanImporter.ts
+│   │   ├── CurlParser.ts
+│   │   ├── HttpClientState.ts
+│   │   ├── useHttpState.ts
+│   │   └── EnvironmentManager.tsx
+│   ├── lib-cipher/            # Encryption tools
+│   │   ├── LibCipherCipherTab.tsx
+│   │   ├── LibCipherJsonTab.tsx
+│   │   └── LibCipherKeysPanel.tsx
+│   ├── ui/                    # Button, Checkbox, IconButton, Select
+│   ├── GitPanel.tsx + Git*.tsx + GitConsole.tsx + GitConflict*.tsx
+│   ├── SsmTerminal.tsx        # AWS SSM session terminal
+│   ├── CloudWatchPanel.tsx
+│   ├── EC2Panel.tsx
+│   ├── JenkinsPanel.tsx
+│   ├── JiraPanel.tsx
+│   ├── SonarPanel.tsx
+│   ├── TestsPanel.tsx
+│   ├── ProxyPanel.tsx
+│   ├── FileServerPanel.tsx
+│   ├── CommandsPanel.tsx
+│   └── ServiceManager.tsx     # Top-level workspace layout
+├── context/
+│   └── WorkspaceContext.tsx
+├── stores/
+│   └── gitStore.ts            # Zustand store for git state
+└── services/                  # External API clients
+    ├── githubApi.ts
+    ├── cloudwatchApi.ts
+    └── jenkinsApi.ts
 ```
 
 ### Styling

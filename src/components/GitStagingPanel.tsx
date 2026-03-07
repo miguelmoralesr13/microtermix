@@ -321,7 +321,6 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     }, [commitMessage, projectPath, isAnythingStaged, invalidate, fetchStatus, fetchTimeline]);
 
     const handleAbortMerge = useCallback(async () => {
-        if (!confirm('Are you sure you want to abort the merge? This will discard all uncommitted changes.')) return;
         try {
             const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
             if (!res.success) {
