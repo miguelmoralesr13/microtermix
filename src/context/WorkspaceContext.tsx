@@ -5,9 +5,10 @@ import type { CommandStep } from '../types/commands';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import type { NexusWorkspaceConfig } from '../types/workspaceConfig';
-import { applyWorkspaceConfigToStorage } from '../types/workspaceConfig';
+import { applyWorkspaceConfigToStorage, resolveFolderNameToPath } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
+import { useGitStore } from '../stores/gitStore';
 
 export interface Project {
     name: String;
@@ -27,19 +28,12 @@ export interface ProcessState {
     restarts?: number;
 }
 
-export interface GitConfig {
-    provider: 'gitlab' | 'github' | 'bitbucket' | 'none';
-    url: string;
-    token: string;
-}
-
 export interface WorkspaceState {
     currentPath: string;
     projects: Project[];
     activeProcesses: Record<string, ProcessState>;
     activeView: AppView;
     targetTerminalTab: string | null;
-    gitConfig: GitConfig;
     /** Se incrementa al aplicar una config cargada; ServiceManager relee localStorage cuando cambia */
     configAppliedTrigger: number;
     savedCommands: Record<string, string>;
@@ -59,7 +53,6 @@ interface WorkspaceContextType {
     appendProcessLog: (serviceId: string, logLine: string) => void;
     setActiveView: (view: AppView) => void;
     setTargetTerminalTab: (tabId: string | null) => void;
-    setGitConfig: (config: GitConfig) => void;
     addSavedCommand: (name: string, command: string, steps?: CommandStep[]) => void;
     removeSavedCommand: (name: string) => void;
     /**
@@ -84,15 +77,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         const savedSettings = localStorage.getItem('nexus-workspace-settings');
         let currentPath = '';
 
-        let gitConfig: GitConfig = { provider: 'none', url: '', token: '' };
-        const savedGitSettings = localStorage.getItem('nexus-git-settings');
-        if (savedGitSettings) {
-            try {
-                const parsed = JSON.parse(savedGitSettings);
-                gitConfig = parsed;
-            } catch (e) { }
-        }
-
         let savedCommands: Record<string, string> = {};
         let savedCommandSteps: Record<string, CommandStep[]> = {};
 
@@ -111,16 +95,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             activeProcesses: {},
             activeView: 'services',
             targetTerminalTab: null,
-            gitConfig,
             savedCommands,
             savedCommandSteps,
             configAppliedTrigger: 0
         };
     });
-
-    React.useEffect(() => {
-        localStorage.setItem('nexus-git-settings', JSON.stringify(state.gitConfig));
-    }, [state.gitConfig]);
 
     // Persist savedCommands and savedCommandSteps whenever they change
     React.useEffect(() => {
@@ -154,10 +133,30 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setState(prev => ({
             ...prev,
             configAppliedTrigger: prev.configAppliedTrigger + 1,
-            ...(config.gitConfig != null && { gitConfig: config.gitConfig as GitConfig }),
             ...(config.savedCommands != null && { savedCommands: config.savedCommands }),
             ...(config.savedCommandSteps != null && { savedCommandSteps: config.savedCommandSteps }),
         }));
+
+        // Cargar cuentas en gitStore
+        const gitStore = useGitStore.getState();
+        if (config.gitAccounts && config.gitAccounts.length > 0) {
+            config.gitAccounts.forEach(a => {
+                const exists = gitStore.accounts.find(x => x.id === a.id);
+                if (exists) {
+                    gitStore.updateAccount(a.id, a);
+                } else {
+                    useGitStore.setState(s => ({
+                        accounts: [...s.accounts.filter(x => x.id !== a.id), a],
+                    }));
+                }
+            });
+        }
+        if (config.repoAccounts) {
+            Object.entries(config.repoAccounts).forEach(([folderName, accountId]) => {
+                const fullPath = resolveFolderNameToPath(folderName, projectPaths);
+                if (fullPath) gitStore.setRepoAccount(fullPath, accountId);
+            });
+        }
     }, []);
 
     const scanWorkspace = async (path: string): Promise<Project[]> => {
@@ -290,10 +289,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setState(prev => ({ ...prev, targetTerminalTab: tabId }));
     };
 
-    const setGitConfig = (config: GitConfig) => {
-        setState(prev => ({ ...prev, gitConfig: config }));
-    };
-
     const addSavedCommand = (name: string, command: string, steps?: CommandStep[]) => {
         setState(prev => ({
             ...prev,
@@ -385,10 +380,30 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     }, [updateProcessStatus, state.savedCommands]);
 
+    // Migración one-time desde gitConfig legacy (nexus-git-settings en localStorage)
+    React.useEffect(() => {
+        const store = useGitStore.getState();
+        if (store.accounts.length > 0) return; // ya migrado
+        try {
+            const raw = localStorage.getItem('nexus-git-settings');
+            if (!raw) return;
+            const cfg = JSON.parse(raw);
+            if (cfg?.provider && cfg.provider !== 'none' && cfg.token) {
+                store.addAccount({
+                    alias: `Default ${cfg.provider === 'github' ? 'GitHub' : 'GitLab'}`,
+                    provider: cfg.provider as 'github' | 'gitlab',
+                    url: cfg.url || (cfg.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
+                    token: cfg.token,
+                });
+                localStorage.removeItem('nexus-git-settings');
+            }
+        } catch (_) {}
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     return (
         <WorkspaceContext.Provider value={{
             state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow,
-            updateProcessStatus, appendProcessLog, setActiveView, setTargetTerminalTab, setGitConfig,
+            updateProcessStatus, appendProcessLog, setActiveView, setTargetTerminalTab,
             executeProjectScript, addSavedCommand, removeSavedCommand
         }}>
             {children}
