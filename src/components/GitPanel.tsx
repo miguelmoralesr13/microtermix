@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Settings, RefreshCw, Github, Gitlab } from 'lucide-react';
+import { Settings, RefreshCw, Github, Gitlab, Download } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
@@ -14,6 +14,7 @@ import { GitInitPanel } from './GitInitPanel';
 import { GitConflictModal } from './GitConflictModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { AccountManagerModal } from './AccountManagerModal';
+import { CloneRepoModal } from './CloneRepoModal';
 
 function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
     if (!remoteUrl) return null;
@@ -45,6 +46,7 @@ export const GitPanel: React.FC = () => {
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+    const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
     const [detectedAccounts, setDetectedAccounts] = useState<typeof accounts>([]);
     const activeAccount = ui.activeTab ? getActiveAccount(ui.activeTab) : undefined;
@@ -147,6 +149,15 @@ export const GitPanel: React.FC = () => {
                             <RefreshCw size={10} className="animate-spin" /> Actualizando...
                         </span>
                     )}
+                    {/* Clone button */}
+                    <button
+                        onClick={() => setIsCloneModalOpen(true)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 transition-colors mr-1 text-slate-300"
+                        title="Clonar repositorio"
+                    >
+                        <Download size={11} />
+                        <span>Clonar</span>
+                    </button>
                     {/* Badge de cuenta activa */}
                     {ui.activeTab && (
                         <button
@@ -291,6 +302,12 @@ export const GitPanel: React.FC = () => {
                 <AccountManagerModal
                     repoPath={ui.activeTab}
                     onClose={() => setIsAccountModalOpen(false)}
+                />
+            )}
+
+            {isCloneModalOpen && (
+                <CloneRepoModal
+                    onClose={() => setIsCloneModalOpen(false)}
                 />
             )}
 

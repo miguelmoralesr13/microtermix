@@ -3,6 +3,46 @@ import { invoke } from '@tauri-apps/api/core';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 
+export interface GithubRepo {
+    id: number;
+    name: string;
+    full_name: string;
+    description: string | null;
+    html_url: string;
+    clone_url: string;
+    ssh_url: string;
+    private: boolean;
+    language: string | null;
+    stargazers_count: number;
+    updated_at: string;
+    fork: boolean;
+}
+
+export async function fetchUserGithubRepos(apiUrl: string, token: string): Promise<GithubRepo[]> {
+    const base = apiUrl || GITHUB_API_BASE;
+    const response = await fetch(`${base}/user/repos?type=all&sort=updated&per_page=50`, {
+        headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${token}`,
+        },
+    });
+    if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+    return response.json();
+}
+
+export async function searchGithubRepos(apiUrl: string, token: string, query: string): Promise<GithubRepo[]> {
+    const base = apiUrl || GITHUB_API_BASE;
+    const response = await fetch(`${base}/search/repositories?q=${encodeURIComponent(query)}&per_page=30`, {
+        headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${token}`,
+        },
+    });
+    if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+    const data = await response.json();
+    return data.items as GithubRepo[];
+}
+
 export interface GithubPR {
     id: number;
     number: number;

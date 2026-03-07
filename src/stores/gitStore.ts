@@ -66,6 +66,16 @@ export interface GitAccount {
     token: string;
 }
 
+export interface CloneFavorite {
+    id: string; // full_name or path_with_namespace
+    name: string;
+    fullName: string;
+    cloneUrl: string;
+    htmlUrl: string;
+    provider: 'github' | 'gitlab';
+    private: boolean;
+}
+
 export interface GitUi {
     activeTab: string | null;
     sidebarWidth: number;
@@ -86,6 +96,10 @@ interface GitStore {
     removeAccount:    (id: string) => void;
     setRepoAccount:   (repoPath: string, accountId: string | null) => void;
     getActiveAccount: (repoPath: string) => GitAccount | undefined;
+
+    cloneFavorites: CloneFavorite[];
+    addCloneFavorite: (f: CloneFavorite) => void;
+    removeCloneFavorite: (id: string) => void;
 
     setUi: (patch: Partial<GitUi>) => void;
     ensureRepo: (path: string) => void;
@@ -199,6 +213,7 @@ export const useGitStore = create<GitStore>()(
 
                 accounts: [],
                 repoAccounts: {},
+                cloneFavorites: [],
 
                 addAccount: (a) => {
                     const id = crypto.randomUUID();
@@ -237,6 +252,18 @@ export const useGitStore = create<GitStore>()(
                     const s = get();
                     const id = s.repoAccounts[repoPath];
                     return id ? s.accounts.find(a => a.id === id) : undefined;
+                },
+
+                addCloneFavorite: (f) => {
+                    set(s => ({
+                        cloneFavorites: s.cloneFavorites.some(x => x.id === f.id)
+                            ? s.cloneFavorites
+                            : [...s.cloneFavorites, f],
+                    }));
+                },
+
+                removeCloneFavorite: (id) => {
+                    set(s => ({ cloneFavorites: s.cloneFavorites.filter(f => f.id !== id) }));
                 },
 
                 setUi: (patch) => set(s => ({ ui: { ...s.ui, ...patch } })),
@@ -359,6 +386,7 @@ export const useGitStore = create<GitStore>()(
                 name: 'nexus-git-store',
                 partialize: (s) => ({
                     ui: s.ui,
+                    cloneFavorites: s.cloneFavorites,
                     repos: Object.fromEntries(
                         Object.entries(s.repos).map(([k, v]) => [
                             k,
