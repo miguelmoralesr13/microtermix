@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
-import { useWorkspace } from '../context/WorkspaceContext';
 import { useGitStore, EMPTY_REPO_DATA, RawCommit } from '../stores/gitStore';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -147,8 +146,9 @@ function computeGraph(commits: RawCommit[]): { nodes: GraphNode[], edges: GraphE
 type Filter = 'all' | 'mine' | 'merges' | 'tags';
 
 export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitSelect }) => {
-    const { state } = useWorkspace();
     const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+    const activeAccount = getActiveAccount(projectPath);
     const fetchTimeline = useGitStore(s => s.fetchTimeline);
     const invalidate = useGitStore(s => s.invalidate);
 
@@ -180,8 +180,8 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     // Fetch GitHub CI Statuses — deferred so the timeline renders first before network calls start
     useEffect(() => {
         if (rawCommits.length > 0) {
-            const token = state.gitConfig.token;
-            if (token && state.gitConfig.provider === 'github') {
+            const token = activeAccount?.token;
+            if (token && activeAccount?.provider === 'github') {
                 // Only check top 5 commits to reduce concurrent fetch calls
                 const topHashes = rawCommits.slice(0, 5).map(c => c.hash);
                 const timer = setTimeout(() => {
@@ -204,7 +204,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                 return () => clearTimeout(timer);
             }
         }
-    }, [rawCommits, projectPath, state.gitConfig.token, state.gitConfig.provider]);
+    }, [rawCommits, projectPath, activeAccount?.token, activeAccount?.provider]);
 
     const visibleCommits = useMemo(() =>
         timelineView === 'local'

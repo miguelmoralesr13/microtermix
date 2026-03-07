@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useWorkspace } from '../context/WorkspaceContext';
-import { GitBranch, GitCommit, AlertTriangle, ChevronRight, Github, Gitlab, Server } from 'lucide-react';
+import { useGitStore } from '../stores/gitStore';
+import { GitBranch, GitCommit, AlertTriangle, ChevronRight, Github, Gitlab } from 'lucide-react';
 
 interface GitInitPanelProps {
     projectPath: string;
@@ -10,14 +10,16 @@ interface GitInitPanelProps {
 }
 
 export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initialStep, onInitialized }) => {
-    const { state } = useWorkspace();
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+    const activeAccount = getActiveAccount(projectPath);
+    const activeProvider = activeAccount?.provider ?? 'none';
     const [step, setStep] = useState<1 | 2>(initialStep || 1);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Step 2 Fields
     const [gitignoreContent, setGitignoreContent] = useState('node_modules/\ndist/\nbuild/\ntarget/\n.env\n.DS_Store\n');
-    const [remoteType, setRemoteType] = useState<'provider' | 'custom'>(state.gitConfig.provider !== 'none' ? 'provider' : 'custom');
+    const [remoteType, setRemoteType] = useState<'provider' | 'custom'>(activeProvider !== 'none' ? 'provider' : 'custom');
     const [providerRepoName, setProviderRepoName] = useState(''); // E.g. "username/repo"
     const [customRemoteUrl, setCustomRemoteUrl] = useState('');
     const [commitMessage, setCommitMessage] = useState('Initial commit');
@@ -63,11 +65,10 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
             // 5. Add remote if provided
             let finalOutputUrl = '';
             if (remoteType === 'provider' && providerRepoName.trim()) {
-                const provider = state.gitConfig.provider;
+                const provider = activeProvider;
                 let baseUrl = '';
                 if (provider === 'github') baseUrl = 'github.com';
                 else if (provider === 'gitlab') baseUrl = 'gitlab.com';
-                else if (provider === 'bitbucket') baseUrl = 'bitbucket.org';
 
                 if (baseUrl) {
                     let cleanRepo = providerRepoName.trim();
@@ -154,12 +155,12 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                                 <label className="block text-sm font-medium text-slate-300 mb-3">Add Remote Origin (Optional)</label>
 
                                 <div className="flex bg-slate-900 p-1 rounded-lg mb-4 w-fit">
-                                    {state.gitConfig.provider !== 'none' && (
+                                    {activeProvider !== 'none' && (
                                         <button
                                             onClick={() => setRemoteType('provider')}
                                             className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${remoteType === 'provider' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
                                         >
-                                            Use {state.gitConfig.provider === 'github' ? 'GitHub' : state.gitConfig.provider === 'gitlab' ? 'GitLab' : 'Provider'}
+                                            Use {activeProvider === 'github' ? 'GitHub' : activeProvider === 'gitlab' ? 'GitLab' : 'Provider'}
                                         </button>
                                     )}
                                     <button
@@ -170,13 +171,12 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                                     </button>
                                 </div>
 
-                                {remoteType === 'provider' && state.gitConfig.provider !== 'none' ? (
+                                {remoteType === 'provider' && activeProvider !== 'none' ? (
                                     <div className="flex flex-col space-y-2">
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                {state.gitConfig.provider === 'github' && <Github size={16} className="text-slate-500" />}
-                                                {state.gitConfig.provider === 'gitlab' && <Gitlab size={16} className="text-slate-500" />}
-                                                {state.gitConfig.provider === 'bitbucket' && <Server size={16} className="text-slate-500" />}
+                                                {activeProvider === 'github' && <Github size={16} className="text-slate-500" />}
+                                                {activeProvider === 'gitlab' && <Gitlab size={16} className="text-slate-500" />}
                                             </div>
                                             <input
                                                 type="text"
@@ -188,7 +188,7 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                                         </div>
                                         {providerRepoName && (
                                             <p className="text-[10px] text-slate-500 font-mono pl-1 break-all">
-                                                Will use: {providerRepoName.trim().startsWith('http') || providerRepoName.trim().startsWith('git@') ? providerRepoName.trim() : `https://${state.gitConfig.provider === 'github' ? 'github.com' : state.gitConfig.provider === 'gitlab' ? 'gitlab.com' : 'bitbucket.org'}/${providerRepoName.trim().replace('.git', '')}.git`}
+                                                Will use: {providerRepoName.trim().startsWith('http') || providerRepoName.trim().startsWith('git@') ? providerRepoName.trim() : `https://${activeProvider === 'github' ? 'github.com' : activeProvider === 'gitlab' ? 'gitlab.com' : 'bitbucket.org'}/${providerRepoName.trim().replace('.git', '')}.git`}
                                             </p>
                                         )}
                                     </div>

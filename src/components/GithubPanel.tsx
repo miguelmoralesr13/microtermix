@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { GithubPR, GithubIssue, fetchGithubPRs, fetchGithubIssues } from '../services/githubApi';
 import { CircleDot, GitPullRequest, RefreshCw, ExternalLink } from 'lucide-react';
-import { useWorkspace } from '../context/WorkspaceContext';
+import { useGitStore } from '../stores/gitStore';
 
 interface GithubPanelProps {
     projectPath: string | null;
 }
 
 export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
-    const { state } = useWorkspace();
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+    const activeAccount = projectPath ? getActiveAccount(projectPath) : undefined;
     const [activeTab, setActiveTab] = useState<'prs' | 'issues'>('prs');
     const [prs, setPrs] = useState<GithubPR[]>([]);
     const [issues, setIssues] = useState<GithubIssue[]>([]);
@@ -20,7 +21,7 @@ export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
         setLoading(true);
         setError(null);
         try {
-            const token = state.gitConfig.token || '';
+            const token = activeAccount?.token || '';
             if (activeTab === 'prs') {
                 const data = await fetchGithubPRs(projectPath, token);
                 setPrs(data);
@@ -37,7 +38,7 @@ export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
 
     useEffect(() => {
         loadData();
-    }, [projectPath, activeTab, state.gitConfig.token]);
+    }, [projectPath, activeTab, activeAccount?.token]);
 
     if (!projectPath) {
         return <div className="flex-1 flex items-center justify-center text-slate-500 p-8">No repository selected.</div>;

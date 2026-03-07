@@ -13,6 +13,7 @@ import { CommitDiffModal } from './CommitDiffModal';
 import { GitInitPanel } from './GitInitPanel';
 import { GitConflictModal } from './GitConflictModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
+import { AccountManagerModal } from './AccountManagerModal';
 
 function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
     if (!remoteUrl) return null;
@@ -286,8 +287,12 @@ export const GitPanel: React.FC = () => {
                 />
             )}
 
-            {/* AccountManagerModal — placeholder until Task 7 */}
-            {isAccountModalOpen && null}
+            {isAccountModalOpen && (
+                <AccountManagerModal
+                    repoPath={ui.activeTab}
+                    onClose={() => setIsAccountModalOpen(false)}
+                />
+            )}
 
             {isConflictModalOpen && repoData.status.isMergeInProgress && ui.activeTab && (
                 <GitConflictModal
