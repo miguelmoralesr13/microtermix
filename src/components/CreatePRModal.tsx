@@ -1,5 +1,73 @@
-import React, { useState } from 'react';
-import { X, GitPullRequest, ChevronDown, ChevronRight, RefreshCw, ExternalLink } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, GitPullRequest, ChevronDown, ChevronRight, RefreshCw, ExternalLink, GitBranch } from 'lucide-react';
+
+// ── Searchable branch selector ─────────────────────────────────────────────────
+
+interface BranchSelectProps {
+    value: string;
+    options: string[];
+    onChange: (v: string) => void;
+    placeholder?: string;
+}
+
+const BranchSelect: React.FC<BranchSelectProps> = ({ value, options, onChange, placeholder }) => {
+    const [query, setQuery] = useState('');
+    const [open, setOpen] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    const filtered = query.trim()
+        ? options.filter(b => b.toLowerCase().includes(query.toLowerCase()))
+        : options;
+
+    const select = (branch: string) => {
+        onChange(branch);
+        setQuery('');
+        setOpen(false);
+        inputRef.current?.blur();
+    };
+
+    return (
+        <div className="relative">
+            <div className={`flex items-center gap-1.5 bg-slate-950 border rounded-lg px-2.5 py-1.5 transition-colors ${open ? 'border-purple-500' : 'border-slate-700'}`}>
+                <GitBranch size={11} className="text-slate-500 shrink-0" />
+                <input
+                    ref={inputRef}
+                    value={open ? query : value}
+                    onChange={e => setQuery(e.target.value)}
+                    onFocus={() => { setOpen(true); setQuery(''); }}
+                    onBlur={() => { setTimeout(() => setOpen(false), 100); }}
+                    onKeyDown={e => {
+                        if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur(); }
+                        if (e.key === 'Enter' && filtered.length > 0) { e.preventDefault(); select(filtered[0]); }
+                    }}
+                    placeholder={open ? 'Buscar rama...' : placeholder}
+                    className="flex-1 bg-transparent text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none min-w-0"
+                />
+                <ChevronDown size={11} className={`text-slate-500 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </div>
+
+            {open && (
+                <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-slate-900 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto scrollbar-hide">
+                    {filtered.length === 0 ? (
+                        <div className="px-3 py-2 text-[11px] text-slate-600 italic">Sin resultados</div>
+                    ) : (
+                        filtered.map(b => (
+                            <div
+                                key={b}
+                                onMouseDown={() => select(b)}
+                                className={`flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors ${b === value ? 'bg-purple-900/30 text-purple-300' : 'text-slate-300 hover:bg-slate-800'}`}
+                            >
+                                <GitBranch size={10} className="text-slate-500 shrink-0" />
+                                <span className="truncate">{b}</span>
+                                {b === value && <span className="ml-auto text-[9px] text-purple-400">activa</span>}
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
 import { createGithubPR } from '../services/githubApi';
 import { createGitlabMR } from '../services/gitlabApi';
 import type { GitAccount } from '../stores/gitStore';
@@ -128,31 +196,25 @@ export const CreatePRModal: React.FC<CreatePRModalProps> = ({
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1">
                                 <label className="text-xs font-medium text-slate-400">Rama origen <span className="text-red-400">*</span></label>
-                                <select
+                                <BranchSelect
                                     value={head}
-                                    onChange={e => {
-                                        const newHead = e.target.value;
+                                    options={allBranches}
+                                    onChange={newHead => {
                                         setHead(newHead);
-                                        // If the new head matches the current base, pick a different base
                                         if (newHead === base) {
                                             const fallback = allBranches.find(b => b !== newHead) ?? '';
                                             setBase(fallback);
                                         }
                                     }}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 transition-colors"
-                                >
-                                    {allBranches.map(b => <option key={b} value={b}>{b}</option>)}
-                                </select>
+                                />
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs font-medium text-slate-400">Rama destino <span className="text-red-400">*</span></label>
-                                <select
+                                <BranchSelect
                                     value={base}
-                                    onChange={e => setBase(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500 transition-colors"
-                                >
-                                    {allBranches.filter(b => b !== head).map(b => <option key={b} value={b}>{b}</option>)}
-                                </select>
+                                    options={allBranches.filter(b => b !== head)}
+                                    onChange={setBase}
+                                />
                             </div>
                         </div>
 

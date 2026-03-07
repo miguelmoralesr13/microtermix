@@ -66,7 +66,8 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [cloningId, setCloningId] = useState<string | null>(null);
-    const [cloneSuccess, setCloneSuccess] = useState<string | null>(null);
+    const [clonedIds, setClonedIds] = useState<Set<string>>(new Set());
+    const [cloneTargetName, setCloneTargetName] = useState<string>('');
     const searchRef = useRef<HTMLInputElement>(null);
 
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -109,19 +110,47 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
         }
     };
 
-    const handleClone = async (repo: NormalizedRepo) => {
+    const buildAuthenticatedUrl = (cloneUrl: string, account: typeof selectedAccount): string => {
+        if (!account?.token) return cloneUrl;
+        try {
+            const parsed = new URL(cloneUrl);
+            if (account.provider === 'github') {
+                parsed.username = account.token;
+            } else {
+                // GitLab uses oauth2 as username with token as password
+                parsed.username = 'oauth2';
+                parsed.password = account.token;
+            }
+            return parsed.toString();
+        } catch {
+            return cloneUrl;
+        }
+    };
+
+    const handleClone = async (repo: NormalizedRepo, targetName?: string) => {
         if (!state.currentPath) return;
         setCloningId(repo.id);
-        setCloneSuccess(null);
+        setError(null);
+        const folderName = (targetName || repo.name).trim();
         try {
+            const authUrl = buildAuthenticatedUrl(repo.cloneUrl, selectedAccount);
+            const args = ['clone', authUrl];
+            if (folderName && folderName !== repo.name) args.push(folderName);
             const res: any = await invoke('git_execute', {
                 projectPath: state.currentPath,
-                args: ['clone', repo.cloneUrl],
+                args,
             });
-            if (!res.success) throw new Error(res.stderr || 'Clone failed');
-            setCloneSuccess(repo.fullName);
+            if (!res.success) {
+                const msg: string = res.stderr || res.stdout || '';
+                if (msg.toLowerCase().includes('already exists')) {
+                    throw new Error(`El directorio "${folderName}" ya existe. Cambia el nombre de destino.`);
+                }
+                throw new Error(msg || 'Clone failed');
+            }
+            setClonedIds(prev => new Set(prev).add(repo.id));
+            setCloneTargetName('');
         } catch (e: any) {
-            setError(`Clone failed: ${e.message}`);
+            setError(e.message);
         } finally {
             setCloningId(null);
         }
@@ -225,9 +254,20 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                         </button>
                     </div>
 
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-500 shrink-0">Nombre:</label>
+                        <input
+                            type="text"
+                            value={cloneTargetName}
+                            onChange={e => setCloneTargetName(e.target.value)}
+                            placeholder="nombre-carpeta (opcional, por defecto: nombre del repo)"
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                        />
+                    </div>
                     {state.currentPath && (
-                        <p className="text-[10px] text-slate-600 font-mono truncate">
-                            Se clonará en: {state.currentPath}
+                        <p className="text-[10px] text-slate-600 font-mono" title={state.currentPath}>
+                            <span className="text-slate-700">en: </span>
+                            <span className="text-slate-500">…/{state.currentPath.replace(/\\/g, '/').split('/').slice(-2).join('/')}</span>
                         </p>
                     )}
                 </div>
@@ -242,11 +282,15 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                         </div>
                     )}
 
-                    {/* Clone success */}
-                    {cloneSuccess && (
-                        <div className="flex items-center gap-2 p-3 rounded-lg bg-green-900/20 border border-green-900/40 text-green-400 text-xs">
-                            <Download size={13} />
-                            <span>Clonado correctamente: <strong>{cloneSuccess}</strong></span>
+                    {/* Clone successes */}
+                    {clonedIds.size > 0 && (
+                        <div className="p-3 rounded-lg bg-green-900/20 border border-green-900/40 text-green-400 text-xs space-y-1">
+                            {[...clonedIds].map(id => (
+                                <div key={id} className="flex items-center gap-2">
+                                    <Download size={11} className="shrink-0" />
+                                    <span className="truncate">{id}</span>
+                                </div>
+                            ))}
                         </div>
                     )}
 
@@ -274,6 +318,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                                         }}
                                         isFav={true}
                                         isCloning={cloningId === fav.id}
+                                        isCloned={clonedIds.has(fav.id)}
                                         onToggleFav={() => removeCloneFavorite(fav.id)}
                                         onClone={() => handleClone({
                                             id: fav.id,
@@ -286,7 +331,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                                             language: null,
                                             stars: 0,
                                             provider: fav.provider,
-                                        })}
+                                        }, cloneTargetName)}
                                     />
                                 ))}
                             </div>
@@ -312,8 +357,9 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                                         repo={repo}
                                         isFav={isFav(repo.id)}
                                         isCloning={cloningId === repo.id}
+                                        isCloned={clonedIds.has(repo.id)}
                                         onToggleFav={() => toggleFav(repo)}
-                                        onClone={() => handleClone(repo)}
+                                        onClone={() => handleClone(repo, cloneTargetName)}
                                     />
                                 ))}
                             </div>
@@ -338,72 +384,81 @@ interface RepoCardProps {
     repo: NormalizedRepo;
     isFav: boolean;
     isCloning: boolean;
+    isCloned: boolean;
     onToggleFav: () => void;
     onClone: () => void;
 }
 
-const RepoCard: React.FC<RepoCardProps> = ({ repo, isFav, isCloning, onToggleFav, onClone }) => (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-800/50 border border-slate-700/50 hover:border-slate-600 transition-colors group">
-        {/* Provider icon */}
-        <div className="shrink-0">
-            {repo.provider === 'github'
-                ? <Github size={14} className="text-slate-400" />
-                : <Gitlab size={14} className="text-orange-400" />
-            }
-        </div>
+const RepoCard: React.FC<RepoCardProps> = ({ repo, isFav, isCloning, isCloned, onToggleFav, onClone }) => {
+    // Split owner/repo for better display
+    const parts = repo.fullName.split('/');
+    const repoName = parts.pop() ?? repo.fullName;
+    const orgName = parts.join('/');
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium text-slate-200 truncate">{repo.fullName}</span>
-                {repo.isPrivate
-                    ? <Lock size={10} className="text-slate-500 shrink-0" />
-                    : <Globe size={10} className="text-slate-600 shrink-0" />
+    return (
+        <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors group ${isCloned ? 'bg-green-900/10 border-green-800/40' : 'bg-slate-800/50 border-slate-700/50 hover:border-slate-600'}`}>
+            {/* Provider icon */}
+            <div className="shrink-0">
+                {repo.provider === 'github'
+                    ? <Github size={14} className="text-slate-400" />
+                    : <Gitlab size={14} className="text-orange-400" />
                 }
-                {repo.language && (
-                    <span className="text-[10px] text-slate-500 bg-slate-700/60 px-1.5 py-0.5 rounded shrink-0">{repo.language}</span>
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-semibold text-slate-200 text-xs shrink-0 truncate max-w-[200px]">{repoName}</span>
+                    {orgName && <span className="text-[10px] text-slate-500 truncate shrink min-w-0">{orgName}/</span>}
+                    {repo.isPrivate
+                        ? <Lock size={10} className="text-slate-500 shrink-0" />
+                        : <Globe size={10} className="text-slate-600 shrink-0" />
+                    }
+                    {repo.language && (
+                        <span className="text-[10px] text-slate-500 bg-slate-700/60 px-1.5 py-0.5 rounded shrink-0">{repo.language}</span>
+                    )}
+                </div>
+                {repo.description && (
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5">{repo.description}</p>
                 )}
             </div>
-            {repo.description && (
-                <p className="text-[11px] text-slate-500 truncate mt-0.5">{repo.description}</p>
+
+            {/* Stars */}
+            {repo.stars > 0 && (
+                <div className="flex items-center gap-0.5 text-[10px] text-slate-500 shrink-0">
+                    <Star size={10} /> {repo.stars}
+                </div>
             )}
-        </div>
 
-        {/* Stars */}
-        {repo.stars > 0 && (
-            <div className="flex items-center gap-0.5 text-[10px] text-slate-500 shrink-0">
-                <Star size={10} /> {repo.stars}
+            {/* Actions */}
+            <div className="flex items-center gap-1 shrink-0">
+                <a
+                    href={repo.htmlUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Abrir en navegador"
+                    onClick={e => e.stopPropagation()}
+                >
+                    <ExternalLink size={12} />
+                </a>
+                <button
+                    onClick={onToggleFav}
+                    className={`p-1 rounded hover:bg-slate-700 transition-colors ${isFav ? 'text-yellow-400' : 'text-slate-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100'}`}
+                    title={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                >
+                    <Star size={12} className={isFav ? 'fill-yellow-400' : ''} />
+                </button>
+                <button
+                    onClick={onClone}
+                    disabled={isCloning}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors disabled:opacity-50 ${isCloned ? 'bg-green-900/20 border-green-700/40 text-green-400 hover:bg-green-900/30' : 'bg-nexus-neon/10 hover:bg-nexus-neon/20 border-nexus-neon/30 text-nexus-neon'}`}
+                    title={isCloned ? 'Clonar de nuevo' : 'Clonar'}
+                >
+                    {isCloning ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
+                    {isCloning ? 'Clonando...' : isCloned ? '✓ Clonado' : 'Clonar'}
+                </button>
             </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
-            <a
-                href={repo.htmlUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-all"
-                title="Abrir en navegador"
-                onClick={e => e.stopPropagation()}
-            >
-                <ExternalLink size={12} />
-            </a>
-            <button
-                onClick={onToggleFav}
-                className={`p-1 rounded hover:bg-slate-700 transition-colors ${isFav ? 'text-yellow-400' : 'text-slate-500 hover:text-yellow-400 opacity-0 group-hover:opacity-100'}`}
-                title={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-            >
-                <Star size={12} className={isFav ? 'fill-yellow-400' : ''} />
-            </button>
-            <button
-                onClick={onClone}
-                disabled={isCloning}
-                className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold bg-nexus-neon/10 hover:bg-nexus-neon/20 border border-nexus-neon/30 text-nexus-neon disabled:opacity-50 transition-colors"
-                title="Clonar"
-            >
-                {isCloning ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}
-                {isCloning ? 'Clonando...' : 'Clonar'}
-            </button>
         </div>
-    </div>
-);
+    );
+};

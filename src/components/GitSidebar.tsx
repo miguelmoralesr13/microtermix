@@ -257,7 +257,11 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const activeBranch = localBranches.find(b => b.active);
     const getActiveAccount = useGitStore(s => s.getActiveAccount);
     const activeAccount = getActiveAccount(projectPath);
-    const allLocalBranchNames = localBranches.map(b => b.name);
+    // Strip remote prefix (e.g. "origin/main" → "main") and merge with local for branch selectors
+    const allBranchNames = [...new Set([
+        ...localBranches.map(b => b.name),
+        ...remoteBranches.map(r => r.replace(/^[^/]+\//, '')),
+    ])].sort();
 
     return (
         <DndContext
@@ -411,7 +415,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                         projectPath={projectPath}
                         account={activeAccount}
                         activeBranch={activeBranch?.name ?? ''}
-                        branches={allLocalBranchNames}
+                        branches={allBranchNames}
                     />
 
                 </div>
