@@ -1,4 +1,6 @@
 import type { CommandStep } from './commands';
+import type { GitAccount } from '../stores/gitStore';
+import { useGitStore } from '../stores/gitStore';
 
 /**
  * Configuración del workspace que se guarda en nexus-workspace.json en la carpeta del workspace.
@@ -11,7 +13,8 @@ export interface NexusWorkspaceConfig {
     selectedProjects?: string[];
     multiScript?: string;
     globalEnvName?: string;
-    gitConfig?: { provider: string; url: string; token: string };
+    gitAccounts?:  GitAccount[];
+    repoAccounts?: Record<string, string>; // folderName → accountId
     vitePreviewOpen?: boolean;
     savedCommands?: Record<string, string>;
     savedCommandSteps?: Record<string, CommandStep[]>;
@@ -119,7 +122,6 @@ export function buildWorkspaceConfigFromCurrentState(
     selectedProjects: string[],
     multiScript: string,
     globalEnvName: string,
-    gitConfig: { provider: string; url: string; token: string },
     vitePreviewOpen: boolean,
     activeTerminalTabId: string | null,
     projectPaths: string[],
@@ -154,7 +156,11 @@ export function buildWorkspaceConfigFromCurrentState(
         selectedProjects: selectedProjects.map(getFolderName),
         multiScript,
         globalEnvName,
-        gitConfig,
+        gitAccounts: useGitStore.getState().accounts,
+        repoAccounts: Object.fromEntries(
+            Object.entries(useGitStore.getState().repoAccounts)
+                .map(([path, id]) => [getFolderName(path), id])
+        ),
         vitePreviewOpen,
         savedCommands,
         savedCommandSteps: Object.keys(savedCommandSteps).length ? savedCommandSteps : undefined,
