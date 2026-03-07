@@ -1,6 +1,10 @@
 // ── Jira REST API v3 helper ────────────────────────────────────────────────────
 
 export const JIRA_CONFIG_KEY = 'nexus-jira-config';
+export const JIRA_ACCOUNTS_KEY = 'nexus-jira-accounts';
+export const JIRA_ACTIVE_KEY = 'nexus-jira-active';
+
+// ── Multi-account types (JiraConfig declared below — TS resolves at compile time) ──
 
 // ── API Request Logger (event bus) ───────────────────────────────────────────
 export interface JiraApiLogEntry {
@@ -51,6 +55,12 @@ export interface JiraConfig {
     tempoToken: string;
 }
 
+export interface JiraAccount {
+    id: string;
+    name: string;
+    config: JiraConfig;
+}
+
 export const emptyConfig = (): JiraConfig => ({
     baseUrl: '',
     email: '',
@@ -72,17 +82,89 @@ export const emptyConfig = (): JiraConfig => ({
     tempoToken: '',
 });
 
-export function loadConfig(): JiraConfig {
+// ── Account management ────────────────────────────────────────────────────────
+
+export function loadAccounts(): JiraAccount[] {
     try {
-        const raw = localStorage.getItem(JIRA_CONFIG_KEY);
-        if (!raw) return emptyConfig();
-        return { ...emptyConfig(), ...JSON.parse(raw) };
+        const raw = localStorage.getItem(JIRA_ACCOUNTS_KEY);
+        if (raw) return JSON.parse(raw) as JiraAccount[];
+        // Migrate from old single-config format
+        const oldRaw = localStorage.getItem(JIRA_CONFIG_KEY);
+        if (oldRaw) {
+            const cfg = { ...emptyConfig(), ...JSON.parse(oldRaw) };
+            if (cfg.baseUrl) {
+                const accounts: JiraAccount[] = [{ id: crypto.randomUUID(), name: 'Default', config: cfg }];
+                localStorage.setItem(JIRA_ACCOUNTS_KEY, JSON.stringify(accounts));
+                return accounts;
+            }
+        }
+        return [];
     } catch {
-        return emptyConfig();
+        return [];
     }
 }
 
+export function saveAccounts(accounts: JiraAccount[]): void {
+    localStorage.setItem(JIRA_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+export function getActiveAccountId(): string | null {
+    return localStorage.getItem(JIRA_ACTIVE_KEY);
+}
+
+export function setActiveAccountId(id: string | null): void {
+    if (id) localStorage.setItem(JIRA_ACTIVE_KEY, id);
+    else localStorage.removeItem(JIRA_ACTIVE_KEY);
+}
+
+export function addJiraAccount(name: string, config: JiraConfig): JiraAccount {
+    const accounts = loadAccounts();
+    const newAcc: JiraAccount = { id: crypto.randomUUID(), name, config };
+    accounts.push(newAcc);
+    saveAccounts(accounts);
+    setActiveAccountId(newAcc.id);
+    return newAcc;
+}
+
+export function updateJiraAccount(id: string, patch: Partial<Pick<JiraAccount, 'name' | 'config'>>): void {
+    const accounts = loadAccounts();
+    const idx = accounts.findIndex(a => a.id === id);
+    if (idx >= 0) {
+        accounts[idx] = { ...accounts[idx], ...patch };
+        saveAccounts(accounts);
+    }
+}
+
+export function removeJiraAccount(id: string): void {
+    let accounts = loadAccounts();
+    accounts = accounts.filter(a => a.id !== id);
+    saveAccounts(accounts);
+    // If we removed the active account, switch to first remaining
+    if (getActiveAccountId() === id) {
+        setActiveAccountId(accounts[0]?.id ?? null);
+    }
+}
+
+export function loadConfig(): JiraConfig {
+    const accounts = loadAccounts();
+    const activeId = getActiveAccountId();
+    const account = accounts.find(a => a.id === activeId) ?? accounts[0];
+    return account ? { ...emptyConfig(), ...account.config } : emptyConfig();
+}
+
 export function saveConfig(cfg: JiraConfig): void {
+    const accounts = loadAccounts();
+    const activeId = getActiveAccountId();
+    const idx = accounts.findIndex(a => a.id === activeId);
+    if (idx >= 0) {
+        accounts[idx] = { ...accounts[idx], config: cfg };
+        saveAccounts(accounts);
+    } else {
+        const newAcc: JiraAccount = { id: crypto.randomUUID(), name: 'Default', config: cfg };
+        accounts.push(newAcc);
+        saveAccounts(accounts);
+        setActiveAccountId(newAcc.id);
+    }
     localStorage.setItem(JIRA_CONFIG_KEY, JSON.stringify(cfg));
 }
 
@@ -177,6 +259,28 @@ export async function getJiraMediaUrl(url: string): Promise<string> {
 
 export async function testConnection(): Promise<{ displayName: string; accountId: string; avatarUrls: Record<string, string> }> {
     return jiraFetch('/myself');
+}
+
+/** Test connection using the provided config directly (without requiring a prior save). */
+export async function testConnectionWith(cfg: JiraConfig): Promise<{ displayName: string; accountId: string; avatarUrls: Record<string, string> }> {
+    if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) {
+        throw new Error('Completa la URL base, email y API token antes de probar.');
+    }
+    const token = btoa(`${cfg.email}:${cfg.apiToken}`);
+    const fullUrl = `${cfg.baseUrl.replace(/\/$/, '')}/rest/api/3/myself`;
+    const res = await fetch(fullUrl, {
+        headers: {
+            'Authorization': `Basic ${token}`,
+            'Accept': 'application/json',
+        },
+    });
+    if (!res.ok) {
+        let text = '';
+        try { text = await res.text(); } catch { }
+        throw new Error(`Jira ${res.status}: ${text || res.statusText}`);
+    }
+    const text = await res.text();
+    return JSON.parse(text);
 }
 
 // ── Tempo REST API v4 helper ──────────────────────────────────────────────

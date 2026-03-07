@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useJiraStore } from '../stores/jiraStore';
 import {
     Settings, Plus, RefreshCw, Search, X, CheckCircle,
-    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, ChevronDown, Pin, UserCheck, Timer, Paperclip, Send
+    AlertCircle, Layers, ExternalLink, Star, ChevronRight, ChevronLeft, ChevronDown, Pin, UserCheck, Timer, Paperclip, Send,
+    Trash2, UserCircle, PlusCircle
 } from 'lucide-react';
 import {
     JiraConfig, JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
-    loadConfig, saveConfig, testConnection,
+    loadConfig, saveConfig, testConnection, testConnectionWith,
+    emptyConfig,
     statusColor,
     getProjects, getIssueTypes, getUsers, createIssue,
     getEpics, getStoriesByEpic, getTasksByStory, createSubTask, transitionIssue,
@@ -533,29 +536,6 @@ function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose: () =>
 
 // ── Stories View (3-Column Hierarchy) ────────────────────────────────────────
 
-const PINNED_EPICS_KEY = 'nexus-jira-pinned-epics';
-const PINNED_STORIES_KEY = 'nexus-jira-pinned-stories';
-const PERSIST_EPICS_KEY = 'nexus-jira-epics';
-const PERSIST_STORIES_KEY = 'nexus-jira-stories';
-const PERSIST_TASKS_KEY = 'nexus-jira-tasks';
-const PERSIST_SEL_EPIC_KEY = 'nexus-jira-sel-epic';
-const PERSIST_SEL_STORY_KEY = 'nexus-jira-sel-story';
-
-function loadPinned(key: string): string[] {
-    try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
-}
-function savePinned(key: string, keys: string[]) {
-    localStorage.setItem(key, JSON.stringify(keys));
-}
-function loadLS<T>(key: string, fallback: T): T {
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? (JSON.parse(raw) as T) : fallback;
-    } catch { return fallback; }
-}
-function saveLS(key: string, value: unknown) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch { }
-}
 
 function isReleased(issue: JiraIssue): boolean {
     const cfg = loadConfig();
@@ -1074,31 +1054,37 @@ function StoriesView() {
             .catch(() => { }); // silent — don't block the UI
     }, []);
 
-    // ── Persistent issues cache ──
-    const [epics, setEpics] = useState<JiraIssue[]>(() => loadLS<JiraIssue[]>(PERSIST_EPICS_KEY, []));
-    const [stories, setStories] = useState<JiraIssue[]>(() => loadLS<JiraIssue[]>(PERSIST_STORIES_KEY, []));
-    const [tasks, setTasks] = useState<JiraIssue[]>(() => loadLS<JiraIssue[]>(PERSIST_TASKS_KEY, []));
+    // ── Stories state via Zustand store ──────────────────────────────────────
+    const storeSelection = useJiraStore(s => s.storiesSelection);
+    const storeSetSelection = useJiraStore(s => s.setStoriesSelection);
+    const storePinnedEpics = useJiraStore(s => s.pinnedEpics);
+    const storePinnedStories = useJiraStore(s => s.pinnedStories);
+    const storeSetPinnedEpics = useJiraStore(s => s.setPinnedEpics);
+    const storeSetPinnedStories = useJiraStore(s => s.setPinnedStories);
 
-    // ── Persistent selection ──
-    const [selectedEpic, setSelectedEpicRaw] = useState<JiraIssue | null>(() => loadLS<JiraIssue | null>(PERSIST_SEL_EPIC_KEY, null));
-    const [selectedStory, setSelectedStoryRaw] = useState<JiraIssue | null>(() => loadLS<JiraIssue | null>(PERSIST_SEL_STORY_KEY, null));
+    // Ephemeral issue lists — not persisted (re-fetched on mount, fast enough)
+    const [epics, setEpics] = useState<JiraIssue[]>([]);
+    const [stories, setStories] = useState<JiraIssue[]>([]);
+    const [tasks, setTasks] = useState<JiraIssue[]>([]);
 
-    // Cascade setters: changing Epic clears Story+Tasks; changing Story clears Tasks
+    // Restore persisted selection objects from store (may be null after reload — re-fetched by effects)
+    const [selectedEpic, setSelectedEpicLocal] = useState<JiraIssue | null>(storeSelection.epic);
+    const [selectedStory, setSelectedStoryLocal] = useState<JiraIssue | null>(storeSelection.story);
+
+    // Cascade setters — update both local state and store
     const setSelectedEpic = (v: JiraIssue | null) => {
-        setSelectedEpicRaw(v);
-        saveLS(PERSIST_SEL_EPIC_KEY, v);
-        // cascade clear downstream
-        setSelectedStoryRaw(null); saveLS(PERSIST_SEL_STORY_KEY, null);
+        setSelectedEpicLocal(v);
+        storeSetSelection({ epicKey: v?.key ?? null, storyKey: null, epic: v, story: null });
+        setSelectedStoryLocal(null);
         setSelectedTask(null);
-        setStories([]); saveLS(PERSIST_STORIES_KEY, []);
-        setTasks([]); saveLS(PERSIST_TASKS_KEY, []);
+        setStories([]);
+        setTasks([]);
     };
     const setSelectedStory = (v: JiraIssue | null) => {
-        setSelectedStoryRaw(v);
-        saveLS(PERSIST_SEL_STORY_KEY, v);
-        // cascade clear downstream
+        setSelectedStoryLocal(v);
+        storeSetSelection({ storyKey: v?.key ?? null, story: v });
         setSelectedTask(null);
-        setTasks([]); saveLS(PERSIST_TASKS_KEY, []);
+        setTasks([]);
     };
 
     const [createForStory, setCreateForStory] = useState<JiraIssue | null>(null);
@@ -1111,8 +1097,8 @@ function StoriesView() {
     const [storyFilterStatus, setStoryFilterStatus] = useState('');
     const [showStoryFilters, setShowStoryFilters] = useState(false);
     const availableStatuses = ['Open', 'In Progress', 'Done', 'Released', 'Discarded', 'Blocked', 'To Do', 'Review'];
-    const [pinnedEpics, setPinnedEpics] = useState<string[]>(() => loadPinned(PINNED_EPICS_KEY));
-    const [pinnedStories, setPinnedStories] = useState<string[]>(() => loadPinned(PINNED_STORIES_KEY));
+    const pinnedEpics = storePinnedEpics;
+    const pinnedStories = storePinnedStories;
 
     const [loadingEpics, setLoadingEpics] = useState(false);
     const [loadingStories, setLoadingStories] = useState(false);
@@ -1153,7 +1139,6 @@ function StoriesView() {
         try {
             const data = await getEpics(project, search);
             setEpics(data);
-            saveLS(PERSIST_EPICS_KEY, data);
         } catch (e: any) {
             setEpicError(e?.message ?? 'Error cargando Epics');
         } finally {
@@ -1173,7 +1158,7 @@ function StoriesView() {
         setStoryError(null);
         setTasks([]);
         getStoriesByEpic(selectedEpic.key)
-            .then(data => { setStories(data); saveLS(PERSIST_STORIES_KEY, data); })
+            .then(data => { setStories(data); })
             .catch((e: any) => setStoryError(e?.message ?? 'Error cargando Stories'))
             .finally(() => setLoadingStories(false));
     }, [selectedEpic?.key]);
@@ -1184,15 +1169,14 @@ function StoriesView() {
         setLoadingTasks(true);
         setTaskError(null);
         getTasksByStory(selectedStory.key)
-            .then(data => { setTasks(data); saveLS(PERSIST_TASKS_KEY, data); })
+            .then(data => { setTasks(data); })
             .catch((e: any) => setTaskError(e?.message ?? 'Error cargando Tasks'))
             .finally(() => setLoadingTasks(false));
     }, [selectedStory?.key]);
 
-    const togglePin = (key: string, list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>, storageKey: string) => {
+    const togglePin = (key: string, list: string[], setList: (keys: string[]) => void) => {
         const next = list.includes(key) ? list.filter(k => k !== key) : [key, ...list];
         setList(next);
-        savePinned(storageKey, next);
     };
 
     const sortWithPins = (items: JiraIssue[], pinned: string[]) => [
@@ -1233,8 +1217,7 @@ function StoriesView() {
             if (selectedStory) {
                 const updated = await getTasksByStory(selectedStory.key);
                 setTasks(updated);
-                saveLS(PERSIST_TASKS_KEY, updated);
-                const refreshed = updated.find(t => t.key === task.key);
+                                const refreshed = updated.find(t => t.key === task.key);
                 if (refreshed) { setSelectedTask(refreshed); setTaskDetailTarget(refreshed); }
             }
         } catch (e: any) {
@@ -1314,7 +1297,7 @@ function StoriesView() {
                                 selected={selectedEpic?.key === epic.key}
                                 pinned={pinnedEpics.includes(epic.key)}
                                 onSelect={() => setSelectedEpic(epic)}
-                                onPin={() => togglePin(epic.key, pinnedEpics, setPinnedEpics, PINNED_EPICS_KEY)}
+                                onPin={() => togglePin(epic.key, pinnedEpics, storeSetPinnedEpics)}
                                 onDetail={() => setTaskDetailTarget(epic)}
                                 onAssign={epic.fields.assignee?.accountId === myAccountId ? undefined : async () => {
                                     const accountId = myAccountId || loadConfig().defaultAssigneeId;
@@ -1324,8 +1307,7 @@ function StoriesView() {
                                         // Refresh epics
                                         const updated = await getEpics(project);
                                         setEpics(updated);
-                                        saveLS(PERSIST_EPICS_KEY, updated);
-                                    } catch (e: any) {
+                                                                            } catch (e: any) {
                                         setTransitionError(e?.message ?? 'Error al asignar');
                                     }
                                 }}
@@ -1406,7 +1388,7 @@ function StoriesView() {
                                     selected={selectedStory?.key === story.key}
                                     pinned={pinnedStories.includes(story.key)}
                                     onSelect={() => setSelectedStory(story)}
-                                    onPin={() => togglePin(story.key, pinnedStories, setPinnedStories, PINNED_STORIES_KEY)}
+                                    onPin={() => togglePin(story.key, pinnedStories, storeSetPinnedStories)}
                                     onDetail={() => {
                                         setSelectedTask(null);
                                         setTaskDetailTarget(story);
@@ -1419,8 +1401,7 @@ function StoriesView() {
                                             if (selectedEpic) {
                                                 const updated = await getStoriesByEpic(selectedEpic.key);
                                                 setStories(updated);
-                                                saveLS(PERSIST_STORIES_KEY, updated);
-                                            }
+                                                                                            }
                                         } catch (e: any) {
                                             setTransitionError(e?.message ?? 'Error al asignar');
                                         }
@@ -1470,8 +1451,7 @@ function StoriesView() {
                                         if (selectedStory) {
                                             const updated = await getTasksByStory(selectedStory.key);
                                             setTasks(updated);
-                                            saveLS(PERSIST_TASKS_KEY, updated);
-                                            const refreshed = updated.find(t => t.key === task.key);
+                                                                                        const refreshed = updated.find(t => t.key === task.key);
                                             if (refreshed) setSelectedTask(refreshed);
                                         }
                                     } catch (e: any) {
@@ -1599,14 +1579,12 @@ function StoriesView() {
                             if (type === (cfg.taskType || 'task').toLowerCase() && selectedStory) {
                                 const updated = await getTasksByStory(selectedStory.key);
                                 setTasks(updated);
-                                saveLS(PERSIST_TASKS_KEY, updated);
-                                const r = updated.find(t => t.key === taskDetailTarget.key);
+                                                                const r = updated.find(t => t.key === taskDetailTarget.key);
                                 if (r) { setTaskDetailTarget(r); setSelectedTask(r); }
                             } else if (selectedEpic) {
                                 const updated = await getStoriesByEpic(selectedEpic.key);
                                 setStories(updated);
-                                saveLS(PERSIST_STORIES_KEY, updated);
-                                const r = updated.find(s => s.key === taskDetailTarget.key);
+                                                                const r = updated.find(s => s.key === taskDetailTarget.key);
                                 if (r) setTaskDetailTarget(r);
                             }
                         } catch (e: any) {
@@ -1704,7 +1682,7 @@ function StoriesView() {
                         if (selectedStory?.key === createForStory.key) {
                             setLoadingTasks(true);
                             getTasksByStory(createForStory.key)
-                                .then(data => { setTasks(data); saveLS(PERSIST_TASKS_KEY, data); })
+                                .then(data => { setTasks(data); })
                                 .finally(() => setLoadingTasks(false));
                         }
                     }}
@@ -1725,8 +1703,57 @@ function StoriesView() {
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({ onSaved }: { onSaved: () => void }) {
-    const [cfg, setCfg] = useState<JiraConfig>(loadConfig());
+function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean) => void }) {
+    // ── Account management via Zustand store ──────────────────────────────────
+    const accounts = useJiraStore(s => s.accounts);
+    const activeAccountId = useJiraStore(s => s.activeAccountId);
+    const storeAddAccount = useJiraStore(s => s.addAccount);
+    const storeUpdateAccount = useJiraStore(s => s.updateAccount);
+    const storeRemoveAccount = useJiraStore(s => s.removeAccount);
+    const storeSetActiveAccount = useJiraStore(s => s.setActiveAccount);
+    const storeSaveActiveConfig = useJiraStore(s => s.saveActiveConfig);
+
+    const [newAccountName, setNewAccountName] = useState('');
+    const [showAddAccount, setShowAddAccount] = useState(false);
+
+    const switchToAccount = (id: string) => {
+        storeSetActiveAccount(id);
+        const found = accounts.find(a => a.id === id);
+        if (found) setCfg({ ...emptyConfig(), ...found.config });
+        setTestResult(null);
+    };
+
+    const handleAddAccount = () => {
+        const name = newAccountName.trim() || `Cuenta ${accounts.length + 1}`;
+        const newAcc = storeAddAccount(name, emptyConfig());
+        setCfg(emptyConfig());
+        setNewAccountName('');
+        setShowAddAccount(false);
+        // Switch to the new account's form
+        setTestResult(null);
+        // The store already set activeAccountId to the new account
+        void newAcc;
+    };
+
+    const handleRenameAccount = (id: string, newName: string) => {
+        storeUpdateAccount(id, { name: newName });
+    };
+
+    const handleDeleteAccount = (id: string) => {
+        storeRemoveAccount(id);
+        // After remove, store updates activeAccountId automatically
+        // Sync the form to the new active account
+        const remaining = accounts.filter(a => a.id !== id);
+        const newActive = remaining.find(a => a.id !== id) ?? remaining[0];
+        if (newActive) setCfg({ ...emptyConfig(), ...newActive.config });
+    };
+
+    // ── Config form state ─────────────────────────────────────────────────────
+    const [cfg, setCfg] = useState<JiraConfig>(() => {
+        // Init from store's active account
+        const s = useJiraStore.getState();
+        return s.getActiveConfig();
+    });
     const [testing, setTesting] = useState(false);
     const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
     const [saving, setSaving] = useState(false);
@@ -1752,11 +1779,12 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
         loadActivityOpts(saved.activityFieldId, saved.storiesProject || saved.defaultProject);
     }, []);
 
+    // ── Fix: test using form state (cfg), not saved localStorage config ───────
     const handleTest = async () => {
         setTesting(true);
         setTestResult(null);
         try {
-            const me = await testConnection();
+            const me = await testConnectionWith(cfg);
             setTestResult({ ok: true, msg: `✅ Conectado como ${me.displayName}` });
             if (!cfg.defaultAssigneeId) {
                 setCfg(c => ({ ...c, defaultAssigneeId: me.accountId }));
@@ -1770,8 +1798,8 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
 
     const handleSave = () => {
         setSaving(true);
-        saveConfig(cfg);
-        setTimeout(() => { setSaving(false); onSaved(); }, 400);
+        storeSaveActiveConfig(cfg);
+        setTimeout(() => { setSaving(false); onSaved(true); }, 400);
     };
 
     const addCustomField = () => {
@@ -1800,144 +1828,338 @@ function SettingsPanel({ onSaved }: { onSaved: () => void }) {
         </div>
     );
 
+    const [section, setSection] = useState<'accounts' | 'connection' | 'tempo' | 'defaults' | 'stories' | 'custom'>('accounts');
+
+    type SectionId = typeof section;
+    const navItems: { id: SectionId; label: string; icon: React.ReactNode; badge?: number }[] = [
+        { id: 'accounts',   label: 'Cuentas',        icon: <UserCircle size={14} />,  badge: accounts.length },
+        { id: 'connection', label: 'Conexión',        icon: <Settings size={14} /> },
+        { id: 'tempo',      label: 'Tempo',           icon: <Timer size={14} /> },
+        { id: 'defaults',   label: 'Defaults',        icon: <Layers size={14} /> },
+        { id: 'stories',    label: 'Stories View',    icon: <Pin size={14} /> },
+        { id: 'custom',     label: 'Custom Fields',   icon: <ChevronRight size={14} />, badge: Object.keys(cfg.customFields).length || undefined },
+    ];
+
+    const isCfgSection = section !== 'accounts';
+
     return (
-        <div className="max-w-2xl mx-auto space-y-6 py-6 px-4">
-            <h2 className="text-base font-bold text-slate-200 flex items-center gap-2"><Settings size={16} /> Configuración de Jira</h2>
+        <div className="flex h-full overflow-hidden">
+            {/* ── Left nav ── */}
+            <div className="w-44 shrink-0 border-r border-slate-800 flex flex-col py-3 px-2 gap-0.5 overflow-y-auto">
+                <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider px-2 pb-2">Configuración</p>
+                {navItems.map(item => (
+                    <button
+                        key={item.id}
+                        onClick={() => setSection(item.id)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${
+                            section === item.id
+                                ? 'bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/20'
+                                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'
+                        }`}
+                    >
+                        <span className="shrink-0">{item.icon}</span>
+                        <span className="flex-1">{item.label}</span>
+                        {item.badge != null && item.badge > 0 && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${section === item.id ? 'bg-nexus-neon/20 text-nexus-neon' : 'bg-slate-700 text-slate-400'}`}>
+                                {item.badge}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
 
-            {/* Connection */}
-            <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Conexión</h3>
-                {field('Jira Base URL (ej. https://empresa.atlassian.net)', 'baseUrl')}
-                {field('Email de Atlassian', 'email')}
-                {field('API Token', 'apiToken', 'password')}
-                <button onClick={handleTest} disabled={testing}
-                    className="px-4 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50">
-                    {testing ? <RefreshCw size={12} className="inline animate-spin mr-1" /> : null}
-                    {testing ? 'Probando...' : 'Probar conexión'}
-                </button>
-                {testResult && (
-                    <p className={`text-xs ${testResult.ok ? 'text-nexus-success' : 'text-nexus-danger'}`}>{testResult.msg}</p>
-                )}
-            </section>
+            {/* ── Right content ── */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-            {/* Tempo */}
-            <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                    <Timer size={12} /> Tempo
-                </h3>
-                {field('Tempo API Token (app.tempo.io → API Integration)', 'tempoToken', 'password')}
-                <p className="text-[10px] text-slate-600">El account ID del autor se toma del campo "Account ID del asignado por defecto" de arriba.</p>
-            </section>
+                    {/* ── Cuentas ── */}
+                    {section === 'accounts' && (
+                        <>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Cuentas Jira</h3>
+                                <p className="text-xs text-slate-500">Cada cuenta tiene su propia configuración de conexión y preferencias.</p>
+                            </div>
 
-            {/* Default fields */}
-            <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Valores por defecto (para crear issues)</h3>
-                {field('Clave de proyecto por defecto (ej. NCPPPMC)', 'defaultProject')}
-                <div>
-                    <label className="block text-xs text-slate-400 mb-1">Tipo de issue por defecto</label>
-                    <select value={cfg.defaultIssueType}
-                        onChange={e => setCfg(c => ({ ...c, defaultIssueType: e.target.value }))}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon">
-                        {['Story', 'Bug', 'Task', 'Sub-task', 'Epic'].map(t => <option key={t}>{t}</option>)}
-                    </select>
-                </div>
-                {field('Account ID del asignado por defecto', 'defaultAssigneeId')}
-                <div>
-                    <label className="block text-xs text-slate-400 mb-1">Prioridad por defecto</label>
-                    <select value={cfg.defaultPriority}
-                        onChange={e => setCfg(c => ({ ...c, defaultPriority: e.target.value }))}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon">
-                        {['Highest', 'High', 'Medium', 'Low', 'Lowest'].map(p => <option key={p}>{p}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label className="block text-xs text-slate-400 mb-1">Labels por defecto (separados por coma)</label>
-                    <input
-                        type="text"
-                        value={cfg.defaultLabels.join(', ')}
-                        onChange={e => setCfg(c => ({ ...c, defaultLabels: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                        placeholder="frontend, microfrontend"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
-                    />
-                </div>
-            </section>
+                            <div className="space-y-2">
+                                {accounts.length === 0 && (
+                                    <p className="text-xs text-slate-500 py-2">No hay cuentas. Añade una para comenzar.</p>
+                                )}
+                                {accounts.map(acc => (
+                                    <div
+                                        key={acc.id}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer group ${acc.id === activeAccountId ? 'border-nexus-neon/40 bg-nexus-neon/5' : 'border-slate-700 bg-slate-800/40 hover:border-slate-600'}`}
+                                        onClick={() => acc.id !== activeAccountId && switchToAccount(acc.id)}
+                                    >
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${acc.id === activeAccountId ? 'bg-nexus-neon' : 'bg-slate-600'}`} />
+                                        <input
+                                            type="text"
+                                            defaultValue={acc.name}
+                                            onBlur={e => { if (e.target.value.trim() && e.target.value !== acc.name) handleRenameAccount(acc.id, e.target.value.trim()); }}
+                                            onClick={e => e.stopPropagation()}
+                                            className={`flex-1 bg-transparent text-sm focus:outline-none min-w-0 cursor-text ${acc.id === activeAccountId ? 'text-white' : 'text-slate-400'}`}
+                                            title="Clic para renombrar"
+                                        />
+                                        {acc.id === activeAccountId && (
+                                            <span className="text-[10px] text-nexus-neon font-semibold shrink-0 px-1.5 py-0.5 bg-nexus-neon/10 rounded-full">activa</span>
+                                        )}
+                                        {acc.id !== activeAccountId && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); switchToAccount(acc.id); setSection('connection'); }}
+                                                className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-400 hover:text-nexus-neon px-2 py-0.5 rounded border border-transparent hover:border-nexus-neon/30 transition-all"
+                                            >
+                                                Activar
+                                            </button>
+                                        )}
+                                        {accounts.length > 1 && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); handleDeleteAccount(acc.id); }}
+                                                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-900/40 text-slate-500 hover:text-red-400 transition-all"
+                                                title="Eliminar cuenta"
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
 
-            {/* Hierarchy config */}
-            <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Stories View — Jerarquía</h3>
-                {field('Proyecto para vista Stories (ej. NCPPPMC)', 'storiesProject')}
-                {field('Tipo Epic (Business)', 'epicType')}
-                {field('Tipo Story (Technical)', 'storyType')}
-                {field('Tipo Task (Sub-tarea)', 'taskType')}
-                {field('ID del campo Activity (ej. customfield_10115) — dejar vacío para omitir', 'activityFieldId')}
-                <div>
-                    <label className="block text-xs text-slate-400 mb-1">Valor de Activity</label>
-                    <div className="flex gap-2">
-                        <select
-                            value={cfg.activityValue}
-                            onChange={e => {
-                                const found = activityOpts.find(a => a.value === e.target.value);
-                                setCfg(c => ({ ...c, activityValue: e.target.value, activityId: found?.id ?? c.activityId }));
-                            }}
-                            disabled={activityOpts.length === 0}
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon disabled:text-slate-600"
-                        >
-                            <option value="">{activityOpts.length === 0 ? 'Carga las opciones primero →' : 'Selecciona un valor'}</option>
-                            {activityOpts.map(a => (
-                                <option key={a.id} value={a.value}>{a.value}</option>
-                            ))}
-                        </select>
-                        <button
-                            type="button"
-                            onClick={() => loadActivityOpts(cfg.activityFieldId, cfg.storiesProject || cfg.defaultProject)}
-                            disabled={!cfg.activityFieldId || !(cfg.storiesProject || cfg.defaultProject) || loadingActivityOpts}
-                            className="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                        >
-                            {loadingActivityOpts ? <RefreshCw size={12} className="animate-spin" /> : 'Recargar'}
-                        </button>
-                    </div>
-                    {cfg.activityId && (
-                        <p className="text-[10px] text-slate-600 mt-1">ID: {cfg.activityId}</p>
+                            {showAddAccount ? (
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={newAccountName}
+                                        onChange={e => setNewAccountName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleAddAccount(); if (e.key === 'Escape') setShowAddAccount(false); }}
+                                        placeholder="ej. Trabajo, Cliente X..."
+                                        autoFocus
+                                        className="flex-1 bg-slate-950 border border-nexus-neon/40 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                                    />
+                                    <button onClick={handleAddAccount} className="px-4 py-2 rounded-lg text-xs font-bold bg-nexus-neon text-slate-900 hover:bg-opacity-80 transition-colors">
+                                        Crear
+                                    </button>
+                                    <button onClick={() => setShowAddAccount(false)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-700 transition-colors">
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setShowAddAccount(true)}
+                                    className="flex items-center gap-1.5 text-xs text-nexus-neon hover:text-white transition-colors py-1"
+                                >
+                                    <PlusCircle size={13} /> Añadir cuenta
+                                </button>
+                            )}
+
+                            {accounts.length > 0 && (
+                                <div className="pt-2 border-t border-slate-800">
+                                    <button
+                                        onClick={() => setSection('connection')}
+                                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-nexus-neon transition-colors"
+                                    >
+                                        <Settings size={12} /> Configurar conexión de la cuenta activa
+                                        <ChevronRight size={12} />
+                                    </button>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* ── Conexión ── */}
+                    {section === 'connection' && (
+                        <>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Conexión</h3>
+                                <p className="text-xs text-slate-500">
+                                    {activeAccountId && accounts.find(a => a.id === activeAccountId)
+                                        ? `Cuenta: ${accounts.find(a => a.id === activeAccountId)!.name}`
+                                        : 'Credenciales de acceso a la API de Jira'}
+                                </p>
+                            </div>
+                            {accounts.length === 0 && (
+                                <div className="p-3 rounded-lg bg-slate-800/60 border border-slate-700 text-xs text-slate-400">
+                                    Ve a <button onClick={() => setSection('accounts')} className="text-nexus-neon underline">Cuentas</button> y crea una cuenta primero.
+                                </div>
+                            )}
+                            {field('Jira Base URL (ej. https://empresa.atlassian.net)', 'baseUrl')}
+                            {field('Email de Atlassian', 'email')}
+                            {field('API Token', 'apiToken', 'password')}
+                            <div className="flex items-center gap-3">
+                                <button onClick={handleTest} disabled={testing}
+                                    className="flex items-center gap-1.5 px-4 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-50">
+                                    {testing ? <RefreshCw size={12} className="animate-spin" /> : <CheckCircle size={12} />}
+                                    {testing ? 'Probando...' : 'Probar conexión'}
+                                </button>
+                                {testResult && (
+                                    <div className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg flex-1 ${testResult.ok ? 'bg-green-900/20 border border-green-900/40 text-green-400' : 'bg-red-900/20 border border-red-900/40 text-red-400'}`}>
+                                        {testResult.ok ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
+                                        {testResult.msg}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {/* ── Tempo ── */}
+                    {section === 'tempo' && (
+                        <>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5 flex items-center gap-2"><Timer size={14} /> Tempo</h3>
+                                <p className="text-xs text-slate-500">Integración con Tempo Timesheets para registrar tiempo en issues.</p>
+                            </div>
+                            {field('Tempo API Token', 'tempoToken', 'password')}
+                            <p className="text-xs text-slate-500">Obtén tu token en <span className="text-slate-300 font-mono">app.tempo.io → Settings → API Integration</span>.</p>
+                            <p className="text-xs text-slate-600">El account ID del autor se toma del campo "Account ID del asignado por defecto" en la sección Defaults.</p>
+                        </>
+                    )}
+
+                    {/* ── Defaults ── */}
+                    {section === 'defaults' && (
+                        <>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Valores por defecto</h3>
+                                <p className="text-xs text-slate-500">Se usan al crear issues desde el formulario.</p>
+                            </div>
+                            {field('Clave de proyecto por defecto (ej. MYPROJ)', 'defaultProject')}
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Tipo de issue por defecto</label>
+                                <select value={cfg.defaultIssueType}
+                                    onChange={e => setCfg(c => ({ ...c, defaultIssueType: e.target.value }))}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon">
+                                    {['Story', 'Bug', 'Task', 'Sub-task', 'Epic'].map(t => <option key={t}>{t}</option>)}
+                                </select>
+                            </div>
+                            {field('Account ID del asignado por defecto', 'defaultAssigneeId')}
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Prioridad por defecto</label>
+                                <select value={cfg.defaultPriority}
+                                    onChange={e => setCfg(c => ({ ...c, defaultPriority: e.target.value }))}
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon">
+                                    {['Highest', 'High', 'Medium', 'Low', 'Lowest'].map(p => <option key={p}>{p}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Labels por defecto (separados por coma)</label>
+                                <input
+                                    type="text"
+                                    value={cfg.defaultLabels.join(', ')}
+                                    onChange={e => setCfg(c => ({ ...c, defaultLabels: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                                    placeholder="frontend, microfrontend"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* ── Stories View ── */}
+                    {section === 'stories' && (
+                        <>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Stories View — Jerarquía</h3>
+                                <p className="text-xs text-slate-500">Configura los tipos de issues y el campo Activity para la vista de 3 columnas.</p>
+                            </div>
+                            {field('Proyecto para vista Stories (ej. MYPROJ)', 'storiesProject')}
+                            <div className="grid grid-cols-3 gap-3">
+                                {field('Tipo Epic', 'epicType')}
+                                {field('Tipo Story', 'storyType')}
+                                {field('Tipo Task', 'taskType')}
+                            </div>
+                            {field('ID campo Activity (ej. customfield_10115)', 'activityFieldId')}
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Valor de Activity</label>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={cfg.activityValue}
+                                        onChange={e => {
+                                            const found = activityOpts.find(a => a.value === e.target.value);
+                                            setCfg(c => ({ ...c, activityValue: e.target.value, activityId: found?.id ?? c.activityId }));
+                                        }}
+                                        disabled={activityOpts.length === 0}
+                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon disabled:text-slate-600"
+                                    >
+                                        <option value="">{activityOpts.length === 0 ? 'Carga las opciones →' : 'Selecciona un valor'}</option>
+                                        {activityOpts.map(a => <option key={a.id} value={a.value}>{a.value}</option>)}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => loadActivityOpts(cfg.activityFieldId, cfg.storiesProject || cfg.defaultProject)}
+                                        disabled={!cfg.activityFieldId || !(cfg.storiesProject || cfg.defaultProject) || loadingActivityOpts}
+                                        className="px-3 py-2 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                                    >
+                                        {loadingActivityOpts ? <RefreshCw size={12} className="animate-spin" /> : 'Recargar'}
+                                    </button>
+                                </div>
+                                {cfg.activityId && <p className="text-[10px] text-slate-600 mt-1 font-mono">ID: {cfg.activityId}</p>}
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Statuses con color especial (separados por coma)</label>
+                                <input
+                                    type="text"
+                                    value={(cfg.releasedStatuses ?? []).join(', ')}
+                                    onChange={e => setCfg(c => ({ ...c, releasedStatuses: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                                    placeholder="Released, Discarded"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* ── Custom Fields ── */}
+                    {section === 'custom' && (
+                        <>
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Campos personalizados</h3>
+                                <p className="text-xs text-slate-500">
+                                    Campos como <code className="bg-slate-800 px-1 rounded font-mono">customfield_10020</code> que se envían automáticamente al crear un issue.
+                                </p>
+                            </div>
+
+                            {Object.entries(cfg.customFields).length === 0 && (
+                                <p className="text-xs text-slate-600 py-2">No hay campos personalizados configurados.</p>
+                            )}
+
+                            <div className="space-y-2">
+                                {Object.entries(cfg.customFields).map(([k, v]) => (
+                                    <div key={k} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700">
+                                        <span className="font-mono text-nexus-neon/80 text-xs flex-1">{k}</span>
+                                        <span className="text-slate-300 text-xs flex-1 truncate">{JSON.stringify(v)}</span>
+                                        <button onClick={() => removeCustomField(k)} className="p-1 rounded hover:bg-red-900/30 text-slate-500 hover:text-red-400 transition-colors">
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <input value={newFieldKey} onChange={e => setNewFieldKey(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && addCustomField()}
+                                    placeholder="customfield_XXXXX"
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon font-mono" />
+                                <input value={newFieldVal} onChange={e => setNewFieldVal(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && addCustomField()}
+                                    placeholder="valor"
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon" />
+                                <button onClick={addCustomField} className="px-3 py-2 text-xs bg-nexus-neon text-nexus-darker rounded-lg font-bold hover:bg-opacity-80 transition-colors">
+                                    <Plus size={13} />
+                                </button>
+                            </div>
+                        </>
                     )}
                 </div>
-                <div>
-                    <label className="block text-xs text-slate-400 mb-1">Statuses con color especial (separados por coma)</label>
-                    <input
-                        type="text"
-                        value={(cfg.releasedStatuses ?? []).join(', ')}
-                        onChange={e => setCfg(c => ({ ...c, releasedStatuses: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                        placeholder="Released, Discarded"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
-                    />
-                </div>
-            </section>
 
-            {/* Custom fields */}
-            <section className="space-y-3 bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Campos personalizados (custom fields Jira)</h3>
-                <p className="text-[11px] text-slate-500">Agrega campos como <code className="bg-slate-800 px-1 rounded">customfield_10020</code> con su valor por defecto. Se enviarán automáticamente al crear un issue.</p>
-                {Object.entries(cfg.customFields).map(([k, v]) => (
-                    <div key={k} className="flex items-center gap-2 text-xs">
-                        <span className="font-mono text-nexus-neon/80 bg-slate-800 px-2 py-1 rounded flex-1">{k}</span>
-                        <span className="text-slate-300 flex-1 truncate">{JSON.stringify(v)}</span>
-                        <button onClick={() => removeCustomField(k)} className="text-nexus-danger hover:bg-slate-700 p-1 rounded"><X size={12} /></button>
+                {/* ── Footer: save button (only for cfg sections) ── */}
+                {isCfgSection && (
+                    <div className="shrink-0 px-6 py-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-end gap-3">
+                        {saving && <span className="text-xs text-slate-500">Guardando...</span>}
+                        <button
+                            onClick={handleSave}
+                            disabled={saving}
+                            className="px-5 py-2 rounded-lg bg-nexus-accent hover:bg-opacity-80 text-white font-bold text-xs transition-colors disabled:opacity-50"
+                        >
+                            {saving ? 'Guardando...' : 'Guardar configuración'}
+                        </button>
                     </div>
-                ))}
-                <div className="flex gap-2">
-                    <input value={newFieldKey} onChange={e => setNewFieldKey(e.target.value)}
-                        placeholder="customfield_XXXXX"
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon font-mono" />
-                    <input value={newFieldVal} onChange={e => setNewFieldVal(e.target.value)}
-                        placeholder="valor"
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon" />
-                    <button onClick={addCustomField} className="px-3 py-1 text-xs bg-nexus-neon text-nexus-darker rounded font-bold hover:bg-opacity-80 transition-colors">+</button>
-                </div>
-            </section>
-
-            <button onClick={handleSave} disabled={saving}
-                className="w-full py-2.5 rounded-lg bg-nexus-accent hover:bg-opacity-80 text-white font-bold text-sm transition-colors disabled:opacity-50">
-                {saving ? 'Guardando...' : 'Guardar configuración'}
-            </button>
+                )}
+            </div>
         </div>
     );
 }
@@ -2176,31 +2398,17 @@ function BoardView() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selected, setSelected] = useState<JiraIssue | null>(null);
-    const [filter, setFilter] = useState<BoardFilter>(() => {
-        try {
-            const saved = localStorage.getItem('nexus_jira_board_filter');
-            if (!saved) return { assignees: ['me'] };
-            const p = JSON.parse(saved);
-            // Migrate old single-value fields to arrays
-            if (p.assignee !== undefined && !p.assignees) {
-                p.assignees = p.assignee ? [p.assignee] : [];
-                delete p.assignee;
-            }
-            if (p.issueType !== undefined && !p.issueTypes) {
-                p.issueTypes = p.issueType ? [p.issueType] : [];
-                delete p.issueType;
-            }
-            return p;
-        } catch { return { assignees: ['me'] }; }
-    });
 
-    const [searchInput, setSearchInput] = useState(() =>
-        loadLS<BoardFilter>('nexus_jira_board_filter', {}).text ?? ''
-    );
+    // Board filter + project from Zustand store (persisted automatically)
+    const filter = useJiraStore(s => s.boardFilter);
+    const storeSetFilter = useJiraStore(s => s.setBoardFilter);
+    const projectKey = useJiraStore(s => s.boardProjectKey) || cfg.defaultProject;
+    const storeSetProjectKey = useJiraStore(s => s.setBoardProjectKey);
 
-    const [projectKey, setProjectKey] = useState<string>(() =>
-        localStorage.getItem('nexus_jira_board_proj') || cfg.defaultProject
-    );
+    const setFilter = (f: BoardFilter) => storeSetFilter(f);
+    const setProjectKey = (key: string) => storeSetProjectKey(key);
+
+    const [searchInput, setSearchInput] = useState(filter.text ?? '');
     const [projects, setProjects] = useState<{ key: string; name: string }[]>([]);
     const [projectIssueTypes, setProjectIssueTypes] = useState<{ id: string; name: string }[]>([]);
     const [projectStatuses, setProjectStatuses] = useState<string[]>([]);
@@ -2224,12 +2432,7 @@ function BoardView() {
         { value: 'Lowest', label: '⚪ Lowest' },
     ];
 
-    // Persist filter & project
-    useEffect(() => { localStorage.setItem('nexus_jira_board_filter', JSON.stringify(filter)); }, [filter]);
-    useEffect(() => {
-        if (projectKey) localStorage.setItem('nexus_jira_board_proj', projectKey);
-        else localStorage.removeItem('nexus_jira_board_proj');
-    }, [projectKey]);
+    // Filter & project are now persisted by the Zustand store automatically
 
     // Load projects once
     useEffect(() => { getProjects().then(setProjects).catch(() => {}); }, []);
@@ -2287,7 +2490,7 @@ function BoardView() {
                 <div className="flex items-center gap-2">
                     <select
                         value={projectKey || ''}
-                        onChange={e => { setProjectKey(e.target.value); setFilter(prev => ({ ...prev, issueTypes: [], epicKeys: [] })); }}
+                        onChange={e => { setProjectKey(e.target.value); setFilter({ ...filter, issueTypes: [], epicKeys: [] }); }}
                         className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-[11px] font-bold text-nexus-neon focus:outline-none focus:border-nexus-neon"
                     >
                         <option value="">Seleccionar Proyecto...</option>
@@ -2300,14 +2503,14 @@ function BoardView() {
                             value={searchInput}
                             onChange={e => setSearchInput(e.target.value)}
                             onKeyDown={e => {
-                                if (e.key === 'Enter') setFilter(prev => ({ ...prev, text: searchInput || undefined }));
-                                if (e.key === 'Escape') { setSearchInput(''); setFilter(prev => ({ ...prev, text: undefined })); }
+                                if (e.key === 'Enter') setFilter({ ...filter, text: searchInput || undefined });
+                                if (e.key === 'Escape') { setSearchInput(''); setFilter({ ...filter, text: undefined }); }
                             }}
                             placeholder="Buscar título o clave... ↵"
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-7 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
                         />
                         {searchInput && (
-                            <button onClick={() => { setSearchInput(''); setFilter(prev => ({ ...prev, text: undefined })); }}
+                            <button onClick={() => { setSearchInput(''); setFilter({ ...filter, text: undefined }); }}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
                                 <X size={11} />
                             </button>
@@ -2332,38 +2535,38 @@ function BoardView() {
                         label="Asignado"
                         options={[{ value: 'me', label: '👤 Yo' }, { value: 'unassigned', label: '— Sin asignar' }, ...projectAssignees]}
                         selected={filter.assignees ?? []}
-                        onChange={v => setFilter(prev => ({ ...prev, assignees: v }))}
+                        onChange={v => setFilter({ ...filter, assignees: v })}
                     />
                     <MultiSelect
                         label="Tipo"
                         options={projectIssueTypes.map(t => ({ value: t.name, label: t.name }))}
                         selected={filter.issueTypes ?? []}
-                        onChange={v => setFilter(prev => ({ ...prev, issueTypes: v }))}
+                        onChange={v => setFilter({ ...filter, issueTypes: v })}
                     />
                     <MultiSelect
                         label="Estado"
                         options={projectStatuses.map(s => ({ value: s, label: s }))}
                         selected={filter.statuses ?? []}
-                        onChange={v => setFilter(prev => ({ ...prev, statuses: v }))}
+                        onChange={v => setFilter({ ...filter, statuses: v })}
                     />
                     <MultiSelect
                         label="Prioridad"
                         options={PRIORITIES}
                         selected={filter.priorities ?? []}
-                        onChange={v => setFilter(prev => ({ ...prev, priorities: v }))}
+                        onChange={v => setFilter({ ...filter, priorities: v })}
                     />
                     <MultiSelect
                         label="Épica"
                         options={projectEpics.map(e => ({ value: e.key, label: `${e.key} — ${e.fields.summary}` }))}
                         selected={filter.epicKeys ?? []}
-                        onChange={v => setFilter(prev => ({ ...prev, epicKeys: v }))}
+                        onChange={v => setFilter({ ...filter, epicKeys: v })}
                     />
                     {labelOptions.length > 0 && (
                         <MultiSelect
                             label="Label"
                             options={labelOptions}
                             selected={filter.labels ?? []}
-                            onChange={v => setFilter(prev => ({ ...prev, labels: v }))}
+                            onChange={v => setFilter({ ...filter, labels: v })}
                         />
                     )}
                     <span className="ml-auto text-[10px] text-slate-600 font-bold uppercase tracking-wider">
@@ -2407,7 +2610,23 @@ export const JiraPanel: React.FC = () => {
         return (saved === 'board' || saved === 'stories' || saved === 'create' || saved === 'settings') ? saved : 'board';
     });
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+    // Account state comes from Zustand — reactive, no polling needed
+    const accounts = useJiraStore(s => s.accounts);
+    const activeAccountId = useJiraStore(s => s.activeAccountId);
+    const storeSetActiveAccount = useJiraStore(s => s.setActiveAccount);
+
     useEffect(() => { localStorage.setItem(STORAGE_JIRA_TAB, tab); }, [tab]);
+
+    // Switching account uses activeAccountId as the remount key — no reloadKey hack needed
+    const handleSwitchAccount = (id: string) => {
+        storeSetActiveAccount(id);
+    };
+
+    const handleSettingsSaved = () => {
+        setSuccessMsg('Configuración guardada');
+        setTab('board');
+    };
 
     const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
         { id: 'board', label: 'Board', icon: <Layers size={14} /> },
@@ -2415,6 +2634,8 @@ export const JiraPanel: React.FC = () => {
         { id: 'create', label: 'Crear Issue', icon: <Plus size={14} /> },
         { id: 'settings', label: 'Configuración', icon: <Settings size={14} /> },
     ];
+
+    const activeAccountName = accounts.find(a => a.id === activeAccountId)?.name;
 
     return (
         <div className="flex flex-col h-full min-h-0 bg-slate-950">
@@ -2429,16 +2650,38 @@ export const JiraPanel: React.FC = () => {
                         {t.icon}{t.label}
                     </button>
                 ))}
-                {successMsg && (
-                    <div className="ml-auto flex items-center gap-1.5 text-xs text-nexus-success">
-                        <CheckCircle size={13} /> {successMsg}
-                        <button onClick={() => setSuccessMsg(null)} className="ml-1 text-slate-500 hover:text-slate-300"><X size={11} /></button>
-                    </div>
-                )}
+
+                <div className="ml-auto flex items-center gap-2 pb-1">
+                    {accounts.length > 0 && (
+                        <div className="flex items-center gap-1.5">
+                            <UserCircle size={13} className="text-slate-500" />
+                            {accounts.length === 1 ? (
+                                <span className="text-xs text-slate-400">{activeAccountName}</span>
+                            ) : (
+                                <select
+                                    value={activeAccountId ?? ''}
+                                    onChange={e => handleSwitchAccount(e.target.value)}
+                                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-slate-300 focus:outline-none focus:border-nexus-neon cursor-pointer"
+                                >
+                                    {accounts.map(a => (
+                                        <option key={a.id} value={a.id}>{a.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    )}
+
+                    {successMsg && (
+                        <div className="flex items-center gap-1.5 text-xs text-nexus-success">
+                            <CheckCircle size={13} /> {successMsg}
+                            <button onClick={() => setSuccessMsg(null)} className="ml-1 text-slate-500 hover:text-slate-300"><X size={11} /></button>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            {/* key={activeAccountId} forces full remount of all views when account changes */}
+            <div key={activeAccountId ?? 'none'} className="flex-1 min-h-0 overflow-hidden">
                 {tab === 'board' && <BoardView />}
                 {tab === 'stories' && <StoriesView />}
                 {tab === 'create' && (
@@ -2450,12 +2693,7 @@ export const JiraPanel: React.FC = () => {
                     </div>
                 )}
                 {tab === 'settings' && (
-                    <div className="h-full overflow-y-auto scrollbar-hide">
-                        <SettingsPanel onSaved={() => {
-                            setSuccessMsg('Configuración guardada');
-                            setTab('board');
-                        }} />
-                    </div>
+                    <SettingsPanel onSaved={handleSettingsSaved} />
                 )}
             </div>
         </div>
