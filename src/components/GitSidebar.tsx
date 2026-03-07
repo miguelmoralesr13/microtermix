@@ -4,6 +4,7 @@ import { GitBranch, GitMerge, FileArchive, Download, UploadCloud, RefreshCw, Fol
 import { PushPreviewModal } from './PushPreviewModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { MergeConfirmModal } from './MergeConfirmModal';
+import { PRSection } from './PRSection';
 import {
     DndContext,
     useDraggable,
@@ -254,6 +255,9 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     );
 
     const activeBranch = localBranches.find(b => b.active);
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+    const activeAccount = getActiveAccount(projectPath);
+    const allLocalBranchNames = localBranches.map(b => b.name);
 
     return (
         <DndContext
@@ -401,6 +405,14 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                             )}
                         </div>
                     )}
+
+                    {/* Pull Requests / Merge Requests */}
+                    <PRSection
+                        projectPath={projectPath}
+                        account={activeAccount}
+                        activeBranch={activeBranch?.name ?? ''}
+                        branches={allLocalBranchNames}
+                    />
 
                 </div>
             </div>

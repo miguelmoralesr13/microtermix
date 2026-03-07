@@ -47,11 +47,18 @@ export interface GithubPR {
     id: number;
     number: number;
     title: string;
-    state: string;
+    state: 'open' | 'closed';
     html_url: string;
     user: { login: string; avatar_url: string };
     created_at: string;
-    body: string;
+    updated_at: string;
+    body: string | null;
+    draft: boolean;
+    head: { ref: string; sha: string };
+    base: { ref: string };
+    labels: { id: number; name: string; color: string }[];
+    requested_reviewers: { login: string; avatar_url: string }[];
+    mergeable_state?: string;
 }
 
 export interface GithubIssue {
@@ -92,24 +99,22 @@ async function getOwnerRepo(projectPath: string): Promise<{ owner: string; repo:
     }
 }
 
-export async function fetchGithubPRs(projectPath: string, token: string): Promise<GithubPR[]> {
+export async function fetchGithubPRs(
+    projectPath: string,
+    token: string,
+    apiUrl?: string,
+    state: 'open' | 'closed' | 'all' = 'open'
+): Promise<GithubPR[]> {
     const info = await getOwnerRepo(projectPath);
     if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
-
-    const headers: Record<string, string> = {
-        'Accept': 'application/vnd.github.v3+json',
-    };
-    if (token) {
-        headers['Authorization'] = `token ${token}`;
-    }
-
-    const response = await fetch(`${GITHUB_API_BASE}/repos/${info.owner}/${info.repo}/pulls?state=open`, {
-        headers
-    });
-
-    if (!response.ok) {
-        throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
-    }
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+    const response = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/pulls?state=${state}&per_page=50`,
+        { headers }
+    );
+    if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
     return response.json();
 }
 
@@ -137,28 +142,46 @@ export async function fetchGithubIssues(projectPath: string, token: string): Pro
     return data.filter(item => !item.pull_request);
 }
 
-export async function createGithubPR(projectPath: string, token: string, title: string, head: string, base: string, body: string): Promise<GithubPR> {
+export async function createGithubPR(
+    projectPath: string,
+    token: string,
+    title: string,
+    head: string,
+    base: string,
+    body: string,
+    draft = false,
+    reviewers: string[] = [],
+    apiUrl?: string,
+): Promise<GithubPR> {
     const info = await getOwnerRepo(projectPath);
     if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
-    if (!token) throw new Error("GitHub PAT Token is required to create a Pull Request.");
-
+    if (!token) throw new Error("GitHub token is required to create a Pull Request.");
+    const baseUrl = apiUrl || GITHUB_API_BASE;
     const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
         'Authorization': `token ${token}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
     };
-
-    const response = await fetch(`${GITHUB_API_BASE}/repos/${info.owner}/${info.repo}/pulls`, {
+    const response = await fetch(`${baseUrl}/repos/${info.owner}/${info.repo}/pulls`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ title, head, base, body })
+        body: JSON.stringify({ title, head, base, body, draft }),
     });
-
     if (!response.ok) {
         const errData = await response.json().catch(() => null);
         throw new Error(`GitHub API Error: ${response.status} ${errData?.message || response.statusText}`);
     }
-    return response.json();
+    const pr: GithubPR = await response.json();
+    // GitHub API does not accept requested_reviewers in the PR creation payload;
+    // reviewer assignment requires a separate follow-up request.
+    if (reviewers.length > 0) {
+        await fetch(`${baseUrl}/repos/${info.owner}/${info.repo}/pulls/${pr.number}/requested_reviewers`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ reviewers }),
+        }).catch(() => null);
+    }
+    return pr;
 }
 
 export interface GithubCommitStatus {
