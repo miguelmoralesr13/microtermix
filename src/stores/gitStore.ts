@@ -58,9 +58,16 @@ export interface GitRepoData {
 
 export type BranchFilter = 'all' | 'local' | 'remote';
 
+export interface GitAccount {
+    id: string;
+    alias: string;
+    provider: 'github' | 'gitlab';
+    url: string;
+    token: string;
+}
+
 export interface GitUi {
     activeTab: string | null;
-    activeSubTab: 'git' | 'remote';
     sidebarWidth: number;
     stagingWidth: number;
     branchFilter: BranchFilter;
@@ -69,6 +76,16 @@ export interface GitUi {
 interface GitStore {
     repos: Record<string, GitRepoData>;
     ui: GitUi;
+
+    // Cuentas en memoria — NO persisten en Zustand, solo en nexus-workspace.json
+    accounts: GitAccount[];
+    repoAccounts: Record<string, string>; // repoPath → accountId
+
+    addAccount:       (a: Omit<GitAccount, 'id'>) => string;
+    updateAccount:    (id: string, patch: Partial<Omit<GitAccount, 'id'>>) => void;
+    removeAccount:    (id: string) => void;
+    setRepoAccount:   (repoPath: string, accountId: string | null) => void;
+    getActiveAccount: (repoPath: string) => GitAccount | undefined;
 
     setUi: (patch: Partial<GitUi>) => void;
     ensureRepo: (path: string) => void;
@@ -175,10 +192,51 @@ export const useGitStore = create<GitStore>()(
                 repos: {},
                 ui: {
                     activeTab: null,
-                    activeSubTab: 'git',
                     sidebarWidth: 230,
                     stagingWidth: 280,
                     branchFilter: 'all',
+                },
+
+                accounts: [],
+                repoAccounts: {},
+
+                addAccount: (a) => {
+                    const id = crypto.randomUUID();
+                    set(s => ({ accounts: [...s.accounts, { ...a, id }] }));
+                    return id;
+                },
+
+                updateAccount: (id, patch) => {
+                    set(s => ({
+                        accounts: s.accounts.map(acc => acc.id === id ? { ...acc, ...patch } : acc),
+                    }));
+                },
+
+                removeAccount: (id) => {
+                    set(s => ({
+                        accounts: s.accounts.filter(acc => acc.id !== id),
+                        repoAccounts: Object.fromEntries(
+                            Object.entries(s.repoAccounts).filter(([, v]) => v !== id)
+                        ),
+                    }));
+                },
+
+                setRepoAccount: (repoPath, accountId) => {
+                    set(s => {
+                        const next = { ...s.repoAccounts };
+                        if (accountId === null) {
+                            delete next[repoPath];
+                        } else {
+                            next[repoPath] = accountId;
+                        }
+                        return { repoAccounts: next };
+                    });
+                },
+
+                getActiveAccount: (repoPath) => {
+                    const s = get();
+                    const id = s.repoAccounts[repoPath];
+                    return id ? s.accounts.find(a => a.id === id) : undefined;
                 },
 
                 setUi: (patch) => set(s => ({ ui: { ...s.ui, ...patch } })),
