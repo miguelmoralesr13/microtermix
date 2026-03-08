@@ -215,3 +215,118 @@ export async function fetchGithubCommitStatus(projectPath: string, token: string
         return null;
     }
 }
+
+export type GithubMergeMethod = 'merge' | 'squash' | 'rebase';
+
+export async function mergeGithubPR(
+    projectPath: string,
+    token: string,
+    prNumber: number,
+    method: GithubMergeMethod = 'merge',
+    commitTitle?: string,
+    commitMessage?: string,
+    apiUrl?: string,
+): Promise<void> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    if (!token) throw new Error("GitHub token is required to merge a Pull Request.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+    };
+    const body: Record<string, string> = { merge_method: method };
+    if (commitTitle) body.commit_title = commitTitle;
+    if (commitMessage) body.commit_message = commitMessage;
+    const response = await fetch(`${base}/repos/${info.owner}/${info.repo}/pulls/${prNumber}/merge`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(`GitHub API Error: ${response.status} ${err?.message || response.statusText}`);
+    }
+}
+
+export interface GithubPRCommit {
+    sha: string;
+    commit: {
+        message: string;
+        author: { name: string; date: string };
+    };
+}
+
+export interface GithubPRFile {
+    filename: string;
+    status: 'added' | 'removed' | 'modified' | 'renamed' | 'copied' | 'changed' | 'unchanged';
+    additions: number;
+    deletions: number;
+    changes: number;
+}
+
+export async function fetchGithubPRCommits(
+    projectPath: string, token: string, prNumber: number, apiUrl?: string
+): Promise<GithubPRCommit[]> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+    const res = await fetch(`${base}/repos/${info.owner}/${info.repo}/pulls/${prNumber}/commits?per_page=100`, { headers });
+    if (!res.ok) throw new Error(`GitHub API Error: ${res.status}`);
+    return res.json();
+}
+
+export async function fetchGithubPRFiles(
+    projectPath: string, token: string, prNumber: number, apiUrl?: string
+): Promise<GithubPRFile[]> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+    const res = await fetch(`${base}/repos/${info.owner}/${info.repo}/pulls/${prNumber}/files?per_page=100`, { headers });
+    if (!res.ok) throw new Error(`GitHub API Error: ${res.status}`);
+    return res.json();
+}
+
+export async function closeGithubPR(
+    projectPath: string, token: string, prNumber: number, apiUrl?: string
+): Promise<void> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    if (!token) throw new Error("GitHub token is required.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json',
+    };
+    const res = await fetch(`${base}/repos/${info.owner}/${info.repo}/pulls/${prNumber}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ state: 'closed' }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(`GitHub API Error: ${res.status} ${err?.message || res.statusText}`);
+    }
+}
+
+export async function deleteGithubBranch(
+    projectPath: string, token: string, branchName: string, apiUrl?: string
+): Promise<void> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    if (!token) throw new Error("GitHub token is required.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+    };
+    await fetch(`${base}/repos/${info.owner}/${info.repo}/git/refs/heads/${branchName}`, {
+        method: 'DELETE', headers,
+    }); // non-fatal if fails
+}

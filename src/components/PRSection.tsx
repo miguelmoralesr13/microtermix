@@ -4,6 +4,7 @@ import { fetchGithubPRs, type GithubPR } from '../services/githubApi';
 import { fetchGitlabMRs, type GitlabMR } from '../services/gitlabApi';
 import type { GitAccount } from '../stores/gitStore';
 import { CreatePRModal } from './CreatePRModal';
+import { MergePRModal } from './MergePRModal';
 
 // Normalized PR shape shared between GitHub and GitLab
 export interface NormalizedPR {
@@ -86,6 +87,7 @@ export const PRSection: React.FC<PRSectionProps> = ({ projectPath, account, acti
     const [error, setError] = useState<string | null>(null);
     const [fetched, setFetched] = useState(false);
     const [showCreate, setShowCreate] = useState(false);
+    const [mergingPR, setMergingPR] = useState<NormalizedPR | null>(null);
 
     const fetchPRs = useCallback(async () => {
         if (!account) return;
@@ -182,7 +184,7 @@ export const PRSection: React.FC<PRSectionProps> = ({ projectPath, account, acti
                     )}
 
                     {account && !loading && prs.map(pr => (
-                        <PRRow key={pr.id} pr={pr} />
+                        <PRRow key={pr.id} pr={pr} onMerge={() => setMergingPR(pr)} />
                     ))}
 
                     {account && !loading && !fetched && !error && (
@@ -201,13 +203,23 @@ export const PRSection: React.FC<PRSectionProps> = ({ projectPath, account, acti
                     onCreated={() => { fetchPRs(); }}
                 />
             )}
+
+            {mergingPR && account && (
+                <MergePRModal
+                    pr={mergingPR}
+                    projectPath={projectPath}
+                    account={account}
+                    onClose={() => setMergingPR(null)}
+                    onMerged={() => { setMergingPR(null); fetchPRs(); }}
+                />
+            )}
         </>
     );
 };
 
 // ── PR row ─────────────────────────────────────────────────────────────────────
 
-const PRRow: React.FC<{ pr: NormalizedPR }> = ({ pr }) => (
+const PRRow: React.FC<{ pr: NormalizedPR; onMerge: () => void }> = ({ pr, onMerge }) => (
     <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-slate-400 hover:bg-slate-800 hover:text-white group transition-colors">
         <GitMerge size={11} className={`shrink-0 ${pr.draft ? 'text-slate-600' : 'text-purple-400'}`} />
         <div className="flex-1 min-w-0">
@@ -223,15 +235,24 @@ const PRRow: React.FC<{ pr: NormalizedPR }> = ({ pr }) => (
                 <CiDot status={pr.ciStatus} />
             </div>
         </div>
-        <a
-            href={pr.htmlUrl}
-            target="_blank"
-            rel="noreferrer"
-            onClick={e => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-200 transition-all shrink-0"
-            title="Abrir en navegador"
-        >
-            <ExternalLink size={11} />
-        </a>
+        <div className="flex items-center gap-0.5 shrink-0">
+            <button
+                onClick={e => { e.stopPropagation(); onMerge(); }}
+                className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/40 text-purple-300 transition-all"
+                title="Hacer merge"
+            >
+                <GitMerge size={9} /> Merge
+            </button>
+            <a
+                href={pr.htmlUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={e => e.stopPropagation()}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-200 transition-all"
+                title="Abrir en navegador"
+            >
+                <ExternalLink size={11} />
+            </a>
+        </div>
     </div>
 );

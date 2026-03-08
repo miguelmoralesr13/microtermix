@@ -124,3 +124,97 @@ export async function createGitlabMR(
     }
     return response.json();
 }
+
+export async function mergeGitlabMR(
+    projectPath: string,
+    token: string,
+    mrIid: number,
+    squash = false,
+    removeBranch = false,
+    commitMessage?: string,
+    apiUrl?: string,
+): Promise<void> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project from 'origin' remote.");
+    if (!token) throw new Error("GitLab token is required to merge a Merge Request.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    const body: Record<string, unknown> = {
+        squash,
+        should_remove_source_branch: removeBranch,
+    };
+    if (commitMessage) body.merge_commit_message = commitMessage;
+    const response = await fetch(`${base}/api/v4/projects/${encoded}/merge_requests/${mrIid}/merge`, {
+        method: 'PUT',
+        headers: { 'PRIVATE-TOKEN': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(`GitLab API Error: ${response.status} ${err?.message || response.statusText}`);
+    }
+}
+
+export interface GitlabMRCommit {
+    id: string;
+    short_id: string;
+    title: string;
+    author_name: string;
+    created_at: string;
+}
+
+export interface GitlabMRChange {
+    new_path: string;
+    old_path: string;
+    new_file: boolean;
+    deleted_file: boolean;
+    renamed_file: boolean;
+}
+
+export async function fetchGitlabMRCommits(
+    projectPath: string, token: string, mrIid: number, apiUrl?: string
+): Promise<GitlabMRCommit[]> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project from 'origin' remote.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    const res = await fetch(`${base}/api/v4/projects/${encoded}/merge_requests/${mrIid}/commits`, {
+        headers: { 'PRIVATE-TOKEN': token },
+    });
+    if (!res.ok) throw new Error(`GitLab API Error: ${res.status}`);
+    return res.json();
+}
+
+export async function fetchGitlabMRChanges(
+    projectPath: string, token: string, mrIid: number, apiUrl?: string
+): Promise<GitlabMRChange[]> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project from 'origin' remote.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    const res = await fetch(`${base}/api/v4/projects/${encoded}/merge_requests/${mrIid}/changes`, {
+        headers: { 'PRIVATE-TOKEN': token },
+    });
+    if (!res.ok) throw new Error(`GitLab API Error: ${res.status}`);
+    const data = await res.json();
+    return data.changes ?? [];
+}
+
+export async function closeGitlabMR(
+    projectPath: string, token: string, mrIid: number, apiUrl?: string
+): Promise<void> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project from 'origin' remote.");
+    if (!token) throw new Error("GitLab token is required.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    const res = await fetch(`${base}/api/v4/projects/${encoded}/merge_requests/${mrIid}`, {
+        method: 'PUT',
+        headers: { 'PRIVATE-TOKEN': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state_event: 'close' }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(`GitLab API Error: ${res.status} ${err?.message || res.statusText}`);
+    }
+}
