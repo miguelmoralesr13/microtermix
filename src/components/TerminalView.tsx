@@ -6,6 +6,23 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { Search, X, ChevronUp, ChevronDown } from 'lucide-react';
 import 'xterm/css/xterm.css';
 
+/** Copies text to clipboard using execCommand (reliable on Linux WebKitGTK) with async API fallback. */
+function writeToClipboard(text: string) {
+    try {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;pointer-events:none';
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(el);
+        if (!ok) throw new Error('execCommand failed');
+    } catch {
+        navigator.clipboard?.writeText(text).catch(() => {});
+    }
+}
+
 interface TerminalViewProps {
     serviceId: string;
 }
@@ -43,12 +60,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         fitAddon.fit();
 
         term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+            if (e.type !== 'keydown') return true;
             if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
                 const sel = term.getSelection();
                 if (sel) {
-                    navigator.clipboard?.writeText(sel).catch(() => {});
+                    writeToClipboard(sel);
                     return false;
                 }
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+                navigator.clipboard?.readText().then(text => {
+                    if (text) term.write(text);
+                }).catch(() => {});
+                return false;
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
                 e.preventDefault();

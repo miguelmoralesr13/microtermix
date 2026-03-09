@@ -12,6 +12,14 @@ use tokio::process::Command as AsyncCommand;
 use crate::proxy::{find_vite_config, generate_vite_wrapper};
 use crate::AppState;
 
+/// Public wrapper called from state.rs on app exit.
+#[cfg(not(target_os = "windows"))]
+pub fn kill_tree_unix_pub(pid: u32) {
+    kill_tree_unix(pid, nix::sys::signal::Signal::SIGKILL);
+}
+#[cfg(target_os = "windows")]
+pub fn kill_tree_unix_pub(_pid: u32) {}
+
 /// Recursively kill a process tree on Linux by reading /proc PPid entries.
 /// Kills children first (depth-first), then the process itself.
 #[cfg(not(target_os = "windows"))]
@@ -228,13 +236,16 @@ pub async fn execute_service_script(
     _script_display: Option<String>,
     use_vite_wrapper: Option<bool>,
     vite_wrapper_remotes: Option<HashMap<String, String>>,
+    vite_wrapper_base: Option<String>,
+    vite_wrapper_sourcemap: Option<bool>,
+    vite_wrapper_host: Option<String>,
 ) -> Result<(), String> {
     let path = Path::new(&project_path);
     let mut script_to_run = script.clone();
     if use_vite_wrapper == Some(true) {
         if let Some(ref remotes) = vite_wrapper_remotes {
             if !remotes.is_empty() && path.is_dir() && find_vite_config(path).is_some() {
-                if let Ok(wrapper_name) = generate_vite_wrapper(path, remotes) {
+                if let Ok(wrapper_name) = generate_vite_wrapper(path, remotes, vite_wrapper_base.as_deref(), vite_wrapper_sourcemap, vite_wrapper_host.as_deref()) {
                     let wrapper_arg = format!("--config {}", wrapper_name);
                     let mut new_parts = Vec::new();
                     for part in script.split("&&") {
@@ -299,10 +310,16 @@ pub async fn execute_service_script(
     let stderr = child.stderr.take().unwrap();
 
     let notify = Arc::new(tokio::sync::Notify::new());
+    let child_pid = child.id().unwrap_or(0);
 
     {
         let mut processes = state.processes.lock().await;
         processes.insert(service_id.clone(), notify.clone());
+    }
+    if child_pid > 0 {
+        if let Ok(mut pids) = state.process_pids.lock() {
+            pids.insert(service_id.clone(), child_pid);
+        }
     }
 
     let app_clone = app.clone();
@@ -387,6 +404,10 @@ pub async fn execute_service_script(
                     }
                 }
                 let _ = child.kill().await;
+                let app_state = app_wait.state::<crate::AppState>();
+                if let Ok(mut pids) = app_state.process_pids.lock() {
+                    pids.remove(&service_id_wait);
+                };
             }
             _ = child.wait() => {
                 // Process completed naturally — notify frontend so it can update status
@@ -394,6 +415,9 @@ pub async fn execute_service_script(
                 {
                     let mut procs = app_state.processes.lock().await;
                     procs.remove(&service_id_wait);
+                }
+                if let Ok(mut pids) = app_state.process_pids.lock() {
+                    pids.remove(&service_id_wait);
                 }
                 let _ = app_wait.emit("service-stopped", service_id_wait);
             }

@@ -364,6 +364,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             const viteConfig = getViteWrapperConfig(projectPath);
             const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
             const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
+            const viteWrapperBase = viteConfig?.base || undefined;
+            const viteWrapperSourcemap = viteConfig?.sourcemap || undefined;
+            const viteWrapperHost = viteConfig?.host || undefined;
 
             updateProcessStatus(compositeServiceId, 'running', rawScript, envVarsJson, incrementRestart);
             await invoke('execute_service_script', {
@@ -373,6 +376,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 envVarsJson,
                 useViteWrapper: useViteWrapper || undefined,
                 viteWrapperRemotes,
+                viteWrapperBase,
+                viteWrapperSourcemap,
+                viteWrapperHost,
             });
         } catch (e) {
             console.error(`Execution failed for ${compositeServiceId}`, e);

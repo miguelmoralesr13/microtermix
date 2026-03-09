@@ -22,8 +22,8 @@ pub use crate::state::AppState;
 pub use crate::projects::{get_project_script_bodies, read_project_envs, scan_projects, Project};
 pub use crate::processes::{
     execute_service_script, get_listening_processes, kill_all_services, kill_process_by_pid,
-    kill_service, read_file_at_path, read_file_content, write_file_content, ListeningProcess,
-    LogEvent,
+    kill_service, kill_tree_unix_pub, read_file_at_path, read_file_content, write_file_content,
+    ListeningProcess, LogEvent,
 };
 pub use crate::proxy::{
     get_proxy_candidates, has_vite_config, parse_vite_federation, start_proxy, stop_proxy,
@@ -286,6 +286,12 @@ pub fn run() {
             crypto_encrypt_json_fields,
             crypto_decrypt_json_all,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                let state = app_handle.state::<AppState>();
+                crate::state::kill_all_pids_sync(&state);
+            }
+        });
 }

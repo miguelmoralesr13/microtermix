@@ -126,7 +126,43 @@ function AppContent() {
   return <ServiceManager />;
 }
 
+/**
+ * On Linux WebKitGTK, Ctrl+C/V/X are sometimes not forwarded to the webview.
+ * This listener forces execCommand so clipboard always works.
+ */
+/**
+ * On Linux WebKitGTK, standard keyboard shortcuts are not always forwarded to the webview.
+ * This maps every Ctrl/Meta+key combo to its execCommand equivalent so they all work.
+ */
+const EDIT_SHORTCUT_MAP: Record<string, string> = {
+  c: 'copy',
+  x: 'cut',
+  v: 'paste',
+  z: 'undo',
+  y: 'redo',
+  a: 'selectAll',
+  b: 'bold',
+  i: 'italic',
+  u: 'underline',
+};
+
+function useLinuxClipboardFix() {
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.defaultPrevented) return;
+      const key = e.key.toLowerCase();
+      // Ctrl+Shift+Z → redo (alternative to Ctrl+Y)
+      const cmd = (e.shiftKey && key === 'z') ? 'redo' : EDIT_SHORTCUT_MAP[key];
+      if (cmd) document.execCommand(cmd);
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, []);
+}
+
 function App() {
+  useLinuxClipboardFix();
   return (
     <WorkspaceProvider>
       <AppContent />

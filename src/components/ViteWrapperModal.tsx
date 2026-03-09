@@ -22,6 +22,9 @@ export interface ViteWrapperConfig {
     enabled: boolean;
     remotes: Record<string, string>;
     disabledRemotes?: string[];
+    base?: string;
+    sourcemap?: boolean;
+    host?: string;
 }
 
 export interface ProxyCandidateItem {
@@ -48,15 +51,18 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
     const [federationName, setFederationName] = useState('');
     const [remoteList, setRemoteList] = useState<ViteRemoteEntry[]>([]);
     const [disabledRemotes, setDisabledRemotes] = useState<Set<string>>(new Set());
+    const [base, setBase] = useState('');
+    const [sourcemap, setSourcemap] = useState(false);
+    const [host, setHost] = useState('');
     const [loading, setLoading] = useState(false);
     const [newRemoteName, setNewRemoteName] = useState('');
     const [newRemoteUrl, setNewRemoteUrl] = useState('');
 
     const persistCurrentProject = useCallback(() => {
         if (!selectedPath) return;
-        const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes] };
+        const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes], base: base || undefined, sourcemap: sourcemap || undefined, host: host || undefined };
         localStorage.setItem(storageKey(selectedPath), JSON.stringify(config));
-    }, [selectedPath, enabled, remotes, disabledRemotes]);
+    }, [selectedPath, enabled, remotes, disabledRemotes, base, sourcemap, host]);
 
     const loadFederation = useCallback(async (projectPath: string) => {
         if (!projectPath) return;
@@ -75,6 +81,9 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
             } catch (_) { }
             setEnabled(!!saved.enabled);
             setDisabledRemotes(new Set(saved.disabledRemotes ?? []));
+            setBase(saved.base ?? '');
+            setSourcemap(!!saved.sourcemap);
+            setHost(saved.host ?? '');
             const merged: Record<string, string> = {};
             onlyInWorkspace.forEach(r => {
                 merged[r.name] = saved.remotes?.[r.name] ?? r.default_url;
@@ -108,7 +117,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
     };
 
     const handleSave = () => {
-        const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes] };
+        const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes], base: base || undefined, sourcemap: sourcemap || undefined, host: host || undefined };
         localStorage.setItem(storageKey(selectedPath), JSON.stringify(config));
         onClose();
     };
@@ -197,6 +206,40 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                         />
                                         <span className="text-sm text-slate-300">Usar Vite wrapper en las ejecuciones</span>
                                     </label>
+
+                                    <div className="flex gap-3 flex-wrap">
+                                        <div className="flex-1 min-w-[160px]">
+                                            <label className="block text-xs text-slate-400 mb-1">Base URL <span className="text-slate-500">(opcional)</span></label>
+                                            <input
+                                                type="text"
+                                                value={base}
+                                                onChange={e => setBase(e.target.value)}
+                                                placeholder="/my-app/"
+                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none"
+                                            />
+                                        </div>
+                                        <div className="flex-1 min-w-[160px]">
+                                            <label className="block text-xs text-slate-400 mb-1">Host <span className="text-slate-500">(server/preview)</span></label>
+                                            <input
+                                                type="text"
+                                                value={host}
+                                                onChange={e => setHost(e.target.value)}
+                                                placeholder="0.0.0.0"
+                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none"
+                                            />
+                                        </div>
+                                        <div className="flex items-end pb-0.5">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={sourcemap}
+                                                    onChange={e => setSourcemap(e.target.checked)}
+                                                    className="accent-nexus-neon"
+                                                />
+                                                <span className="text-sm text-slate-300">sourcemap</span>
+                                            </label>
+                                        </div>
+                                    </div>
 
                                     <div>
                                         <p className="text-xs text-slate-400 mb-2">Remotes (URL local por MFE)</p>
@@ -333,7 +376,7 @@ export function getViteWrapperConfig(projectPath: string): ViteWrapperConfig | n
             );
             return { ...parsed, remotes: filteredRemotes };
         }
-        return parsed;
+        return { ...parsed };
     } catch {
         return null;
     }

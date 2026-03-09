@@ -13,6 +13,160 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::state::{AppState, ServerHandle};
 
+/// Finds the byte length of a JS/TS value starting at `s[0]`, stopping when it
+/// reaches a `,` or `}` at depth 0 (outside brackets/parens/braces/strings).
+fn js_value_len(s: &str) -> usize {
+    let mut depth: i32 = 0;
+    let mut in_string: Option<char> = None;
+    let mut escape = false;
+    let mut pos = 0;
+    let bytes = s.as_bytes();
+    while pos < bytes.len() {
+        let b = bytes[pos] as char;
+        if escape {
+            escape = false;
+        } else if b == '\\' && in_string.is_some() {
+            escape = true;
+        } else if let Some(q) = in_string {
+            if b == q { in_string = None; }
+        } else {
+            match b {
+                '"' | '\'' | '`' => { in_string = Some(b); }
+                '(' | '[' | '{'  => { depth += 1; }
+                ')' | ']' | '}'  => { if depth == 0 { break; } depth -= 1; }
+                ','              => { if depth == 0 { break; } }
+                _                => {}
+            }
+        }
+        pos += 1;
+    }
+    pos
+}
+
+/// Finds the byte range [start, end) of the block body (after the opening `{`)
+/// for the first occurrence of `block_key: {` in `content`, skipping comment lines.
+/// Returns (block_open_brace_pos, block_close_brace_pos) — positions of `{` and `}`.
+fn find_block_range(content: &str, block_key: &str) -> Option<(usize, usize)> {
+    let search = format!("{}:", block_key);
+    let mut scan = content;
+    let mut base_offset = 0usize;
+    loop {
+        let offset = scan.find(&search)?;
+        let before = &scan[..offset];
+        let boundary_ok = before.chars().last().map_or(true, |c| !c.is_alphanumeric() && c != '_');
+        let line_start = before.rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let in_comment = before[line_start..].trim_start().starts_with("//");
+        if !boundary_ok || in_comment {
+            base_offset += offset + 1;
+            scan = &scan[offset + 1..];
+            continue;
+        }
+        let after = &scan[offset + search.len()..];
+        // Skip whitespace to find the opening `{`
+        let brace_offset = after.find('{')? ;
+        let open = base_offset + offset + search.len() + brace_offset;
+        // Now find the matching closing `}`
+        let body = &content[open + 1..];
+        let mut depth = 1i32;
+        let mut in_string: Option<char> = None;
+        let mut escape = false;
+        let mut p = 0usize;
+        let bytes = body.as_bytes();
+        while p < bytes.len() {
+            let b = bytes[p] as char;
+            if escape { escape = false; }
+            else if b == '\\' && in_string.is_some() { escape = true; }
+            else if let Some(q) = in_string { if b == q { in_string = None; } }
+            else {
+                match b {
+                    '"' | '\'' | '`' => { in_string = Some(b); }
+                    '{' | '(' | '['  => { depth += 1; }
+                    '}' | ')' | ']'  => { depth -= 1; if depth == 0 { break; } }
+                    _ => {}
+                }
+            }
+            p += 1;
+        }
+        let close = open + 1 + p;
+        return Some((open, close));
+    }
+}
+
+/// Insert or replace `host: <value>` inside `server: {}` and `preview: {}` blocks.
+fn inject_host_in_blocks(content: &str, host_value: &str) -> String {
+    let mut out = content.to_string();
+    for block in &["server", "preview"] {
+        if let Some((open, _)) = find_block_range(&out, block) {
+            // Try to replace existing host: inside the block body
+            let body_start = open + 1;
+            let block_body = out[body_start..].to_string();
+            let (new_body, found) = replace_js_property(&block_body, "host", host_value);
+            if found {
+                out = format!("{}{}{}", &out[..body_start], new_body, "");
+                // new_body already contains the rest of the string
+                out = format!("{}{}", &out[..body_start], new_body);
+            } else {
+                // Insert host: right after the opening {
+                out = format!("{}\n    host: {},{}",
+                    &out[..open + 1], host_value, &out[open + 1..]);
+            }
+        }
+    }
+    out
+}
+
+/// Replaces the value of `key:` in JS/TS content with `new_value`, skipping comment lines.
+/// Handles multiline values by tracking bracket/string depth.
+/// Returns the modified content and whether the key was found.
+fn replace_js_property(content: &str, key: &str, new_value: &str) -> (String, bool) {
+    let search = format!("{}:", key);
+    let mut result = String::new();
+    let mut rest = content;
+
+    loop {
+        match rest.find(&search) {
+            None => {
+                result.push_str(rest);
+                return (result, false);
+            }
+            Some(offset) => {
+                // Word-boundary check: char before key must not be alphanumeric/_
+                let before = &rest[..offset];
+                let boundary_ok = before.chars().last()
+                    .map_or(true, |c| !c.is_alphanumeric() && c != '_');
+
+                // Skip if this occurrence is on a comment line
+                let line_start = before.rfind('\n').map(|p| p + 1).unwrap_or(0);
+                let in_comment = before[line_start..].trim_start().starts_with("//");
+
+                if !boundary_ok || in_comment {
+                    result.push_str(&rest[..offset + 1]);
+                    rest = &rest[offset + 1..];
+                    continue;
+                }
+
+                // Consume everything up to and including "key:"
+                result.push_str(before);
+                result.push_str(&search);
+                let after_colon = &rest[offset + search.len()..];
+
+                // Preserve the whitespace between ':' and the value
+                let ws_len = after_colon.len()
+                    - after_colon.trim_start_matches(|c| c == ' ' || c == '\t').len();
+                result.push_str(&after_colon[..ws_len]);
+
+                let value_str = &after_colon[ws_len..];
+                let vlen = js_value_len(value_str);
+
+                // Write new value, then continue with what came after the old value
+                result.push_str(new_value);
+                result.push_str(&value_str[vlen..]);
+                return (result, true);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProxyCandidate {
     pub project_path: String,
@@ -183,6 +337,9 @@ pub fn get_proxy_candidates(workspace_path: String) -> Result<Vec<ProxyCandidate
 pub fn generate_vite_wrapper(
     project_path: &Path,
     remotes: &HashMap<String, String>,
+    base: Option<&str>,
+    sourcemap: Option<bool>,
+    host: Option<&str>,
 ) -> Result<String, String> {
     let config_path = find_vite_config(project_path).ok_or("No vite config found".to_string())?;
     let ext = config_path
@@ -214,6 +371,62 @@ pub fn generate_vite_wrapper(
             out = re.replace_all(&out, replacement.as_str()).to_string();
         }
     }
+    // Inject base and/or sourcemap by directly replacing/inserting values in the wrapper content.
+    let has_base = base.map(|b| !b.trim().is_empty()).unwrap_or(false);
+    let has_sourcemap = sourcemap.unwrap_or(false);
+
+    if has_base {
+        let b = base.unwrap().trim();
+        let b_escaped = b.replace('\\', "\\\\").replace('"', "\\\"");
+        let new_base_value = format!("\"{}\"", b_escaped);
+        let (replaced, found) = replace_js_property(&out, "base", &new_base_value);
+        if found {
+            out = replaced;
+        } else {
+            // No base found — insert after the first { following `export default`
+            if let Some(export_pos) = out.find("export default") {
+                if let Some(brace_pos) = out[export_pos..].find('{') {
+                    let abs = export_pos + brace_pos + 1;
+                    out = format!("{}\n  base: \"{}\",{}", &out[..abs], b_escaped, &out[abs..]);
+                }
+            }
+        }
+    }
+
+    if has_sourcemap {
+        // 1. If sourcemap already exists, replace its value with true (handles multiline values too).
+        let (sm_replaced, sm_found) = replace_js_property(&out, "sourcemap", "true");
+        if sm_found {
+            out = sm_replaced;
+        } else {
+            // 2. No sourcemap — insert inside existing build: { ... } block.
+            let build_open_pat = r"build\s*:\s*\{";
+            if let Ok(re2) = regex::Regex::new(build_open_pat) {
+                if let Some(m) = re2.find(&out) {
+                    let brace_end = m.end();
+                    out = format!("{}\n    sourcemap: true,{}", &out[..brace_end], &out[brace_end..]);
+                } else {
+                    // 3. No build block — insert after the first { following `export default`
+                    if let Some(export_pos) = out.find("export default") {
+                        if let Some(brace_pos) = out[export_pos..].find('{') {
+                            let abs = export_pos + brace_pos + 1;
+                            out = format!("{}\n  build: {{ sourcemap: true }},{}", &out[..abs], &out[abs..]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Inject host inside server: {} and preview: {} blocks
+    if let Some(h) = host {
+        let h = h.trim();
+        if !h.is_empty() {
+            let h_escaped = h.replace('\\', "\\\\").replace('"', "\\\"");
+            let host_value = format!("\"{}\"", h_escaped);
+            out = inject_host_in_blocks(&out, &host_value);
+        }
+    }
+
     let wrapper_name = format!(".nexus-vite-wrapper.{}", ext);
     let wrapper_path = project_path.join(&wrapper_name);
     // Comentario al inicio para que se vea qué remotes se inyectaron
