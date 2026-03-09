@@ -12,6 +12,39 @@ use tokio::process::Command as AsyncCommand;
 use crate::proxy::{find_vite_config, generate_vite_wrapper};
 use crate::AppState;
 
+/// Recursively kill a process tree on Linux by reading /proc PPid entries.
+/// Kills children first (depth-first), then the process itself.
+#[cfg(not(target_os = "windows"))]
+fn kill_tree_unix(pid: u32, sig: nix::sys::signal::Signal) {
+    use nix::sys::signal::kill;
+    use nix::unistd::Pid;
+    // Find direct children via /proc/<n>/status PPid field
+    if let Ok(entries) = std::fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            let child_pid: u32 = match name_str.parse() {
+                Ok(n) if n != pid => n,
+                _ => continue,
+            };
+            let status_path = format!("/proc/{}/status", child_pid);
+            if let Ok(status) = std::fs::read_to_string(&status_path) {
+                for line in status.lines() {
+                    if let Some(rest) = line.strip_prefix("PPid:") {
+                        if let Ok(ppid) = rest.trim().parse::<u32>() {
+                            if ppid == pid {
+                                kill_tree_unix(child_pid, sig);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    let _ = kill(Pid::from_raw(pid as i32), sig);
+}
+
 /// Entrada de proceso en escucha (netstat).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListeningProcess {
@@ -251,7 +284,6 @@ pub async fn execute_service_script(
     {
         cmd.args(["-c", &script_to_run]);
         // Put the child in its own process group so we can kill the whole tree later
-        use std::os::unix::process::CommandExt;
         cmd.process_group(0);
     }
 
@@ -343,15 +375,15 @@ pub async fn execute_service_script(
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
-                    // Kill the entire process group (node/npm children included)
                     if let Some(pid) = child.id() {
-                        let _ = std::process::Command::new("kill")
-                            .args(["-TERM", &format!("-{}", pid)])
-                            .output();
-                        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-                        let _ = std::process::Command::new("kill")
-                            .args(["-KILL", &format!("-{}", pid)])
-                            .output();
+                        use nix::sys::signal::{kill, Signal};
+                        use nix::unistd::Pid;
+                        // SIGTERM first (graceful), then wait, then SIGKILL the whole tree
+                        kill_tree_unix(pid, Signal::SIGTERM);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+                        kill_tree_unix(pid, Signal::SIGKILL);
+                        // Also SIGKILL the direct shell in case it escaped
+                        let _ = kill(Pid::from_raw(pid as i32), Signal::SIGKILL);
                     }
                 }
                 let _ = child.kill().await;
