@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Square, RotateCcw, FileCode, Wand2 } from 'lucide-react';
-import { Select } from '../ui/Select';
-import { Button } from '../ui/Button';
+import { Select } from '../ui/NexusSelect';
+import { Button } from '../ui/NexusButton';
 import { CommandBuilderModal } from './CommandBuilderModal';
 import { useWorkspace } from '../../context/WorkspaceContext';
 

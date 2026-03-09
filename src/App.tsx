@@ -4,6 +4,7 @@ import { WorkspaceProvider, useWorkspace } from "./context/WorkspaceContext";
 import { ServiceManager } from "./components/ServiceManager";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
+import { Toaster } from 'sonner';
 
 // A wrapper to handle initial workspace loading logic
 function AppContent() {
@@ -129,6 +130,7 @@ function App() {
   return (
     <WorkspaceProvider>
       <AppContent />
+      <Toaster position="bottom-right" theme="dark" richColors />
     </WorkspaceProvider>
   );
 }
