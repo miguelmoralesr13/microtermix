@@ -224,6 +224,11 @@ export const GitPanel: React.FC = () => {
                     <div className="flex-1 flex items-center justify-center text-slate-500 p-8 text-center text-sm">
                         Select a repository tab to manage Git operations.
                     </div>
+                ) : (repoData.isGitRepo === null || repoData.loading.repo) ? (
+                    <div className="flex-1 flex items-center justify-center text-slate-500 text-sm gap-2">
+                        <RefreshCw size={14} className="animate-spin" />
+                        Detecting repository...
+                    </div>
                 ) : (repoData.isGitRepo === 'not_initialized' || repoData.isGitRepo === 'empty_repo') ? (
                     <GitInitPanel
                         projectPath={ui.activeTab}

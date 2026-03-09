@@ -423,6 +423,7 @@ export const useGitStore = create<GitStore>()(
                             k,
                             {
                                 ...v,
+                                isGitRepo: null,
                                 loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
                                 lastFetched: {},
                             },
