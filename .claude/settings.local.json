@@ -13,7 +13,23 @@
       "Bash(cargo check:*)",
       "Bash(python:*)",
       "Bash(npm install:*)",
-      "Bash(winget upgrade:*)"
+      "Bash(winget upgrade:*)",
+      "Bash(npx shadcn@latest init --defaults 2>&1 | head -30)",
+      "Bash(npx shadcn@latest init --defaults 2>&1 | head -40)",
+      "Bash(npx shadcn@latest add dialog --yes 2>&1 | tail -10)",
+      "Bash(npx shadcn@latest add tabs --yes 2>&1 | tail -5 && npx shadcn@latest add badge --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add calendar --yes 2>&1 | tail -10)",
+      "Bash(npx shadcn@latest add calendar --yes 2>&1 | head -20)",
+      "Bash(npx shadcn@latest add popover --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add select --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add input --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add textarea --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add label --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add separator --yes 2>&1 | tail -5)",
+      "Bash(npx shadcn@latest add tooltip --yes 2>&1 | tail -5)",
+      "Bash(git add components.json tsconfig.json vite.config.ts package.json src/App.tsx src/components/services/MultiExecutionBar.tsx \"src/lib/\" \"src/components/ui/NexusButton.tsx\" \"src/components/ui/NexusSelect.tsx\" \"src/components/ui/badge.tsx\" \"src/components/ui/button.tsx\" \"src/components/ui/calendar.tsx\" \"src/components/ui/dialog.tsx\" \"src/components/ui/input.tsx\" \"src/components/ui/label.tsx\" \"src/components/ui/popover.tsx\" \"src/components/ui/select.tsx\" \"src/components/ui/separator.tsx\" \"src/components/ui/tabs.tsx\" \"src/components/ui/textarea.tsx\" \"src/components/ui/tooltip.tsx\")",
+      "Bash(git rm \"src/components/ui/Button.tsx\" \"src/components/ui/Select.tsx\")",
+      "Bash(git commit -m \"$\\(cat <<'EOF'\nfeat: install shadcn/ui + sonner + configure @/ alias\n\n- Add @/ path alias in tsconfig.json and vite.config.ts\n- Initialize shadcn/ui with components.json \\(base-nova style, TailwindCSS v4\\)\n- Install @base-ui/react and class-variance-authority for shadcn components\n- Add shadcn components: dialog, tabs, badge, popover, select, input, textarea, button, label, separator, tooltip\n- Add manual calendar.tsx stub \\(react-day-picker has peer dep conflict\\)\n- Create src/lib/utils.ts with cn\\(\\) helper\n- Rename legacy Button.tsx/Select.tsx to NexusButton.tsx/NexusSelect.tsx to avoid casing collision\n- Install sonner and date-fns; add <Toaster> to App.tsx\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

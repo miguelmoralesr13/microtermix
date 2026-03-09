@@ -59,6 +59,7 @@ App.tsx
 | `commands` | CommandsPanel | Save/run named commands (single or multi-step) |
 | `git` | GitPanel | Git diff, staging, timeline, GitHub PR/push |
 | `jira` | JiraPanel | Jira ticket browser |
+| `time` | TempoTab (src/components/jira/) | Tempo Cloud API v4 worklogs: view by period, log/edit/delete time |
 | `processes` | ProcessesPanel | Netstat-based listening ports viewer |
 | `proxy` | ProxyPanel | Axum-based reverse proxy |
 | `fileServer` | FileServerPanel | Axum-based static file server |
@@ -131,6 +132,12 @@ src/
 │   │   ├── LibCipherCipherTab.tsx
 │   │   ├── LibCipherJsonTab.tsx
 │   │   └── LibCipherKeysPanel.tsx
+│   ├── jira/                      # Tempo time tracking
+│   │   ├── TempoTab.tsx           # Root: My Worklogs + By Issue
+│   │   ├── WorklogList.tsx        # Grouped by day with totals
+│   │   ├── WorklogCard.tsx        # Individual worklog card
+│   │   ├── LogTimeModal.tsx       # Create/edit worklog dialog
+│   │   └── PeriodSelector.tsx    # Week/Month period navigator
 │   ├── ui/                    # Button, Checkbox, IconButton, Select
 │   ├── GitPanel.tsx + Git*.tsx + GitConsole.tsx + GitConflict*.tsx
 │   ├── SsmTerminal.tsx        # AWS SSM session terminal
@@ -147,13 +154,17 @@ src/
 ├── context/
 │   └── WorkspaceContext.tsx
 ├── stores/
-│   └── gitStore.ts            # Zustand store for git state
+│   ├── gitStore.ts            # Zustand store for git state
+│   └── tempoStore.ts          # Zustand: worklogs, period, CRUD
 └── services/                  # External API clients
     ├── githubApi.ts
     ├── cloudwatchApi.ts
-    └── jenkinsApi.ts
+    ├── jenkinsApi.ts
+    └── tempoApi.ts            # Tempo Cloud API v4
 ```
 
 ### Styling
 
 TailwindCSS v4 is used via the `@tailwindcss/vite` plugin (no `tailwind.config.js`). Custom design tokens (e.g., `nexus-neon`, `nexus-accent`, `nexus-dark`) are defined in `src/index.css`. The dark theme base color is `#020617`.
+
+**shadcn/ui** is installed (style: new-york). Components live in `src/components/ui/` alongside existing custom UI. Use `cn()` from `src/lib/utils.ts` for class merging. Toast notifications via `sonner` — `<Toaster>` is mounted in `App.tsx`. Old custom Button/Select renamed to `NexusButton`/`NexusSelect`.

@@ -16,10 +16,11 @@ import {
     getActivityOptions, getProjectStatuses, addComment, uploadAttachment,
 } from './jiraApi';
 import { TempoLogModal } from './TempoLogModal';
+import { TempoTab } from './jira/TempoTab';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'board' | 'stories' | 'create' | 'settings';
+type Tab = 'board' | 'stories' | 'create' | 'settings' | 'time';
 // type BoardFilter = 'mine' | 'project' | 'search'; (moved to jiraApi.ts with a richer signature)
 
 // ── Escape key hook ─────────────────────────────────────────────────────────
@@ -2607,7 +2608,7 @@ const STORAGE_JIRA_TAB = 'nexus-jira-active-tab';
 export const JiraPanel: React.FC = () => {
     const [tab, setTab] = useState<Tab>(() => {
         const saved = localStorage.getItem(STORAGE_JIRA_TAB);
-        return (saved === 'board' || saved === 'stories' || saved === 'create' || saved === 'settings') ? saved : 'board';
+        return (saved === 'board' || saved === 'stories' || saved === 'create' || saved === 'settings' || saved === 'time') ? saved : 'board';
     });
     const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -2632,6 +2633,7 @@ export const JiraPanel: React.FC = () => {
         { id: 'board', label: 'Board', icon: <Layers size={14} /> },
         { id: 'stories', label: 'Stories', icon: <Pin size={14} /> },
         { id: 'create', label: 'Crear Issue', icon: <Plus size={14} /> },
+        { id: 'time' as Tab, label: 'Time', icon: <Timer size={14} /> },
         { id: 'settings', label: 'Configuración', icon: <Settings size={14} /> },
     ];
 
@@ -2692,6 +2694,11 @@ export const JiraPanel: React.FC = () => {
                         }} />
                     </div>
                 )}
+                {tab === 'time' && (() => {
+                    const activeAcc = accounts.find(a => a.id === activeAccountId);
+                    if (!activeAcc) return null;
+                    return <TempoTab config={activeAcc.config} accountId={activeAcc.config.defaultAssigneeId} />;
+                })()}
                 {tab === 'settings' && (
                     <SettingsPanel onSaved={handleSettingsSaved} />
                 )}
