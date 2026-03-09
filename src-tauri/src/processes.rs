@@ -63,44 +63,79 @@ pub fn get_listening_processes() -> Result<Vec<ListeningProcess>, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let output = StdCommand::new("netstat")
-            .args(["-tulnp"])
+        // Try ss first (works without root for current-user processes), then netstat
+        let (output, use_ss) = StdCommand::new("ss")
+            .args(["-tlnp"])
             .output()
-            .or_else(|_| StdCommand::new("ss").args(["-tulnp"]).output())
+            .map(|o| (o, true))
+            .or_else(|_| StdCommand::new("netstat").args(["-tlnp"]).output().map(|o| (o, false)))
             .map_err(|e| e.to_string())?;
+
         let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Detect ss format: modern ss has Netid column → data rows start with "tcp"/"udp".
+        // Older ss omits Netid → data rows start with "LISTEN".
+        let ss_has_netid = use_ss && stdout.lines().any(|l| {
+            let f = l.trim().split_whitespace().next().unwrap_or("");
+            matches!(f, "tcp" | "tcp6" | "udp" | "udp6")
+        });
+
         let mut rows = Vec::new();
+
         for line in stdout.lines() {
             let line = line.trim();
             if line.is_empty()
                 || line.starts_with("Proto")
                 || line.starts_with("State")
                 || line.starts_with("Netid")
+                || line.starts_with("Local")
+                || line.starts_with("Active")
             {
                 continue;
             }
             let parts: Vec<&str> = line.split_whitespace().collect();
-            let pid_str = parts.last().unwrap_or(&"0");
-            let pid: u32 = pid_str
-                .split('/')
-                .next()
-                .unwrap_or("0")
-                .parse()
-                .unwrap_or(0);
-            if pid > 0 && parts.len() >= 5 {
-                let (local, foreign) = if parts.len() >= 6 {
-                    (parts[4].to_string(), parts[5].to_string())
-                } else {
-                    (parts[3].to_string(), parts[4].to_string())
-                };
-                rows.push(ListeningProcess {
-                    proto: parts[0].to_string(),
-                    local_address: local,
-                    foreign_address: foreign,
-                    state: "LISTEN".to_string(),
-                    pid,
-                });
-            }
+
+            let (proto, local, foreign, pid) = if use_ss && ss_has_netid {
+                // Modern ss: tcp LISTEN Recv-Q Send-Q Local:Port Peer:Port [Process]
+                // indices:   [0] [1]    [2]    [3]    [4]        [5]       [6..]
+                if parts.len() < 6 { continue; }
+                let pid = parts.get(6..).map(|p| p.join(" ")).and_then(|s| {
+                    let idx = s.find("pid=")?;
+                    let rest = &s[idx + 4..];
+                    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                    rest[..end].parse::<u32>().ok()
+                }).unwrap_or(0);
+                (parts[0].to_string(), parts[4].to_string(), parts[5].to_string(), pid)
+            } else if use_ss {
+                // Older ss (no Netid): LISTEN Recv-Q Send-Q Local:Port Peer:Port [Process]
+                // indices:             [0]    [1]    [2]    [3]        [4]       [5..]
+                if parts.len() < 5 { continue; }
+                let pid = parts.get(5..).map(|p| p.join(" ")).and_then(|s| {
+                    let idx = s.find("pid=")?;
+                    let rest = &s[idx + 4..];
+                    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                    rest[..end].parse::<u32>().ok()
+                }).unwrap_or(0);
+                ("tcp".to_string(), parts[3].to_string(), parts[4].to_string(), pid)
+            } else {
+                // netstat -tlnp: Proto Recv-Q Send-Q Local Foreign State [PID/Prog]
+                // indices:       [0]   [1]    [2]    [3]   [4]     [5]   [6]
+                if parts.len() < 4 { continue; }
+                let pid = parts.get(6)
+                    .and_then(|s| s.split('/').next())
+                    .and_then(|s| s.parse::<u32>().ok())
+                    .unwrap_or(0);
+                let foreign = parts.get(4).map(|s| s.to_string()).unwrap_or_default();
+                (parts[0].to_string(), parts[3].to_string(), foreign, pid)
+            };
+
+            rows.push(ListeningProcess {
+                proto,
+                local_address: local,
+                foreign_address: foreign,
+                state: "LISTEN".to_string(),
+                pid,
+            });
         }
         Ok(rows)
     }
@@ -213,7 +248,12 @@ pub async fn execute_service_script(
     #[cfg(not(target_os = "windows"))]
     let mut cmd = AsyncCommand::new("sh");
     #[cfg(not(target_os = "windows"))]
-    cmd.args(["-c", &script_to_run]);
+    {
+        cmd.args(["-c", &script_to_run]);
+        // Put the child in its own process group so we can kill the whole tree later
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
 
     cmd.current_dir(&project_path)
         .envs(envs)
@@ -294,12 +334,24 @@ pub async fn execute_service_script(
                     if let Some(pid) = child.id() {
                         let mut kill_cmd = std::process::Command::new("taskkill");
                         kill_cmd.args(["/F", "/T", "/PID", &pid.to_string()]);
-                        #[cfg(target_os = "windows")]
                         {
                             use std::os::windows::process::CommandExt;
                             kill_cmd.creation_flags(0x08000000);
                         }
                         let _ = kill_cmd.output();
+                    }
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    // Kill the entire process group (node/npm children included)
+                    if let Some(pid) = child.id() {
+                        let _ = std::process::Command::new("kill")
+                            .args(["-TERM", &format!("-{}", pid)])
+                            .output();
+                        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                        let _ = std::process::Command::new("kill")
+                            .args(["-KILL", &format!("-{}", pid)])
+                            .output();
                     }
                 }
                 let _ = child.kill().await;

@@ -197,7 +197,7 @@ export const ServiceManager: React.FC = () => {
         const scriptToRestart = multiScript;
 
         await handleBatchStop();
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 700));
 
         await Promise.all(projectsToRestart.map(async (projectPath) => {
             await executeProjectScript(projectPath, scriptToRestart, {
@@ -214,12 +214,12 @@ export const ServiceManager: React.FC = () => {
         const projectPath = serviceId.split('::')[0];
 
         await invoke('kill_service', { serviceId });
-        setTimeout(async () => {
-            await executeProjectScript(projectPath, pState.script as string, {
-                globalEnvName,
-                incrementRestart: true
-            });
-        }, 500);
+        updateProcessStatus(serviceId, 'stopped');
+        await new Promise(r => setTimeout(r, 700));
+        await executeProjectScript(projectPath, pState.script as string, {
+            globalEnvName,
+            incrementRestart: true
+        });
     };
 
     React.useEffect(() => {

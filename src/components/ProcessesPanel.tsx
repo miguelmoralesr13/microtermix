@@ -101,9 +101,9 @@ export const ProcessesPanel: React.FC = () => {
                                     <td className="py-1.5 px-2">
                                         <button
                                             onClick={() => handleKill(proc.pid)}
-                                            disabled={killing === proc.pid}
-                                            className="p-1.5 rounded text-slate-500 hover:text-nexus-danger hover:bg-nexus-danger/10 transition-colors disabled:opacity-50"
-                                            title="Terminar proceso (taskkill)"
+                                            disabled={killing === proc.pid || proc.pid === 0}
+                                            className="p-1.5 rounded text-slate-500 hover:text-nexus-danger hover:bg-nexus-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                            title={proc.pid === 0 ? 'PID desconocido (sin permisos)' : 'Terminar proceso'}
                                         >
                                             <Trash2 size={14} />
                                         </button>
