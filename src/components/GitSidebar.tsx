@@ -135,6 +135,7 @@ const ActiveBranchDropZone = ({
 
 export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRequest }) => {
     const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
+    const aheadBehind = repo.aheadBehind;
     const branchFilter = useGitStore(s => s.ui.branchFilter);
     const setUi = useGitStore(s => s.setUi);
 
@@ -286,13 +287,38 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                             )}
                             <button
                                 onClick={handlePull}
-                                className={`p-1.5 text-slate-400 hover:text-nexus-success hover:bg-slate-800 rounded transition-colors ${loading ? 'opacity-50 pointer-events-none' : ''}`}
-                                title="Pull (Fetch and Merge)"
+                                className={[
+                                    'relative p-1.5 rounded transition-all',
+                                    loading ? 'opacity-50 pointer-events-none' : '',
+                                    aheadBehind?.behind
+                                        ? 'text-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-500/50 shadow-[0_0_8px_rgba(34,211,238,0.45)] animate-pulse hover:bg-cyan-500/20'
+                                        : 'text-slate-400 hover:text-nexus-success hover:bg-slate-800',
+                                ].join(' ')}
+                                title={aheadBehind?.behind ? `Pull — ${aheadBehind.behind} commit${aheadBehind.behind > 1 ? 's' : ''} behind` : 'Pull'}
                             >
                                 <DownloadCloud size={14} />
+                                {!!aheadBehind?.behind && (
+                                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-cyan-500 text-[8px] font-bold text-white rounded-full flex items-center justify-center px-0.5 leading-none">
+                                        {aheadBehind.behind > 9 ? '9+' : aheadBehind.behind}
+                                    </span>
+                                )}
                             </button>
-                            <button onClick={() => setShowPushModal(true)} className="p-1.5 text-slate-400 hover:text-nexus-accent hover:bg-slate-800 rounded transition-colors" title="Push (Preview commits)">
+                            <button
+                                onClick={() => setShowPushModal(true)}
+                                className={[
+                                    'relative p-1.5 rounded transition-all',
+                                    aheadBehind?.ahead
+                                        ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.45)] animate-pulse hover:bg-amber-500/20'
+                                        : 'text-slate-400 hover:text-nexus-accent hover:bg-slate-800',
+                                ].join(' ')}
+                                title={aheadBehind?.ahead ? `Push — ${aheadBehind.ahead} commit${aheadBehind.ahead > 1 ? 's' : ''} ahead` : 'Push (Preview commits)'}
+                            >
                                 <UploadCloud size={14} />
+                                {!!aheadBehind?.ahead && (
+                                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-amber-500 text-[8px] font-bold text-white rounded-full flex items-center justify-center px-0.5 leading-none">
+                                        {aheadBehind.ahead > 9 ? '9+' : aheadBehind.ahead}
+                                    </span>
+                                )}
                             </button>
                             <button onClick={() => onRefreshRequest?.()} className={`p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ${loading ? 'animate-spin' : ''}`} title="Refresh">
                                 <RefreshCw size={14} />

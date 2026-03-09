@@ -23,6 +23,7 @@ import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
+import { useGitStore } from '../stores/gitStore';
 
 const ACTIVE_TERMINAL_STORAGE_KEY = 'nexus-active-terminal-tab';
 
@@ -38,6 +39,8 @@ function selectedProjectsKey(workspacePath: string): string {
 
 export const ServiceManager: React.FC = () => {
     const { state, setTargetTerminalTab, updateProcessStatus, applyWorkspaceConfig, setWorkspacePath, scanWorkspace, executeProjectScript } = useWorkspace();
+    const gitAccounts = useGitStore(s => s.accounts);
+    const gitRepoAccounts = useGitStore(s => s.repoAccounts);
     const [activeTerminalTab, setActiveTerminalTabState] = useState<string | null>(null);
     const processIds = Object.keys(state.activeProcesses);
 
@@ -290,7 +293,8 @@ export const ServiceManager: React.FC = () => {
         return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
     }, [
         selectedProjects, multiScript, globalEnvName, vitePreviewOpen,
-        activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps
+        activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps,
+        gitAccounts, gitRepoAccounts,
     ]);
 
     const handleLoadWorkspaceConfig = async () => {

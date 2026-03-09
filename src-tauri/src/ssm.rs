@@ -210,3 +210,94 @@ pub async fn ssm_start_session(
     // enable raw-mode stdin (required for interactive input to work on Windows).
     crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, Some(envs)).await
 }
+
+/// Start an SSM Port Forwarding tunnel to a remote host (e.g. an RDS instance in a private subnet).
+///
+/// Uses the document `AWS-StartPortForwardingSessionToRemoteHost`.
+/// The session-manager-plugin will listen on `local_port` and forward TCP traffic to
+/// `remote_host:remote_port` through the EC2 instance over SSM.
+///
+/// Typical use: tunnel to an RDS endpoint without exposing it to the internet.
+#[tauri::command]
+pub async fn ssm_start_port_forward(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    credentials: Ec2Credentials,
+    instance_id: String,
+    remote_host: String,
+    remote_port: u16,
+    local_port: u16,
+    service_id: String,
+    plugin_path: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let plugin_exe = plugin_path_finder(&app, plugin_path.as_deref())?;
+
+    // Call StartSession API with the port-forwarding document
+    let ssm = ssm_client(&credentials).await;
+    let resp = ssm
+        .start_session()
+        .target(&instance_id)
+        .document_name("AWS-StartPortForwardingSessionToRemoteHost")
+        .parameters("host", vec![remote_host.clone()])
+        .parameters("portNumber", vec![remote_port.to_string()])
+        .parameters("localPortNumber", vec![local_port.to_string()])
+        .send()
+        .await
+        .map_err(|e| format!("StartSession (PortForward): {e}"))?;
+
+    let session_id  = resp.session_id().unwrap_or_default().to_string();
+    let stream_url  = resp.stream_url().unwrap_or_default().to_string();
+    let token_value = resp.token_value().unwrap_or_default().to_string();
+
+    let response_json = serde_json::json!({
+        "SessionId":  session_id,
+        "StreamUrl":  stream_url,
+        "TokenValue": token_value,
+    })
+    .to_string();
+
+    let request_json = serde_json::json!({
+        "Target": instance_id,
+        "DocumentName": "AWS-StartPortForwardingSessionToRemoteHost",
+        "Parameters": {
+            "host":            [remote_host.clone()],
+            "portNumber":      [remote_port.to_string()],
+            "localPortNumber": [local_port.to_string()],
+        }
+    })
+    .to_string();
+
+    let region    = credentials.region.clone();
+    let endpoint  = format!("https://ssm.{region}.amazonaws.com");
+    let plugin_str = clean_path_str(&plugin_exe);
+
+    let _ = app.emit("service-logs", crate::LogEvent {
+        service_id: service_id.clone(),
+        line: format!(
+            "[SSM Tunnel] {} → {}:{} escuchando en localhost:{}",
+            instance_id, remote_host, remote_port, local_port
+        ),
+        is_error: false,
+    });
+
+    let mut envs = std::collections::HashMap::new();
+    envs.insert("AWS_ACCESS_KEY_ID".to_string(),     credentials.access_key_id.clone());
+    envs.insert("AWS_SECRET_ACCESS_KEY".to_string(), credentials.secret_access_key.clone());
+    envs.insert("AWS_DEFAULT_REGION".to_string(),    credentials.region.clone());
+    if let Some(tok) = &credentials.session_token {
+        envs.insert("AWS_SESSION_TOKEN".to_string(), tok.clone());
+    }
+
+    let args = vec![
+        response_json,
+        region,
+        "StartSession".to_string(),
+        "{}".to_string(),
+        request_json,
+        endpoint,
+    ];
+
+    crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, Some(envs)).await
+}

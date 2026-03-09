@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:portable": "npm run build && tauri build --no-bundle && node scripts/copy-portable.js",
-    "tauri:linux": "npm run build && tauri build --bundles appimage",
+    "tauri:linux": "npm run build && tauri build --bundles deb,appimage",
+    "tauri:deb": "npm run build && tauri build --bundles deb",
     "tauri:mac": "npm run build && tauri build --bundles dmg,app"
   },
   "dependencies": {

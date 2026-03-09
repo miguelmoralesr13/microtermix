@@ -33,6 +33,7 @@ export const GitPanel: React.FC = () => {
     const fetchRepo = useGitStore(s => s.fetchRepo);
     const fetchAll = useGitStore(s => s.fetchAll);
     const fetchStatus = useGitStore(s => s.fetchStatus);
+    const fetchAheadBehind = useGitStore(s => s.fetchAheadBehind);
 
     const invalidate = useGitStore(s => s.invalidate);
     const ensureRepo = useGitStore(s => s.ensureRepo);
@@ -58,8 +59,20 @@ export const GitPanel: React.FC = () => {
             const repo = useGitStore.getState().repos[ui.activeTab!];
             if (repo?.isGitRepo === 'initialized') {
                 fetchAll(ui.activeTab!, false);
+                fetchAheadBehind(ui.activeTab!, false);
             }
         });
+    }, [ui.activeTab]);
+
+    // Poll ahead/behind every 2 minutes while the panel is open
+    useEffect(() => {
+        if (!ui.activeTab) return;
+        const tab = ui.activeTab;
+        const id = setInterval(() => {
+            const repo = useGitStore.getState().repos[tab];
+            if (repo?.isGitRepo === 'initialized') fetchAheadBehind(tab, true);
+        }, 120_000);
+        return () => clearInterval(id);
     }, [ui.activeTab]);
 
     const handleTabChange = (path: string) => {
@@ -86,7 +99,8 @@ export const GitPanel: React.FC = () => {
         if (!ui.activeTab) return;
         invalidate(ui.activeTab);
         fetchAll(ui.activeTab, true);
-    }, [ui.activeTab, invalidate, fetchAll]);
+        fetchAheadBehind(ui.activeTab, true);
+    }, [ui.activeTab, invalidate, fetchAll, fetchAheadBehind]);
 
     useEffect(() => {
         if (!repoData.status.isMergeInProgress) {

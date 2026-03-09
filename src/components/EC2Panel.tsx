@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
     Monitor, RefreshCw, Settings, Play, Square, RotateCcw, Terminal,
     ChevronDown, ChevronRight, CheckCircle, XCircle, Circle, Loader,
-    AlertCircle, Eye, EyeOff, Search, X,
+    AlertCircle, Eye, EyeOff, Search, X, Database, Link2,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -36,6 +37,16 @@ interface Ec2Instance {
     vpc_id: string | null;
     subnet_id: string | null;
     tags: Ec2Tag[];
+}
+
+interface ActiveTunnel {
+    serviceId: string;
+    instanceId: string;
+    instanceName: string;
+    remoteHost: string;
+    remotePort: number;
+    localPort: number;
+    status: 'connecting' | 'active' | 'stopped';
 }
 
 // ── localStorage ───────────────────────────────────────────────────────────────
@@ -102,6 +113,164 @@ function formatLaunchTime(iso: string | null): string {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
     return d.toLocaleString();
+}
+
+// ── SSM Port Forward Modal ─────────────────────────────────────────────────────
+
+interface SsmPortForwardModalProps {
+    inst: Ec2Instance;
+    onConfirm: (remoteHost: string, remotePort: number, localPort: number) => void;
+    onClose: () => void;
+    starting: boolean;
+    error: string | null;
+}
+
+function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmPortForwardModalProps) {
+    const [remoteHost, setRemoteHost] = useState('');
+    const [remotePort, setRemotePort] = useState(5432);
+    const [localPort, setLocalPort] = useState(15432);
+    const displayName = inst.name ?? inst.instance_id;
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        if (!remoteHost.trim()) return;
+        onConfirm(remoteHost.trim(), remotePort, localPort);
+    }
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+            <div
+                className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-md shadow-2xl"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-800">
+                    <Database size={16} className="text-nexus-neon" />
+                    <h3 className="text-sm font-semibold text-slate-200">SSM Port Forwarding</h3>
+                    <span className="ml-2 text-xs text-slate-500 font-mono truncate">{displayName}</span>
+                    <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-300">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                        Crea un túnel SSM desde tu máquina local hasta un host privado (ej. RDS) a través de la instancia EC2.
+                        Conecta tu cliente de BD a <span className="font-mono text-slateus-300">localhost:&lt;puerto local&gt;</span>.
+                    </p>
+
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs text-slate-400 font-medium">Host remoto <span className="text-slate-600">(endpoint RDS u otro)</span></label>
+                        <input
+                            autoFocus
+                            type="text"
+                            value={remoteHost}
+                            onChange={e => setRemoteHost(e.target.value)}
+                            placeholder="my-db.xxxx.us-east-1.rds.amazonaws.com"
+                            className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-nexus-neon placeholder-slate-600"
+                        />
+                    </div>
+
+                    <div className="flex gap-4">
+                        <div className="flex flex-col gap-1 flex-1">
+                            <label className="text-xs text-slate-400 font-medium">Puerto remoto</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={65535}
+                                value={remotePort}
+                                onChange={e => setRemotePort(parseInt(e.target.value) || 5432)}
+                                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1 flex-1">
+                            <label className="text-xs text-slate-400 font-medium">Puerto local</label>
+                            <input
+                                type="number"
+                                min={1024}
+                                max={65535}
+                                value={localPort}
+                                onChange={e => setLocalPort(parseInt(e.target.value) || 15432)}
+                                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                            />
+                        </div>
+                    </div>
+
+                    {remoteHost && (
+                        <div className="bg-slate-800/60 border border-slate-700 rounded px-3 py-2 text-xs text-slate-400 font-mono">
+                            localhost:{localPort} → {remoteHost}:{remotePort}
+                        </div>
+                    )}
+
+                    {error && (
+                        <div className="flex items-start gap-2 p-2 bg-red-900/20 border border-red-800/40 rounded text-red-400 text-xs">
+                            <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    <div className="flex gap-3 justify-end pt-1">
+                        <button type="button" onClick={onClose} className="px-4 py-1.5 rounded text-sm text-slate-400 hover:text-slate-200 transition-colors">
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={starting || !remoteHost.trim()}
+                            className="px-4 py-1.5 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 rounded text-sm hover:bg-nexus-neon/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {starting && <Loader size={13} className="animate-spin" />}
+                            Iniciar túnel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+// ── Active Tunnels Panel ────────────────────────────────────────────────────────
+
+interface ActiveTunnelsPanelProps {
+    tunnels: ActiveTunnel[];
+    onStop: (serviceId: string) => void;
+}
+
+function ActiveTunnelsPanel({ tunnels, onStop }: ActiveTunnelsPanelProps) {
+    if (tunnels.length === 0) return null;
+    return (
+        <div className="mx-4 mb-3 border border-slate-700 rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border-b border-slate-700">
+                <Link2 size={13} className="text-nexus-neon" />
+                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Túneles activos</span>
+            </div>
+            <div className="flex flex-col divide-y divide-slate-800">
+                {tunnels.map(t => (
+                    <div key={t.serviceId} className="flex items-center gap-3 px-3 py-2.5 bg-slate-900">
+                        <div className="shrink-0">
+                            {t.status === 'connecting'
+                                ? <Loader size={13} className="animate-spin text-yellow-400" />
+                                : t.status === 'active'
+                                    ? <CheckCircle size={13} className="text-green-400" />
+                                    : <XCircle size={13} className="text-slate-500" />
+                            }
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-xs font-mono text-slate-200">
+                                localhost:{t.localPort} <span className="text-slate-500">→</span> {t.remoteHost}:{t.remotePort}
+                            </div>
+                            <div className="text-xs text-slate-500 truncate">via {t.instanceName}</div>
+                        </div>
+                        <button
+                            onClick={() => onStop(t.serviceId)}
+                            className="px-2 py-0.5 rounded text-xs text-red-400 border border-red-800/40 hover:bg-red-900/20 transition-colors shrink-0"
+                            title="Detener túnel"
+                        >
+                            Detener
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }
 
 // ── Settings Tab ───────────────────────────────────────────────────────────────
@@ -231,17 +400,52 @@ function SettingsTab({ creds, setCreds, ssh, setSsh, onSave, onTest, testing, te
 interface InstanceRowProps {
     inst: Ec2Instance;
     ssh: SshDefaults;
+    creds: Ec2Credentials;
     onAction: (action: 'start' | 'stop' | 'reboot', id: string) => void;
     pending: string | null; // action pending for this instance
+    onTunnelStarted: (tunnel: ActiveTunnel) => void;
 }
 
-function InstanceRow({ inst, ssh, onAction, pending }: InstanceRowProps) {
+function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: InstanceRowProps) {
     const [expanded, setExpanded] = useState(false);
+    const [showTunnelModal, setShowTunnelModal] = useState(false);
+    const [tunnelStarting, setTunnelStarting] = useState(false);
+    const [tunnelError, setTunnelError] = useState<string | null>(null);
     const displayName = inst.name ?? inst.instance_id;
     const connectHost = inst.public_ip ?? inst.private_ip;
     const canConnect = !!connectHost && inst.state === 'running';
     const isRunning = inst.state === 'running';
     const isStopped = inst.state === 'stopped';
+
+    async function handleStartTunnel(remoteHost: string, remotePort: number, localPort: number) {
+        setTunnelStarting(true);
+        setTunnelError(null);
+        const serviceId = `ssm-tunnel::${inst.instance_id}::${localPort}`;
+        try {
+            await invoke('ssm_start_port_forward', {
+                credentials: creds,
+                instanceId: inst.instance_id,
+                remoteHost,
+                remotePort,
+                localPort,
+                serviceId,
+            });
+            onTunnelStarted({
+                serviceId,
+                instanceId: inst.instance_id,
+                instanceName: displayName,
+                remoteHost,
+                remotePort,
+                localPort,
+                status: 'connecting',
+            });
+            setShowTunnelModal(false);
+        } catch (e) {
+            setTunnelError(String(e));
+        } finally {
+            setTunnelStarting(false);
+        }
+    }
 
     function buildSshCommand(): string {
         const keyFlag = ssh.keyPath ? ` -i "${ssh.keyPath}"` : '';
@@ -328,6 +532,14 @@ function InstanceRow({ inst, ssh, onAction, pending }: InstanceRowProps) {
                                         <Terminal size={12} />
                                         SSH
                                     </button>
+                                    <button
+                                        onClick={() => { setTunnelError(null); setShowTunnelModal(true); }}
+                                        className="px-2.5 py-1 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-colors flex items-center gap-1.5"
+                                        title="SSM Port Forwarding — conectar a bases de datos privadas"
+                                    >
+                                        <Database size={12} />
+                                        Tunnel
+                                    </button>
                                 </>
                             )}
                         </>
@@ -379,6 +591,17 @@ function InstanceRow({ inst, ssh, onAction, pending }: InstanceRowProps) {
                     )}
                 </div>
             )}
+
+            {/* Port Forward Modal */}
+            {showTunnelModal && (
+                <SsmPortForwardModal
+                    inst={inst}
+                    onConfirm={handleStartTunnel}
+                    onClose={() => setShowTunnelModal(false)}
+                    starting={tunnelStarting}
+                    error={tunnelError}
+                />
+            )}
         </div>
     );
 }
@@ -399,6 +622,7 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
     const [pendingMap, setPendingMap] = useState<Record<string, string>>({});
     const [stateFilter, setStateFilter] = useState<StateFilter>('all');
     const [search, setSearch] = useState('');
+    const [tunnels, setTunnels] = useState<ActiveTunnel[]>([]);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const fetchInstances = useCallback(async () => {
@@ -421,6 +645,48 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
         pollRef.current = setInterval(fetchInstances, 30_000);
         return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }, [fetchInstances]);
+
+    // Listen for service-stopped to mark tunnels as stopped
+    useEffect(() => {
+        let unlisten: (() => void) | null = null;
+        listen<string>('service-stopped', ev => {
+            const stoppedId = ev.payload;
+            setTunnels(prev => prev.map(t =>
+                t.serviceId === stoppedId ? { ...t, status: 'stopped' } : t
+            ));
+        }).then(fn => { unlisten = fn; });
+        return () => { unlisten?.(); };
+    }, []);
+
+    // Listen for first log line from tunnel to mark it active
+    useEffect(() => {
+        let unlisten: (() => void) | null = null;
+        listen<{ service_id: string; line: string; is_error: boolean }>('service-logs', ev => {
+            const { service_id } = ev.payload;
+            if (!service_id.startsWith('ssm-tunnel::')) return;
+            setTunnels(prev => prev.map(t =>
+                t.serviceId === service_id && t.status === 'connecting'
+                    ? { ...t, status: 'active' }
+                    : t
+            ));
+        }).then(fn => { unlisten = fn; });
+        return () => { unlisten?.(); };
+    }, []);
+
+    function handleTunnelStarted(tunnel: ActiveTunnel) {
+        setTunnels(prev => {
+            // Replace if same serviceId already exists
+            const without = prev.filter(t => t.serviceId !== tunnel.serviceId);
+            return [...without, tunnel];
+        });
+    }
+
+    async function handleStopTunnel(serviceId: string) {
+        try {
+            await invoke('kill_service', { serviceId });
+        } catch { /* ignore */ }
+        setTunnels(prev => prev.filter(t => t.serviceId !== serviceId));
+    }
 
     async function handleAction(action: 'start' | 'stop' | 'reboot', id: string) {
         setPendingMap(p => ({ ...p, [id]: action }));
@@ -504,6 +770,12 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
                 </div>
             </div>
 
+            {/* Active tunnels */}
+            <ActiveTunnelsPanel
+                tunnels={tunnels.filter(t => t.status !== 'stopped')}
+                onStop={handleStopTunnel}
+            />
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4">
                 {needsCreds && (
@@ -534,8 +806,10 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
                                 key={inst.instance_id}
                                 inst={inst}
                                 ssh={ssh}
+                                creds={creds}
                                 onAction={handleAction}
                                 pending={pendingMap[inst.instance_id] ?? null}
+                                onTunnelStarted={handleTunnelStarted}
                             />
                         ))}
                     </div>

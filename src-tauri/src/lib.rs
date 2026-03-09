@@ -43,7 +43,7 @@ pub use crate::ec2::{
     ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
     spawn_interactive, spawn_pty_process, spawn_pty_shell, resize_pty, write_stdin_line,
 };
-pub use crate::ssm::{ssm_start_session, ssm_check_plugin};
+pub use crate::ssm::{ssm_start_session, ssm_start_port_forward, ssm_check_plugin};
 pub use crate::crypto::{
     crypto_generate_keys, crypto_encrypt, crypto_decrypt,
     crypto_encrypt_json_fields, crypto_decrypt_json_all,
@@ -201,6 +201,11 @@ fn git_log_native(project_path: String) -> Result<git_native::LogResult, String>
     git_native::git_log_native_impl(project_path)
 }
 
+#[tauri::command]
+async fn git_ahead_behind_native(project_path: String) -> Result<git_native::AheadBehindResult, String> {
+    git_native::git_ahead_behind_native_impl(project_path).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -242,6 +247,7 @@ pub fn run() {
             git_branches_native,
             git_status_native,
             git_log_native,
+            git_ahead_behind_native,
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,
@@ -272,6 +278,7 @@ pub fn run() {
             resize_pty,
             write_stdin_line,
             ssm_start_session,
+            ssm_start_port_forward,
             ssm_check_plugin,
             crypto_generate_keys,
             crypto_encrypt,

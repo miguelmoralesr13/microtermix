@@ -329,6 +329,51 @@ pub fn git_log_native_impl(project_path: String) -> Result<LogResult, String> {
     Ok(LogResult { commits, local_hashes })
 }
 
+// ── Ahead / Behind ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AheadBehindResult {
+    pub ahead: usize,
+    pub behind: usize,
+    pub has_upstream: bool,
+}
+
+/// Run `git fetch` then compute how many commits the current branch is
+/// ahead of / behind its upstream tracking branch.
+pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadBehindResult, String> {
+    // Fetch from remote — ignore errors (offline / no remote)
+    let _ = tokio::process::Command::new("git")
+        .args(["fetch", "--quiet", "--no-tags"])
+        .current_dir(&project_path)
+        .output()
+        .await;
+
+    let repo = repo_open(&project_path)?;
+
+    let head = repo.head().map_err(|e| e.to_string())?;
+    if !head.is_branch() {
+        return Ok(AheadBehindResult { ahead: 0, behind: 0, has_upstream: false });
+    }
+
+    let branch_name = head.shorthand().ok_or("no branch name")?.to_string();
+    let branch = repo.find_branch(&branch_name, BranchType::Local)
+        .map_err(|e| e.to_string())?;
+
+    let upstream = match branch.upstream() {
+        Ok(u) => u,
+        Err(_) => return Ok(AheadBehindResult { ahead: 0, behind: 0, has_upstream: false }),
+    };
+
+    let local_oid = head.peel_to_commit().map_err(|e| e.to_string())?.id();
+    let upstream_oid = upstream.get().peel_to_commit().map_err(|e| e.to_string())?.id();
+
+    let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid)
+        .map_err(|e| e.to_string())?;
+
+    Ok(AheadBehindResult { ahead, behind, has_upstream: true })
+}
+
 /// Collect all oids reachable from HEAD but not from upstream (unpushed).
 /// If no upstream is configured, treats ALL commits as local.
 fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {

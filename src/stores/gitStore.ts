@@ -22,6 +22,12 @@ export interface RawCommit {
     refs: string;
 }
 
+export interface AheadBehind {
+    ahead: number;
+    behind: number;
+    hasUpstream: boolean;
+}
+
 export interface GitRepoData {
     isGitRepo: 'initialized' | 'empty_repo' | 'not_initialized' | null;
     branches: {
@@ -38,16 +44,19 @@ export interface GitRepoData {
         commits: RawCommit[];
         localHashes: string[];
     };
+    aheadBehind: AheadBehind | null;
     loading: {
         repo: boolean;
         branches: boolean;
         status: boolean;
         timeline: boolean;
+        aheadBehind: boolean;
     };
     lastFetched: {
         branches?: number;
         status?: number;
         timeline?: number;
+        aheadBehind?: number;
     };
     errors: {
         branches?: string;
@@ -108,16 +117,18 @@ interface GitStore {
     fetchBranches: (path: string, force?: boolean) => Promise<void>;
     fetchStatus: (path: string, force?: boolean) => Promise<void>;
     fetchTimeline: (path: string, force?: boolean) => Promise<void>;
+    fetchAheadBehind: (path: string, force?: boolean) => Promise<void>;
     fetchAll: (path: string, force?: boolean) => Promise<void>;
-    invalidate: (path: string, slice?: 'branches' | 'status' | 'timeline') => void;
+    invalidate: (path: string, slice?: 'branches' | 'status' | 'timeline' | 'aheadBehind') => void;
 }
 
 // ── Stale times (ms) ──────────────────────────────────────────────────────────
 
-const STALE: Record<'branches' | 'status' | 'timeline', number> = {
+const STALE: Record<'branches' | 'status' | 'timeline' | 'aheadBehind', number> = {
     branches: 60_000,
     status: 30_000,
     timeline: 60_000,
+    aheadBehind: 120_000,
 };
 
 // ── Default repo state ────────────────────────────────────────────────────────
@@ -127,7 +138,8 @@ export const EMPTY_REPO_DATA: GitRepoData = {
     branches: { local: [], remote: [], stashes: [] },
     status: { files: [], currentBranch: '', isMergeInProgress: false },
     timeline: { commits: [], localHashes: [] },
-    loading: { repo: false, branches: false, status: false, timeline: false },
+    aheadBehind: null,
+    loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
     lastFetched: {},
     errors: {},
 };
@@ -137,14 +149,15 @@ export const defaultRepoData = (): GitRepoData => ({
     branches: { local: [], remote: [], stashes: [] },
     status: { files: [], currentBranch: '', isMergeInProgress: false },
     timeline: { commits: [], localHashes: [] },
-    loading: { repo: false, branches: false, status: false, timeline: false },
+    aheadBehind: null,
+    loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
     lastFetched: {},
     errors: {},
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function isStale(repo: GitRepoData, slice: 'branches' | 'status' | 'timeline'): boolean {
+function isStale(repo: GitRepoData, slice: 'branches' | 'status' | 'timeline' | 'aheadBehind'): boolean {
     const t = repo.lastFetched[slice];
     return t === undefined || (Date.now() - t) > STALE[slice];
 }
@@ -363,6 +376,24 @@ export const useGitStore = create<GitStore>()(
                     }
                 },
 
+                fetchAheadBehind: async (path, force = false) => {
+                    const repo = get().repos[path] ?? defaultRepoData();
+                    if (!force && !isStale(repo, 'aheadBehind')) return;
+
+                    patchRepo(set, path, r => ({ loading: { ...r.loading, aheadBehind: true } }));
+                    try {
+                        const res: AheadBehind = await invoke('git_ahead_behind_native', { projectPath: path });
+                        patchRepo(set, path, r => ({
+                            aheadBehind: res,
+                            lastFetched: { ...r.lastFetched, aheadBehind: Date.now() },
+                        }));
+                    } catch {
+                        // Silently ignore — offline or no remote
+                    } finally {
+                        patchRepo(set, path, r => ({ loading: { ...r.loading, aheadBehind: false } }));
+                    }
+                },
+
                 fetchAll: async (path, force = false) => {
                     const { fetchBranches, fetchStatus, fetchTimeline } = get();
                     await Promise.all([
@@ -392,7 +423,7 @@ export const useGitStore = create<GitStore>()(
                             k,
                             {
                                 ...v,
-                                loading: { repo: false, branches: false, status: false, timeline: false },
+                                loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
                                 lastFetched: {},
                             },
                         ])

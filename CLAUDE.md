@@ -51,7 +51,7 @@ App.tsx
 - `gitConfig` – provider/URL/token for GitHub/GitLab/Bitbucket
 - `savedCommands`, `savedCommandSteps` – named reusable shell commands
 
-**`ServiceManager`** orchestrates the layout: a sidebar nav + one of 13 content panels based on `activeView`:
+**`ServiceManager`** orchestrates the layout: a sidebar nav + one of 13 content panels based on `activeView`. EC2 instances and SSM sessions are tabs inside `CloudWatchPanel`, not separate views.
 
 | View | Panel | Purpose |
 |---|---|---|
@@ -82,6 +82,12 @@ App.tsx
 | `proxy.rs` | Axum reverse proxy with Vite Module Federation support (`parse_vite_federation`, `start_proxy`) |
 | `file_server.rs` | Axum static file server (`start_file_server`, `stop_file_server`) |
 | `git_diff.rs` | Unified diff, hunk-based diff review, `git_execute`, `git_reword_commit`, `git_apply_patch` |
+| `git_native.rs` | Native git operations (branch, checkout, merge, rebase, stash) without shelling out |
+| `cloudwatch.rs` | AWS CloudWatch API: list log groups/streams, fetch log events |
+| `ec2.rs` | AWS EC2: list/start/stop instances, connect via SSH or SSM |
+| `ssm.rs` | AWS SSM session management: start/send-input/terminate sessions |
+| `http_client.rs` | Tauri-side HTTP client commands (bypasses CORS for frontend requests) |
+| `crypto.rs` | AES-256-GCM encrypt/decrypt for the LibCipher panel |
 | `workspace.rs` | Multi-window support: `open_new_workspace`, `get_initial_workspace_for_window` |
 
 ### Key Conventions
