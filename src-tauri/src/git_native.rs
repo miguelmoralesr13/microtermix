@@ -64,7 +64,7 @@ pub struct LogResult {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn repo_open(project_path: &str) -> Result<Repository, String> {
-    Repository::open(project_path).map_err(|e| e.to_string())
+    Repository::discover(project_path).map_err(|e| e.to_string())
 }
 
 /// Format seconds since epoch as a relative time string (e.g. "3 days ago").

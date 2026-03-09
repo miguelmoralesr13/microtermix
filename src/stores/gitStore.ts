@@ -288,7 +288,7 @@ export const useGitStore = create<GitStore>()(
                 },
 
                 fetchRepo: async (path) => {
-                    patchRepo(set, path, r => ({ loading: { ...r.loading, repo: true } }));
+                    patchRepo(set, path, r => ({ loading: { ...r.loading, repo: true }, isGitRepo: null }));
                     try {
                         const res: { isGitRepo: boolean; hasCommits: boolean } =
                             await invoke('git_is_repo_native', { projectPath: path });
