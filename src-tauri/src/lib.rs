@@ -11,6 +11,7 @@ mod http_client;
 mod ec2;
 mod ssm;
 mod crypto;
+mod mock_server;
 mod apigateway;
 
 use std::fs;
@@ -55,6 +56,7 @@ pub use crate::apigateway::{
     apigw_get_http_apis, apigw_get_http_api_routes, apigw_get_http_route_integration,
     apigw_export_api_swagger_rest, apigw_export_api_swagger_http,
 };
+pub use crate::mock_server::{start_mock_server, stop_mock_server, MockServerState};
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -232,6 +234,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::new())
+        .manage(std::sync::Arc::new(tokio::sync::Mutex::new(MockServerState::new())))
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 let app_handle = window.app_handle().clone();
@@ -312,6 +315,8 @@ pub fn run() {
             apigw_get_http_route_integration,
             apigw_export_api_swagger_rest,
             apigw_export_api_swagger_http
+            start_mock_server,
+            stop_mock_server,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

@@ -18,6 +18,7 @@ import { CloudWatchPanel } from './CloudWatchPanel';
 import { HttpPanel } from './http/HttpPanel';
 import { JenkinsPanel } from './JenkinsPanel';
 import { LibCipherPanel } from './LibCipherPanel';
+import { MockPanel } from './mocks/MockPanel';
 import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
 import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -544,6 +545,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'lib-cipher' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <LibCipherPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'mocks' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <MockPanel />
                         </div>
                     )}
 

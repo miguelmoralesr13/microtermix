@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3, Cloud, Network, Workflow, Package } from 'lucide-react';
+import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();
@@ -32,8 +32,8 @@ export const Sidebar: React.FC = () => {
             {renderNavIcon('fileServer', FolderOpen, "Servidor de archivos")}
             {renderNavIcon('cloudwatch', Cloud, "AWS Manager (Logs, EC2, APIGW)")}
             {renderNavIcon('jenkins', Workflow, "Jenkins CI/CD")}
-            
             {renderNavIcon('lib-cipher', Package, "Cifrado / Descifrado")}
+            {renderNavIcon('mocks', Ghost, "Servidor de Mocks")}
         </div>
     );
 };
