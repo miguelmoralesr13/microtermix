@@ -13,10 +13,11 @@ pub struct Ec2Credentials {
 async fn ec2_client(c: &Ec2Credentials) -> aws_sdk_ec2::Client {
     use aws_config::Region;
     use aws_credential_types::Credentials;
+    let token = c.session_token.as_deref().filter(|s| !s.trim().is_empty()).map(String::from);
     let creds = Credentials::new(
         &c.access_key_id,
         &c.secret_access_key,
-        c.session_token.clone(),
+        token,
         None,
         "microtermix",
     );

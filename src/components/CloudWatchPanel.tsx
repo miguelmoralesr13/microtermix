@@ -23,8 +23,9 @@ import {
     cwGetMetricData,
     ssmCheckPlugin,
 } from '../services/cloudwatchApi';
+import { ApiGatewayPanel } from './ApiGatewayPanel';
 
-type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2';
+type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway';
 
 // ── EC2 Types ─────────────────────────────────────────────────────────────────
 
@@ -1532,6 +1533,7 @@ export const CloudWatchPanel: React.FC = () => {
         { id: 'logs', label: 'Logs' },
         { id: 'metrics', label: 'Métricas' },
         { id: 'ec2', label: 'EC2' },
+        { id: 'api-gateway', label: 'API Gateway' },
     ];
 
     return (
@@ -1565,6 +1567,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tab === 'metrics' && isConfigured && <MetricsTab cfg={cfg} />}
                 {tab === 'ec2' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
                 {tab === 'ec2' && isConfigured && <Ec2Tab cfg={cfg} />}
+                {tab === 'api-gateway' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
+                {tab === 'api-gateway' && isConfigured && <ApiGatewayPanel credentials={cfg} />}
             </div>
         </div>
     );

@@ -11,6 +11,7 @@ mod http_client;
 mod ec2;
 mod ssm;
 mod crypto;
+mod apigateway;
 
 use std::fs;
 use std::path::Path;
@@ -48,6 +49,11 @@ pub use crate::crypto::{
     crypto_generate_keys, crypto_encrypt, crypto_decrypt,
     crypto_encrypt_json_fields, crypto_decrypt_json_all,
     CryptoKeyPair,
+};
+pub use crate::apigateway::{
+    apigw_get_rest_apis, apigw_get_rest_api_resources, apigw_get_rest_method_details,
+    apigw_get_http_apis, apigw_get_http_api_routes, apigw_get_http_route_integration,
+    apigw_export_api_swagger_rest, apigw_export_api_swagger_http,
 };
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
@@ -285,6 +291,14 @@ pub fn run() {
             crypto_decrypt,
             crypto_encrypt_json_fields,
             crypto_decrypt_json_all,
+            apigw_get_rest_apis,
+            apigw_get_rest_api_resources,
+            apigw_get_rest_method_details,
+            apigw_get_http_apis,
+            apigw_get_http_api_routes,
+            apigw_get_http_route_integration,
+            apigw_export_api_swagger_rest,
+            apigw_export_api_swagger_http
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

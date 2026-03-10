@@ -13,9 +13,10 @@ pub struct CwCredentials {
 async fn logs_client(c: &CwCredentials) -> aws_sdk_cloudwatchlogs::Client {
     use aws_config::Region;
     use aws_credential_types::Credentials;
+    let token = c.session_token.as_deref().filter(|s| !s.trim().is_empty()).map(String::from);
     let creds = Credentials::new(
         &c.access_key_id, &c.secret_access_key,
-        c.session_token.clone(), None, "microtermix",
+        token, None, "microtermix",
     );
     let cfg = aws_config::from_env()
         .credentials_provider(creds)
@@ -27,9 +28,10 @@ async fn logs_client(c: &CwCredentials) -> aws_sdk_cloudwatchlogs::Client {
 async fn metrics_client(c: &CwCredentials) -> aws_sdk_cloudwatch::Client {
     use aws_config::Region;
     use aws_credential_types::Credentials;
+    let token = c.session_token.as_deref().filter(|s| !s.trim().is_empty()).map(String::from);
     let creds = Credentials::new(
         &c.access_key_id, &c.secret_access_key,
-        c.session_token.clone(), None, "microtermix",
+        token, None, "microtermix",
     );
     let cfg = aws_config::from_env()
         .credentials_provider(creds)

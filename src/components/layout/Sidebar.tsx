@@ -30,7 +30,7 @@ export const Sidebar: React.FC = () => {
             {renderNavIcon('proxy', Globe, "Proxy reverso")}
             {renderNavIcon('http', Network, "HTTP Client")}
             {renderNavIcon('fileServer', FolderOpen, "Servidor de archivos")}
-            {renderNavIcon('cloudwatch', Cloud, "AWS")}
+            {renderNavIcon('cloudwatch', Cloud, "AWS Manager (Logs, EC2, APIGW)")}
             {renderNavIcon('jenkins', Workflow, "Jenkins CI/CD")}
             
             {renderNavIcon('lib-cipher', Package, "Cifrado / Descifrado")}
