@@ -92,7 +92,11 @@ export const GitPanel: React.FC = () => {
         if (ui.activeTab) { invalidate(ui.activeTab, 'status'); fetchStatus(ui.activeTab, true); }
     };
     const handleBranchRefresh = () => {
-        if (ui.activeTab) { invalidate(ui.activeTab); fetchAll(ui.activeTab, true); }
+        if (ui.activeTab) {
+            invalidate(ui.activeTab);
+            fetchAll(ui.activeTab, true);
+            fetchAheadBehind(ui.activeTab, true);
+        }
     };
 
     const handleRefreshAll = useCallback(() => {

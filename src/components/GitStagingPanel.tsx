@@ -311,9 +311,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             } else {
                 setCommitMessage('');
                 invalidate(projectPath, 'status');
-                fetchStatus(projectPath, false);
+                fetchStatus(projectPath, true);
                 invalidate(projectPath, 'timeline');
-                fetchTimeline(projectPath, false);
+                fetchTimeline(projectPath, true);
             }
         } finally {
             setIsCommitting(false);
@@ -327,9 +327,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 setError(res.stderr || 'Failed to abort merge');
             } else {
                 invalidate(projectPath, 'status');
-                fetchStatus(projectPath, false);
+                fetchStatus(projectPath, true);
                 invalidate(projectPath, 'timeline');
-                fetchTimeline(projectPath, false);
+                fetchTimeline(projectPath, true);
             }
         } catch (e: any) {
             setError(e?.message ?? 'Failed to abort merge');

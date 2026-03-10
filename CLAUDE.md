@@ -165,6 +165,38 @@ src/
 
 ### Styling
 
-TailwindCSS v4 is used via the `@tailwindcss/vite` plugin (no `tailwind.config.js`). Custom design tokens (e.g., `nexus-neon`, `nexus-accent`, `nexus-dark`) are defined in `src/index.css`. The dark theme base color is `#020617`.
+TailwindCSS v4 is used via the `@tailwindcss/vite` plugin (no `tailwind.config.js`). Custom design tokens (`nexus-neon`, `nexus-accent`, `nexus-dark`, etc.) are defined in `src/App.css` inside the `@theme` block. The dark theme base color is `#020617`.
 
-**shadcn/ui** is installed (style: new-york). Components live in `src/components/ui/` alongside existing custom UI. Use `cn()` from `src/lib/utils.ts` for class merging. Toast notifications via `sonner` — `<Toaster>` is mounted in `App.tsx`. Old custom Button/Select renamed to `NexusButton`/`NexusSelect`.
+**shadcn/ui** is installed (style: new-york). Components live in `src/components/ui/`. Use `cn()` from `src/lib/utils.ts` for class merging. Toast notifications via `sonner` — `<Toaster>` is mounted in `App.tsx`.
+
+#### Regla: usar shadcn/ui siempre
+
+**Para cualquier componente nuevo o modificado, usar shadcn/ui obligatoriamente:**
+
+| Necesidad | Usar |
+|---|---|
+| Botón | `Button` de `@/components/ui/button` — variants: `default`, `outline`, `ghost`, `destructive`, `secondary`; sizes: `xs`, `sm`, `default`, `lg`, `icon-xs`, `icon-sm`, `icon` |
+| Select / dropdown | `Select + SelectTrigger + SelectContent + SelectItem` de `@/components/ui/select` |
+| Modal / diálogo | `Dialog + DialogContent + DialogHeader + DialogTitle + DialogFooter` de `@/components/ui/dialog` |
+| Tooltip en botones | `TooltipProvider + Tooltip + TooltipTrigger + TooltipContent` de `@/components/ui/tooltip` |
+| Menú contextual / popover | `Popover + PopoverTrigger + PopoverContent` de `@/components/ui/popover` |
+| Badge / etiqueta | `Badge` de `@/components/ui/badge` |
+| Input de texto | `Input` de `@/components/ui/input` |
+| Textarea | `Textarea` de `@/components/ui/textarea` |
+| Separador | `Separator` de `@/components/ui/separator` |
+| Tabs | `Tabs + TabsList + TabsTrigger + TabsContent` de `@/components/ui/tabs` |
+
+**Jamás crear botones, modales o dropdowns raw** (`<button>`, `div fixed inset-0 backdrop`, `<select>` nativo) cuando existe un componente shadcn equivalente.
+
+#### API crítica de base-ui (este proyecto NO usa Radix UI)
+
+shadcn/ui aquí está construido sobre `@base-ui/react`, no Radix. Diferencias clave:
+
+- **`TooltipTrigger`** no acepta `asChild`. Usar prop `render`: `<TooltipTrigger render={<Button ... />}>`
+- **`Select`** usa `onValueChange` (no `onChange`) en el Root
+- **`Dialog`** se controla con `open` + `onOpenChange` — siempre montar el componente, no usar `{condition && <Dialog>}`
+- **`PopoverContent`** acepta `side` y `align` directamente
+
+#### CSS variables shadcn (TailwindCSS v4)
+
+Los tokens de color de shadcn (`bg-popover`, `bg-muted`, `text-foreground`, etc.) están definidos como `--color-*` en el bloque `@theme` de `src/App.css` — NO en `:root`. Para agregar un nuevo color shadcn, añadirlo ahí como `--color-nombre: #hex`.

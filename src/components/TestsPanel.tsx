@@ -2,12 +2,18 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core';
 import {
     FlaskConical, Play, Square, RefreshCw, ExternalLink,
-    Settings, ChevronDown, ChevronRight, Monitor, TerminalSquare,
+    Settings, Monitor, TerminalSquare, X,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { TerminalView } from './TerminalView';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface TestConfig {
     command: string;
@@ -22,38 +28,10 @@ const DEFAULT_CONFIG: TestConfig = {
 };
 
 const PRESETS: { label: string; config: TestConfig }[] = [
-    {
-        label: 'Vitest',
-        config: {
-            command: 'npm run test',
-            coverageXmlPath: 'coverage/clover.xml',
-            coverageHtmlPath: 'coverage/lcov-report/index.html',
-        },
-    },
-    {
-        label: 'Jest',
-        config: {
-            command: 'npx jest --coverage',
-            coverageXmlPath: 'coverage/clover.xml',
-            coverageHtmlPath: 'coverage/lcov-report/index.html',
-        },
-    },
-    {
-        label: 'Maven / JaCoCo',
-        config: {
-            command: 'mvn test',
-            coverageXmlPath: 'target/site/jacoco/jacoco.xml',
-            coverageHtmlPath: 'target/site/jacoco/index.html',
-        },
-    },
-    {
-        label: 'Gradle / JaCoCo',
-        config: {
-            command: './gradlew test jacocoTestReport',
-            coverageXmlPath: 'build/reports/jacoco/test/jacocoTestReport.xml',
-            coverageHtmlPath: 'build/reports/jacoco/test/html/index.html',
-        },
-    },
+    { label: 'Vitest', config: { command: 'npm run test', coverageXmlPath: 'coverage/clover.xml', coverageHtmlPath: 'coverage/lcov-report/index.html' } },
+    { label: 'Jest',   config: { command: 'npx jest --coverage', coverageXmlPath: 'coverage/clover.xml', coverageHtmlPath: 'coverage/lcov-report/index.html' } },
+    { label: 'Maven / JaCoCo', config: { command: 'mvn test', coverageXmlPath: 'target/site/jacoco/jacoco.xml', coverageHtmlPath: 'target/site/jacoco/index.html' } },
+    { label: 'Gradle / JaCoCo', config: { command: './gradlew test jacocoTestReport', coverageXmlPath: 'build/reports/jacoco/test/jacocoTestReport.xml', coverageHtmlPath: 'build/reports/jacoco/test/html/index.html' } },
 ];
 
 interface CoverageStat { covered: number; total: number; }
@@ -63,15 +41,14 @@ interface CoverageSummary {
     functions: CoverageStat;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STORAGE_TESTS_PATH = 'nexus-tests-selected-path';
-const STORAGE_TESTS_TAB = 'nexus-tests-active-tab';
+const STORAGE_TESTS_TAB  = 'nexus-tests-active-tab';
 
 function configStorageKey(projectPath: string): string {
     return `nexus-test-config-${projectPath.replace(/[/\\:]/g, '_')}`;
 }
-
 function loadConfig(projectPath: string): TestConfig {
     try {
         const raw = localStorage.getItem(configStorageKey(projectPath));
@@ -79,14 +56,9 @@ function loadConfig(projectPath: string): TestConfig {
     } catch (_) { }
     return { ...DEFAULT_CONFIG };
 }
-
 function saveConfig(projectPath: string, config: TestConfig): void {
-    try {
-        localStorage.setItem(configStorageKey(projectPath), JSON.stringify(config));
-    } catch (_) { }
+    try { localStorage.setItem(configStorageKey(projectPath), JSON.stringify(config)); } catch (_) { }
 }
-
-/** Extracts the directory from a file path */
 function dirOf(filePath: string): string {
     const normalized = filePath.replace(/\\/g, '/');
     const idx = normalized.lastIndexOf('/');
@@ -97,99 +69,73 @@ function parseCoverageXml(content: string): CoverageSummary | null {
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(content, 'text/xml');
-
-        // Clover format (Vitest / Jest)
         const cloverMetrics = doc.querySelector('project > metrics');
         if (cloverMetrics) {
             return {
-                lines: {
-                    covered: parseInt(cloverMetrics.getAttribute('coveredstatements') || '0'),
-                    total: parseInt(cloverMetrics.getAttribute('statements') || '0'),
-                },
-                branches: {
-                    covered: parseInt(cloverMetrics.getAttribute('coveredconditionals') || '0'),
-                    total: parseInt(cloverMetrics.getAttribute('conditionals') || '0'),
-                },
-                functions: {
-                    covered: parseInt(cloverMetrics.getAttribute('coveredmethods') || '0'),
-                    total: parseInt(cloverMetrics.getAttribute('methods') || '0'),
-                },
+                lines:     { covered: parseInt(cloverMetrics.getAttribute('coveredstatements') || '0'), total: parseInt(cloverMetrics.getAttribute('statements') || '0') },
+                branches:  { covered: parseInt(cloverMetrics.getAttribute('coveredconditionals') || '0'), total: parseInt(cloverMetrics.getAttribute('conditionals') || '0') },
+                functions: { covered: parseInt(cloverMetrics.getAttribute('coveredmethods') || '0'), total: parseInt(cloverMetrics.getAttribute('methods') || '0') },
             };
         }
-
-        // JaCoCo XML format (Maven / Gradle)
         const reportEl = doc.querySelector('report');
         if (reportEl) {
             const getCounter = (type: string): CoverageStat => {
                 for (const el of Array.from(doc.querySelectorAll('report > counter'))) {
                     if (el.getAttribute('type') === type) {
                         const covered = parseInt(el.getAttribute('covered') || '0');
-                        const missed = parseInt(el.getAttribute('missed') || '0');
+                        const missed  = parseInt(el.getAttribute('missed') || '0');
                         return { covered, total: covered + missed };
                     }
                 }
                 return { covered: 0, total: 0 };
             };
-            return {
-                lines: getCounter('LINE'),
-                branches: getCounter('BRANCH'),
-                functions: getCounter('METHOD'),
-            };
+            return { lines: getCounter('LINE'), branches: getCounter('BRANCH'), functions: getCounter('METHOD') };
         }
-
-        // Cobertura format
         const coverageEl = doc.querySelector('coverage');
         if (coverageEl) {
-            const linesValid = parseInt(coverageEl.getAttribute('lines-valid') || '0');
+            const linesValid   = parseInt(coverageEl.getAttribute('lines-valid') || '0');
             const linesCovered = parseInt(coverageEl.getAttribute('lines-covered') || '0');
-            const branchRate = parseFloat(coverageEl.getAttribute('branch-rate') || '0');
+            const branchRate   = parseFloat(coverageEl.getAttribute('branch-rate') || '0');
             return {
-                lines: { covered: linesCovered, total: linesValid },
-                branches: { covered: Math.round(branchRate * 100), total: 100 },
+                lines:     { covered: linesCovered, total: linesValid },
+                branches:  { covered: Math.round(branchRate * 100), total: 100 },
                 functions: { covered: 0, total: 0 },
             };
         }
-
         return null;
-    } catch (_) {
-        return null;
-    }
+    } catch (_) { return null; }
 }
 
 function pct(stat: CoverageStat): number {
     if (stat.total === 0) return 0;
     return Math.round((stat.covered / stat.total) * 100);
 }
-function pctTextColor(p: number): string {
-    if (p >= 80) return 'text-nexus-success';
-    if (p >= 60) return 'text-yellow-400';
-    return 'text-nexus-danger';
-}
-function pctBarColor(p: number): string {
-    if (p >= 80) return 'bg-nexus-success';
-    if (p >= 60) return 'bg-yellow-400';
-    return 'bg-nexus-danger';
+function pctColor(p: number) {
+    if (p >= 80) return { text: 'text-nexus-success', bar: 'bg-nexus-success' };
+    if (p >= 60) return { text: 'text-yellow-400',    bar: 'bg-yellow-400' };
+    return           { text: 'text-nexus-danger',     bar: 'bg-nexus-danger' };
 }
 
-// ─── Coverage stat bar ────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 const CoverageStatBar: React.FC<{ label: string; stat: CoverageStat }> = ({ label, stat }) => {
     const p = pct(stat);
+    const { text, bar } = pctColor(p);
     return (
         <div>
             <div className="flex justify-between items-baseline mb-1">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{label}</span>
-                <span className={`text-sm font-bold ${pctTextColor(p)}`}>{p}%</span>
+                <span className={cn('text-sm font-bold', text)}>{p}%</span>
             </div>
             <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${pctBarColor(p)}`} style={{ width: `${p}%` }} />
+                <div className={cn('h-full rounded-full transition-all duration-500', bar)} style={{ width: `${p}%` }} />
             </div>
             <p className="text-[10px] text-slate-500 mt-0.5">{stat.covered} / {stat.total}</p>
         </div>
     );
 };
 
-// ─── Main component ──────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export const TestsPanel: React.FC = () => {
     const { state, executeProjectScript, updateProcessStatus } = useWorkspace();
@@ -207,17 +153,11 @@ export const TestsPanel: React.FC = () => {
         if (selectedPath) localStorage.setItem(STORAGE_TESTS_PATH, selectedPath);
     }, [selectedPath]);
 
-    const [config, setConfig] = useState<TestConfig>(() =>
-        selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG }
-    );
+    const [config, setConfig]       = useState<TestConfig>(() => selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG });
     const [configOpen, setConfigOpen] = useState(false);
-
-    // Coverage data
-    const [coverageMap, setCoverageMap] = useState<Record<string, CoverageSummary | null>>({});
+    const [coverageMap, setCoverageMap]     = useState<Record<string, CoverageSummary | null>>({});
     const [coverageLoading, setCoverageLoading] = useState(false);
-    const [coverageError, setCoverageError] = useState<string | null>(null);
-
-    // In-app report viewer
+    const [coverageError, setCoverageError]     = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'execution' | 'report'>(() => {
         const saved = localStorage.getItem(STORAGE_TESTS_TAB);
         return saved === 'report' ? 'report' : 'execution';
@@ -226,25 +166,19 @@ export const TestsPanel: React.FC = () => {
     const [coverageServerPort, setCoverageServerPort] = useState<number | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
 
-    const serviceId = useMemo(() => `${selectedPath}::${config.command} `, [selectedPath, config.command]);
+    const serviceId    = useMemo(() => `${selectedPath}::${config.command} `, [selectedPath, config.command]);
     const processState = state.activeProcesses[serviceId];
-    const isRunning = processState?.status === 'running';
+    const isRunning    = processState?.status === 'running';
     const processStatus = processState?.status;
 
-    // Auto-load coverage when tests finish naturally
     const prevStatusRef = useRef<typeof processStatus>(undefined);
     useEffect(() => {
-        if (prevStatusRef.current === 'running' && processStatus === 'stopped') {
-            loadCoverage();
-        }
+        if (prevStatusRef.current === 'running' && processStatus === 'stopped') loadCoverage();
         prevStatusRef.current = processStatus;
     }, [processStatus]);
 
-    // Stop coverage server when unmounting or switching project
     useEffect(() => {
-        return () => {
-            invoke('stop_coverage_server').catch(() => { });
-        };
+        return () => { invoke('stop_coverage_server').catch(() => { }); };
     }, []);
 
     const stopCoverageServer = useCallback(async () => {
@@ -271,7 +205,6 @@ export const TestsPanel: React.FC = () => {
         if (selectedPath) saveConfig(selectedPath, preset);
     };
 
-    // Run / Stop
     const handleRun = async () => {
         if (!selectedPath || !config.command) return;
         await executeProjectScript(selectedPath, config.command, { globalEnvName: 'none' });
@@ -284,7 +217,6 @@ export const TestsPanel: React.FC = () => {
         } catch (_) { }
     };
 
-    // Load coverage XML
     const loadCoverage = useCallback(async () => {
         if (!selectedPath || !config.coverageXmlPath) return;
         setCoverageLoading(true);
@@ -296,7 +228,7 @@ export const TestsPanel: React.FC = () => {
             if (summary) {
                 setCoverageMap(prev => ({ ...prev, [selectedPath]: summary }));
             } else {
-                setCoverageError('No se pudo parsear el archivo XML. Verifica el formato o la ruta.');
+                setCoverageError('No se pudo parsear el XML. Verifica el formato o la ruta.');
             }
         } catch (_) {
             setCoverageError(`No encontrado: ${config.coverageXmlPath} — ejecuta los tests primero.`);
@@ -305,24 +237,17 @@ export const TestsPanel: React.FC = () => {
         }
     }, [selectedPath, config.coverageXmlPath]);
 
-    // Auto-load when project changes
     useEffect(() => {
         if (selectedPath) loadCoverage();
     }, [selectedPath]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Open in-app report: start coverage server → switch to report tab
-    // If a server is already running, just navigate to the report tab.
     const handleOpenInAppReport = async () => {
         if (!selectedPath || !config.coverageHtmlPath) return;
-        if (coverageServerPort !== null) {
-            setActiveTab('report');
-            return;
-        }
+        if (coverageServerPort !== null) { setActiveTab('report'); return; }
         setReportLoading(true);
         try {
             const htmlFullPath = `${selectedPath}/${config.coverageHtmlPath}`.replace(/\\/g, '/');
-            const htmlDir = dirOf(htmlFullPath);
-            const port = await invoke<number>('start_coverage_server', { htmlDir });
+            const port = await invoke<number>('start_coverage_server', { htmlDir: dirOf(htmlFullPath) });
             setCoverageServerPort(port);
             setActiveTab('report');
         } catch (e) {
@@ -333,6 +258,18 @@ export const TestsPanel: React.FC = () => {
     };
 
     const coverage = coverageMap[selectedPath] ?? null;
+
+    const statusBadge = processState ? (
+        <Badge className={cn(
+            'ml-auto text-[10px] font-semibold rounded-full border-0',
+            isRunning                          ? 'bg-nexus-success/20 text-nexus-success' :
+            processState.status === 'error'    ? 'bg-nexus-danger/20 text-nexus-danger'  :
+                                                 'bg-slate-700 text-slate-400'
+        )}>
+            {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-nexus-success animate-pulse mr-1 inline-block" />}
+            {processState.status}
+        </Badge>
+    ) : null;
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
@@ -355,22 +292,25 @@ export const TestsPanel: React.FC = () => {
                             <p className="px-3 py-4 text-xs text-slate-600 text-center">Sin proyectos</p>
                         )}
                         {projects.map(p => {
-                            const path = p.path as string;
-                            const cov = coverageMap[path];
+                            const path  = p.path as string;
+                            const cov   = coverageMap[path];
                             const linesP = cov ? pct(cov.lines) : null;
-                            const sid = `${path}::${config.command} `;
+                            const sid   = `${path}::${config.command} `;
                             const running = state.activeProcesses[sid]?.status === 'running';
+                            const isSelected = selectedPath === path;
                             return (
                                 <div
                                     key={path}
                                     onClick={() => handleSelectProject(path)}
-                                    className={`flex items-center justify-between px-3 py-2 cursor-pointer transition-colors border-l-2 ${selectedPath === path
-                                        ? 'bg-nexus-neon/10 border-nexus-neon'
-                                        : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600'
-                                        }`}
+                                    className={cn(
+                                        'flex items-center justify-between px-3 py-2 cursor-pointer transition-colors border-l-2',
+                                        isSelected
+                                            ? 'bg-nexus-neon/10 border-nexus-neon'
+                                            : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600',
+                                    )}
                                 >
                                     <div className="flex-1 min-w-0">
-                                        <p className={`text-xs font-medium truncate ${selectedPath === path ? 'text-nexus-neon' : 'text-slate-300'}`}>
+                                        <p className={cn('text-xs font-medium truncate', isSelected ? 'text-nexus-neon' : 'text-slate-300')}>
                                             {p.name as string}
                                         </p>
                                         {running && (
@@ -381,9 +321,12 @@ export const TestsPanel: React.FC = () => {
                                         )}
                                     </div>
                                     {linesP !== null && (
-                                        <span className={`ml-2 shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${pctTextColor(linesP)} bg-slate-800`}>
+                                        <Badge className={cn(
+                                            'ml-2 shrink-0 text-[10px] font-bold border-0 rounded',
+                                            pctColor(linesP).text, 'bg-slate-800',
+                                        )}>
                                             {linesP}%
-                                        </span>
+                                        </Badge>
                                     )}
                                 </div>
                             );
@@ -394,149 +337,94 @@ export const TestsPanel: React.FC = () => {
                 {/* ── Right ─────────────────────────────────────────────── */}
                 {selectedPath ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                        {/* Config (collapsible) */}
-                        <div className="shrink-0 border-b border-slate-800 bg-slate-950/50">
-                            <button
-                                type="button"
-                                onClick={() => setConfigOpen(o => !o)}
-                                className="w-full flex items-center gap-2 px-4 py-2 text-left text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 transition-colors"
-                            >
-                                {configOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                                <Settings size={12} />
-                                <span>Configuración</span>
-                                <span className="ml-auto font-mono text-[10px] text-slate-500 truncate max-w-xs">{config.command}</span>
-                            </button>
-
-                            {configOpen && (
-                                <div className="px-4 pb-4 pt-1 space-y-3">
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {PRESETS.map(preset => (
-                                            <button
-                                                key={preset.label}
-                                                type="button"
-                                                onClick={() => applyPreset(preset.config)}
-                                                className={`px-2.5 py-1 text-[10px] font-semibold rounded border transition-colors ${config.command === preset.config.command && config.coverageXmlPath === preset.config.coverageXmlPath
-                                                    ? 'bg-nexus-neon/20 text-nexus-neon border-nexus-neon/40'
-                                                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500'
-                                                    }`}
-                                            >
-                                                {preset.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Comando</label>
-                                        <input
-                                            type="text"
-                                            value={config.command}
-                                            onChange={e => handleConfigChange({ command: e.target.value })}
-                                            className="w-full bg-slate-900 border border-slate-700 focus:border-nexus-neon rounded px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none transition-colors"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <div>
-                                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">XML Coverage</label>
-                                            <input
-                                                type="text"
-                                                value={config.coverageXmlPath}
-                                                onChange={e => handleConfigChange({ coverageXmlPath: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-700 focus:border-nexus-neon rounded px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">HTML Report</label>
-                                            <input
-                                                type="text"
-                                                value={config.coverageHtmlPath}
-                                                onChange={e => handleConfigChange({ coverageHtmlPath: e.target.value })}
-                                                className="w-full bg-slate-900 border border-slate-700 focus:border-nexus-neon rounded px-3 py-1.5 text-xs text-slate-200 font-mono focus:outline-none transition-colors"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
 
                         {/* Action bar */}
                         <div className="shrink-0 px-4 py-2 border-b border-slate-800 flex items-center gap-2 bg-slate-900/80">
                             {isRunning ? (
-                                <button
+                                <Button
+                                    size="sm"
                                     onClick={handleStop}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-nexus-danger/20 text-nexus-danger font-bold text-xs rounded border border-nexus-danger/40 hover:bg-nexus-danger/30 transition-colors"
+                                    className="bg-nexus-danger/20 text-nexus-danger hover:bg-nexus-danger/30 border border-nexus-danger/40 font-bold gap-1.5 h-7 text-xs"
                                 >
-                                    <Square size={13} fill="currentColor" /> Stop
-                                </button>
+                                    <Square size={12} fill="currentColor" /> Stop
+                                </Button>
                             ) : (
-                                <button
+                                <Button
+                                    size="sm"
                                     onClick={handleRun}
                                     disabled={!config.command}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-nexus-neon text-slate-900 font-bold text-xs rounded hover:bg-[#00ffd5] transition-colors disabled:opacity-50"
+                                    className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold gap-1.5 h-7 text-xs"
                                 >
-                                    <Play size={13} fill="currentColor" /> Run tests
-                                </button>
+                                    <Play size={12} fill="currentColor" /> Run tests
+                                </Button>
                             )}
 
-                            <div className="w-px h-4 bg-slate-700 mx-1" />
+                            <Separator orientation="vertical" className="h-4 bg-slate-700" />
 
-                            <button
+                            <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={loadCoverage}
                                 disabled={coverageLoading || isRunning}
-                                title="Recargar coverage desde XML"
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded border border-slate-700 transition-colors disabled:opacity-50"
+                                className="border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5 h-7 text-xs"
                             >
-                                <RefreshCw size={12} className={coverageLoading ? 'animate-spin' : ''} />
+                                <RefreshCw size={11} className={coverageLoading ? 'animate-spin' : ''} />
                                 {coverageLoading ? 'Cargando...' : 'Refresh coverage'}
-                            </button>
+                            </Button>
 
-                            <button
+                            <Button
+                                variant="outline"
+                                size="sm"
                                 onClick={handleOpenInAppReport}
                                 disabled={reportLoading || isRunning}
-                                title="Abrir reporte HTML dentro de la app"
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded border border-slate-700 transition-colors disabled:opacity-50"
+                                className="border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5 h-7 text-xs"
                             >
-                                <Monitor size={12} />
+                                <Monitor size={11} />
                                 {reportLoading ? 'Iniciando...' : 'Open report'}
-                            </button>
+                            </Button>
 
-                            {processState && (
-                                <span className={`ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full ${isRunning ? 'bg-nexus-success/20 text-nexus-success'
-                                    : processState.status === 'error' ? 'bg-nexus-danger/20 text-nexus-danger'
-                                        : 'bg-slate-700 text-slate-400'
-                                    }`}>
-                                    {processState.status}
-                                </span>
-                            )}
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => setConfigOpen(true)}
+                                className="text-slate-500 hover:text-slate-200 ml-1"
+                                title="Configuración"
+                            >
+                                <Settings size={13} />
+                            </Button>
+
+                            {statusBadge}
                         </div>
 
                         {/* Tab bar */}
                         <div className="shrink-0 flex border-b border-slate-800 bg-slate-950/40">
-                            <button
-                                onClick={() => setActiveTab('execution')}
-                                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${activeTab === 'execution'
-                                    ? 'border-nexus-neon text-nexus-neon'
-                                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                                    }`}
-                            >
-                                <TerminalSquare size={12} /> Ejecución
-                            </button>
-                            <button
-                                onClick={() => coverageServerPort ? setActiveTab('report') : handleOpenInAppReport()}
-                                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${activeTab === 'report'
-                                    ? 'border-nexus-neon text-nexus-neon'
-                                    : 'border-transparent text-slate-500 hover:text-slate-300'
-                                    }`}
-                            >
-                                <ExternalLink size={12} /> Reporte
-                                {coverageServerPort && (
-                                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-nexus-success inline-block" />
-                                )}
-                            </button>
+                            {(['execution', 'report'] as const).map(tab => (
+                                <button
+                                    key={tab}
+                                    onClick={() => tab === 'report'
+                                        ? (coverageServerPort ? setActiveTab('report') : handleOpenInAppReport())
+                                        : setActiveTab('execution')
+                                    }
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors',
+                                        activeTab === tab
+                                            ? 'border-nexus-neon text-nexus-neon'
+                                            : 'border-transparent text-slate-500 hover:text-slate-300',
+                                    )}
+                                >
+                                    {tab === 'execution'
+                                        ? <><TerminalSquare size={12} /> Ejecución</>
+                                        : <><ExternalLink size={12} /> Reporte
+                                            {coverageServerPort && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-nexus-success inline-block" />}
+                                          </>
+                                    }
+                                </button>
+                            ))}
                         </div>
 
-                        {/* ── Execution tab ─────────────────────────────── */}
+                        {/* ── Execution tab ──────────────────────────────── */}
                         {activeTab === 'execution' && (
                             <div className="flex-1 flex min-h-0 overflow-hidden">
-                                {/* Terminal */}
                                 <div className="flex-1 min-w-0 p-2 flex flex-col overflow-hidden">
                                     {processState ? (
                                         <TerminalView serviceId={serviceId} />
@@ -551,40 +439,39 @@ export const TestsPanel: React.FC = () => {
                                     )}
                                 </div>
 
-                                {/* Coverage stats sidebar */}
-                                <div className="w-60 shrink-0 border-l border-slate-800 flex flex-col overflow-y-auto p-4 gap-5 bg-slate-950/30">
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3">Coverage</p>
+                                {/* Coverage sidebar */}
+                                <div className="w-60 shrink-0 border-l border-slate-800 flex flex-col overflow-y-auto p-4 gap-4 bg-slate-950/30">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Coverage</p>
 
-                                        {coverageError && !coverage && (
-                                            <p className="text-[11px] text-slate-500 italic leading-relaxed">{coverageError}</p>
-                                        )}
+                                    {coverageError && !coverage && (
+                                        <p className="text-[11px] text-slate-500 italic leading-relaxed">{coverageError}</p>
+                                    )}
 
-                                        {coverage ? (
-                                            <div className="space-y-4">
-                                                <CoverageStatBar label="Lines" stat={coverage.lines} />
-                                                {coverage.branches.total > 0 && (
-                                                    <CoverageStatBar label="Branches" stat={coverage.branches} />
-                                                )}
-                                                {coverage.functions.total > 0 && (
-                                                    <CoverageStatBar label="Functions" stat={coverage.functions} />
-                                                )}
-                                            </div>
-                                        ) : !coverageError && (
-                                            <p className="text-[11px] text-slate-600 italic">
-                                                Sin datos. Ejecuta los tests y haz click en "Refresh coverage".
-                                            </p>
-                                        )}
-                                    </div>
+                                    {coverage ? (
+                                        <div className="space-y-4">
+                                            <CoverageStatBar label="Lines"     stat={coverage.lines} />
+                                            {coverage.branches.total > 0  && <CoverageStatBar label="Branches"  stat={coverage.branches} />}
+                                            {coverage.functions.total > 0 && <CoverageStatBar label="Functions" stat={coverage.functions} />}
+                                        </div>
+                                    ) : !coverageError && (
+                                        <p className="text-[11px] text-slate-600 italic">
+                                            Sin datos. Ejecuta los tests y haz click en "Refresh coverage".
+                                        </p>
+                                    )}
 
                                     {coverage && (
-                                        <button
-                                            onClick={handleOpenInAppReport}
-                                            disabled={reportLoading}
-                                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded border border-slate-700 transition-colors disabled:opacity-50"
-                                        >
-                                            <Monitor size={12} /> Abrir reporte completo
-                                        </button>
+                                        <>
+                                            <Separator className="bg-slate-800" />
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={handleOpenInAppReport}
+                                                disabled={reportLoading}
+                                                className="w-full border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5"
+                                            >
+                                                <Monitor size={12} /> Abrir reporte completo
+                                            </Button>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -599,12 +486,14 @@ export const TestsPanel: React.FC = () => {
                                             <span className="text-[10px] font-mono text-slate-500">
                                                 http://127.0.0.1:{coverageServerPort}/
                                             </span>
-                                            <button
+                                            <Button
+                                                variant="ghost"
+                                                size="xs"
                                                 onClick={stopCoverageServer}
-                                                className="ml-auto text-[10px] text-slate-500 hover:text-nexus-danger transition-colors"
+                                                className="ml-auto text-slate-500 hover:text-nexus-danger h-auto py-0.5"
                                             >
                                                 Cerrar servidor
-                                            </button>
+                                            </Button>
                                         </div>
                                         <iframe
                                             key={coverageServerPort}
@@ -630,6 +519,83 @@ export const TestsPanel: React.FC = () => {
                     </div>
                 )}
             </div>
+
+            {/* ── Config Dialog ─────────────────────────────────────────── */}
+            <Dialog open={configOpen} onOpenChange={setConfigOpen}>
+                <DialogContent className="max-w-lg bg-slate-900 border-slate-700 p-0" showCloseButton={false}>
+                    <DialogHeader className="flex flex-row items-center gap-2 px-4 py-3 border-b border-slate-700">
+                        <Settings size={14} className="text-nexus-neon" />
+                        <DialogTitle className="text-slate-200 flex-1">Configuración de tests</DialogTitle>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setConfigOpen(false)} className="text-slate-500 hover:text-slate-200">
+                            <X size={15} />
+                        </Button>
+                    </DialogHeader>
+
+                    <div className="px-4 py-4 space-y-4">
+                        {/* Presets */}
+                        <div>
+                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Preset</label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {PRESETS.map(preset => {
+                                    const isActive = config.command === preset.config.command && config.coverageXmlPath === preset.config.coverageXmlPath;
+                                    return (
+                                        <Button
+                                            key={preset.label}
+                                            size="xs"
+                                            variant={isActive ? 'default' : 'outline'}
+                                            onClick={() => applyPreset(preset.config)}
+                                            className={isActive
+                                                ? 'bg-nexus-neon/20 text-nexus-neon border border-nexus-neon/40 hover:bg-nexus-neon/30'
+                                                : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
+                                            }
+                                        >
+                                            {preset.label}
+                                        </Button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <Separator className="bg-slate-800" />
+
+                        {/* Command */}
+                        <div>
+                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Comando</label>
+                            <Input
+                                value={config.command}
+                                onChange={e => handleConfigChange({ command: e.target.value })}
+                                className="bg-slate-950 border-slate-700 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
+                            />
+                        </div>
+
+                        {/* Paths */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">XML Coverage</label>
+                                <Input
+                                    value={config.coverageXmlPath}
+                                    onChange={e => handleConfigChange({ coverageXmlPath: e.target.value })}
+                                    className="bg-slate-950 border-slate-700 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">HTML Report</label>
+                                <Input
+                                    value={config.coverageHtmlPath}
+                                    onChange={e => handleConfigChange({ coverageHtmlPath: e.target.value })}
+                                    className="bg-slate-950 border-slate-700 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end px-4 py-3 border-t border-slate-700">
+                        <Button onClick={() => setConfigOpen(false)} className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">
+                            Listo
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

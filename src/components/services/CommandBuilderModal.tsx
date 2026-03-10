@@ -2,16 +2,20 @@ import React, { useState } from 'react';
 import { Plus, X, GripVertical, Check, TerminalSquare, FolderOpen } from 'lucide-react';
 import type { CommandStep } from '../../types/commands';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 interface CommandBuilderModalProps {
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
     onSave: (name: string, command: string, steps: CommandStep[]) => void;
     initialName?: string;
     initialSteps?: CommandStep[];
 }
 
 export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
-    onClose,
+    open,
+    onOpenChange,
     onSave,
     initialName,
     initialSteps,
@@ -124,23 +128,26 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
     const isEditing = !!initialName;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-            <div
-                className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]"
-                onClick={e => e.stopPropagation()}
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent
+                className="max-w-4xl w-[90vw] max-h-[90vh] flex flex-col bg-slate-900 border border-slate-700 p-0"
+                showCloseButton={false}
             >
-                <div className="flex justify-between items-center p-4 border-b border-slate-800">
-                    <div className="flex items-center gap-2">
-                        <TerminalSquare className="text-nexus-neon" size={20} />
-                        <h2 className="text-lg font-bold text-slate-200">
-                            {isEditing ? 'Edit Command' : 'Command Builder'}
-                        </h2>
-                    </div>
-                    <button onClick={onClose} className="p-1 text-slate-500 hover:text-slate-300 transition-colors">
-                        <X size={20} />
-                    </button>
-                </div>
+                <DialogHeader className="flex flex-row items-center gap-2 p-4 border-b border-slate-800">
+                    <TerminalSquare className="text-nexus-neon" size={18} />
+                    <DialogTitle className="text-slate-200">
+                        {isEditing ? 'Edit Command' : 'Command Builder'}
+                    </DialogTitle>
+                    <Button
+                        variant="ghost" size="icon-sm"
+                        onClick={() => onOpenChange(false)}
+                        className="ml-auto text-slate-500 hover:text-slate-300"
+                    >
+                        <X size={16} />
+                    </Button>
+                </DialogHeader>
 
+                {/* Body — todo el contenido existente */}
                 <div className="p-4 flex-1 overflow-y-auto">
                     <p className="text-xs text-slate-400 mb-4">
                         Construye un comando compuesto arrastrando pasos. <span className="text-nexus-neon bg-slate-800 px-1 rounded font-mono">{"{{ENVS}}"}</span> seguido de un comando genera <span className="font-mono bg-slate-800 px-1 rounded text-xs">cross-env KEY=VAL cmd</span>. Los comandos sin env se unen con <span className="font-mono bg-slate-800 px-1 rounded">&&</span>.
@@ -244,32 +251,34 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-slate-800 bg-slate-950/50">
-                    <div className="mb-4">
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Vista Previa Generada</label>
+                <DialogFooter
+                    className="-mx-0 -mb-0 p-4 border-t border-slate-800 bg-slate-950/50 rounded-b-xl flex-col sm:flex-col gap-3"
+                    showCloseButton={false}
+                >
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                            Vista Previa Generada
+                        </label>
                         <div className="bg-slate-950 border border-slate-800 rounded p-3 font-mono text-sm text-slate-300 min-h-[44px] break-all">
                             {generatedPreview || <span className="text-slate-600 italic">El comando aparecerá aquí...</span>}
                         </div>
                     </div>
-
                     <div className="flex justify-end gap-2">
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 font-semibold text-sm text-slate-400 hover:text-slate-200 transition-colors"
-                        >
+                        <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-slate-400">
                             Cancelar
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={handleSave}
                             disabled={!canSave}
-                            title={!canSave ? "Se requiere un Nombre y al menos un Comando" : ""}
-                            className="flex items-center gap-2 px-4 py-2 bg-nexus-neon text-slate-900 font-bold text-sm rounded hover:bg-[#00ffd5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!canSave ? 'Se requiere un Nombre y al menos un Comando' : ''}
+                            className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
                         >
-                            <Check size={16} /> {isEditing ? 'Guardar Cambios' : 'Guardar & Aplicar'}
-                        </button>
+                            <Check size={14} />
+                            {isEditing ? 'Guardar Cambios' : 'Guardar & Aplicar'}
+                        </Button>
                     </div>
-                </div>
-            </div>
-        </div>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 };

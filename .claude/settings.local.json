@@ -34,7 +34,10 @@
       "Bash(/root/.cargo/bin/cargo check 2>&1 | grep -E \"error|warning: unused\" | head -20)",
       "Bash(/root/.cargo/bin/cargo check 2>&1)",
       "Bash(/home/l1200056/.cargo/bin/cargo check 2>&1)",
-      "Bash(/home/l1200056/.cargo/bin/cargo check 2>&1 | grep \"^error\" | wc -l && /home/l1200056/.cargo/bin/cargo check 2>&1 | grep \"Finished\\\\|error\\\\[\" | head -5)"
+      "Bash(/home/l1200056/.cargo/bin/cargo check 2>&1 | grep \"^error\" | wc -l && /home/l1200056/.cargo/bin/cargo check 2>&1 | grep \"Finished\\\\|error\\\\[\" | head -5)",
+      "Bash(git -C /mnt/datos/projects/microtermix diff -- src/context/WorkspaceContext.tsx src/components/services/TerminalArea.tsx src/components/services/TerminalView.tsx 2>&1 | head -5)",
+      "Bash(git -C /mnt/datos/projects/microtermix log --oneline -1 -- src/context/WorkspaceContext.tsx src/components/services/TerminalArea.tsx 2>&1)",
+      "Bash(wc -l /mnt/datos/projects/microtermix/src/components/Git*.tsx | tail -1)"
     ]
   }
 }

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ProjectRow } from '../ProjectRow';
 import { Project } from '../../context/WorkspaceContext';
+import { Button } from '@/components/ui/button';
 
 interface ProjectListPaneProps {
     projects: Project[];
@@ -58,21 +59,20 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
             className="flex flex-col border-r border-slate-800 bg-slate-950/30 overflow-hidden shrink-0 relative"
             style={{ width: `${width}px` }}
         >
-            <div className="px-3 py-2 border-b border-slate-800 bg-slate-900 flex justify-between items-center shrink-0 gap-2">
+            <div className="px-3 py-2 border-b border-slate-800 bg-slate-900/80 flex justify-between items-center shrink-0 gap-2">
                 <h2 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 shrink-0">
-                    Proyectos ({projects.length})
+                    Proyectos <span className="text-slate-600">({projects.length})</span>
                 </h2>
                 {selectedProjects.length > 0 ? (
-                    <button onClick={onDeselectAll} className="text-[10px] text-slate-400 hover:text-slate-200 whitespace-nowrap">
+                    <Button variant="ghost" size="xs" onClick={onDeselectAll}
+                        className="text-slate-400 hover:text-slate-200 text-[10px] h-auto py-0.5">
                         Deseleccionar
-                    </button>
+                    </Button>
                 ) : (
-                    <button
-                        onClick={onSelectAll}
-                        className="text-[10px] text-nexus-neon hover:text-nexus-neon/80 whitespace-nowrap"
-                    >
+                    <Button variant="ghost" size="xs" onClick={onSelectAll}
+                        className="text-nexus-neon hover:text-nexus-neon/80 hover:bg-nexus-neon/10 text-[10px] h-auto py-0.5">
                         Seleccionar todos
-                    </button>
+                    </Button>
                 )}
             </div>
             <div className="flex-1 overflow-y-auto scrollbar-hide">

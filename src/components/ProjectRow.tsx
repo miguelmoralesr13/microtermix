@@ -3,6 +3,13 @@ import { useWorkspace, Project } from '../context/WorkspaceContext';
 import { useProjectEnvs } from './useProjectEnvs';
 import { EnvManager } from './EnvManager';
 import { Package, Plus, Play } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 interface ProjectRowProps {
     project: Project;
@@ -56,170 +63,179 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
     const processState = activeProcessIds.length > 0 ? state.activeProcesses[activeProcessIds[0]] : null;
     const status = processState?.status || 'idle';
 
+    const TYPE_BADGE: Record<string, string> = {
+        node: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        go:   'bg-sky-500/15 text-sky-400 border-sky-500/30',
+        rust: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    };
+
+    const STATUS_BAR: Record<string, string> = {
+        running: 'bg-emerald-400',
+        error:   'bg-red-400',
+        stopped: 'bg-slate-500',
+        idle:    'bg-transparent',
+    };
+
     return (
         <>
-            <div className={`group flex flex-col p-2 border-b border-slate-800/80 hover:bg-slate-800/50 transition-colors ${isSelected ? 'bg-slate-800/30' : ''}`}>
-                <div className="flex items-center gap-2 w-full min-w-0">
-                    {/* Checkbox */}
-                    <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={onToggleSelect}
-                        className="accent-nexus-neon shrink-0 w-3.5 h-3.5"
-                    />
+            <div className={cn(
+                'group flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/60',
+                'hover:bg-slate-800/40 transition-colors relative',
+                isSelected && 'bg-slate-800/30',
+            )}>
+                {/* Status bar lateral izquierda */}
+                <div className={cn(
+                    'absolute left-0 top-2 bottom-2 w-0.5 rounded-full transition-colors',
+                    STATUS_BAR[status] ?? 'bg-transparent',
+                )} />
 
-                    {/* Nombre: prioridad de espacio para ver completo */}
-                    <div
-                        className="flex-1 min-w-0 flex flex-col cursor-pointer py-0.5 -my-0.5 rounded pr-1 hover:bg-slate-800/50 transition-colors"
-                        onClick={onToggleSelect}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSelect(); } }}
-                        title={project.name as string}
-                    >
-                        <span className="text-xs font-semibold text-slate-200 truncate block">
-                            {project.name}
-                        </span>
-                        {status !== 'idle' && (
-                            <div className="flex items-center text-[9px] mt-0.5">
-                                <span className={`w-1 h-1 rounded-full mr-1 ${status === 'running' ? 'bg-nexus-success animate-pulse' :
-                                    status === 'stopped' ? 'bg-slate-500' : 'bg-nexus-danger'
-                                    }`} />
-                                <span className="text-slate-400 capitalize">{status === 'stopped' ? 'parado' : status}</span>
-                            </div>
+                {/* Checkbox */}
+                <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={onToggleSelect}
+                    className="accent-nexus-neon shrink-0 w-3.5 h-3.5 ml-2"
+                />
+
+                {/* Nombre + Badge tipo */}
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggleSelect}>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-xs font-semibold text-slate-200 truncate">{project.name}</span>
+                        {project.project_type && (
+                            <Badge className={cn(
+                                'text-[9px] px-1.5 py-0 border shrink-0 font-mono uppercase rounded',
+                                TYPE_BADGE[project.project_type as string] ?? 'bg-slate-700 text-slate-400 border-slate-600',
+                            )}>
+                                {project.project_type}
+                            </Badge>
                         )}
                     </div>
+                    {status !== 'idle' && (
+                        <p className={cn(
+                            'text-[9px] mt-0.5',
+                            status === 'running' && 'text-emerald-400',
+                            status === 'error'   && 'text-red-400',
+                            status === 'stopped' && 'text-slate-500',
+                        )}>
+                            {status === 'stopped' ? 'parado' : status}
+                        </p>
+                    )}
+                </div>
 
-                    {/* Botones compactos */}
-                    <div className="flex items-center gap-0.5 shrink-0 relative">
+                {/* Action buttons */}
+                <TooltipProvider delay={400}>
+                    <div className="flex items-center gap-0.5 shrink-0">
+                        {/* Scripts popover */}
                         {project.scripts && project.scripts.length > 0 && (
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setScriptMenuOpen(!scriptMenuOpen); }}
-                                    className="p-1 mr-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-800 rounded transition-colors"
-                                    title="Ejecutar script"
+                            <Popover open={scriptMenuOpen} onOpenChange={setScriptMenuOpen}>
+                                <PopoverTrigger className="p-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-800 rounded transition-colors">
+                                    <Play size={13} className="fill-current" />
+                                </PopoverTrigger>
+                                <PopoverContent
+                                    side="bottom"
+                                    align="start"
+                                    className="w-44 p-1 bg-slate-900 border-slate-700"
                                 >
-                                    <Play size={14} className="fill-current" />
-                                </button>
-                                {scriptMenuOpen && (
-                                    <>
-                                        <div
-                                            className="fixed inset-0 z-40"
-                                            onClick={(e) => { e.stopPropagation(); setScriptMenuOpen(false); }}
-                                        />
-                                        <div className="absolute top-full mt-1 left-0 z-50 bg-slate-900 border border-slate-700 rounded shadow-xl py-1 min-w-[120px] max-h-[200px] overflow-y-auto custom-scrollbar">
-                                            <div className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-1">
-                                                Scripts
-                                            </div>
-                                            {project.scripts.map(s => (
-                                                <button
-                                                    key={s}
-                                                    type="button"
-                                                    className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-nexus-neon transition-colors"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onPlayScript(s);
-                                                        setScriptMenuOpen(false);
-                                                    }}
-                                                >
-                                                    {s}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </>
+                                    <p className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-1">
+                                        Scripts
+                                    </p>
+                                    {project.scripts.map(s => (
+                                        <button
+                                            key={s}
+                                            className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-nexus-neon rounded transition-colors"
+                                            onClick={() => { onPlayScript(s); setScriptMenuOpen(false); }}
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </PopoverContent>
+                            </Popover>
                         )}
+
+                        {/* npm install + add deps (solo node) */}
                         {isNode && (
                             <>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleNpmInstall(); }}
-                                    className="p-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-800 rounded border border-slate-700/80 transition-colors"
-                                    title="npm install"
-                                >
-                                    <Package size={12} />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setAddDepsOpen(true); }}
-                                    className="p-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-800 rounded border border-slate-700/80 transition-colors"
-                                    title="Agregar deps"
-                                >
-                                    <Plus size={12} />
-                                </button>
+                                <Tooltip>
+                                    <TooltipTrigger render={
+                                        <Button variant="ghost" size="icon-xs"
+                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleNpmInstall(); }}
+                                            className="text-slate-500 hover:text-nexus-neon" />
+                                    }>
+                                        <Package size={12} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>npm install</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger render={
+                                        <Button variant="ghost" size="icon-xs"
+                                            onClick={(e: React.MouseEvent) => { e.stopPropagation(); setAddDepsOpen(true); }}
+                                            className="text-slate-500 hover:text-nexus-neon" />
+                                    }>
+                                        <Plus size={12} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>Agregar dependencias</TooltipContent>
+                                </Tooltip>
                             </>
                         )}
-                        <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setEnvManagerOpen(true); }}
-                            className="px-1.5 py-0.5 text-[9px] font-semibold text-slate-400 hover:text-nexus-neon bg-slate-900 rounded border border-slate-700 hover:border-nexus-neon transition-colors"
-                            title={`ENV (${Object.keys(activeVars).length})`}
-                        >
-                            ENV ({Object.keys(activeVars).length})
-                        </button>
+
+                        {/* ENV button */}
+                        <Tooltip>
+                            <TooltipTrigger render={
+                                <Button variant="ghost" size="icon-xs"
+                                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); setEnvManagerOpen(true); }}
+                                    className="text-slate-500 hover:text-nexus-neon font-mono text-[9px] w-auto px-1.5 h-6" />
+                            }>
+                                <span>ENV{Object.keys(activeVars).length > 0 && ` (${Object.keys(activeVars).length})`}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Variables de entorno</TooltipContent>
+                        </Tooltip>
                     </div>
-                </div>
+                </TooltipProvider>
             </div>
 
             {/* Modal: Agregar dependencias */}
-            {addDepsOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setAddDepsOpen(false)}>
-                    <div
-                        className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md p-4 shadow-2xl"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <h3 className="text-sm font-bold text-slate-200 mb-3">Agregar dependencias</h3>
-                        <p className="text-[10px] text-slate-500 mb-2 font-mono truncate">{projectPath}</p>
-                        <input
-                            type="text"
-                            value={addDepsPackages}
-                            onChange={e => setAddDepsPackages(e.target.value)}
-                            placeholder="lodash axios react"
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:border-nexus-neon focus:outline-none mb-3"
-                            onKeyDown={e => e.key === 'Enter' && handleAddDepsInstall()}
-                        />
-                        <div className="flex items-center gap-4 mb-4">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="depsType"
-                                    checked={!addDepsDev}
-                                    onChange={() => setAddDepsDev(false)}
-                                    className="accent-nexus-neon"
-                                />
-                                <span className="text-xs text-slate-300">Dependencies</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name="depsType"
-                                    checked={addDepsDev}
-                                    onChange={() => setAddDepsDev(true)}
-                                    className="accent-nexus-neon"
-                                />
-                                <span className="text-xs text-slate-300">Dev Dependencies</span>
-                            </label>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                            <button
-                                onClick={() => setAddDepsOpen(false)}
-                                className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 border border-slate-700 rounded-lg"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleAddDepsInstall}
-                                disabled={!addDepsPackages.trim()}
-                                className="px-3 py-1.5 text-xs font-bold bg-nexus-neon text-nexus-darker rounded-lg hover:bg-opacity-80 disabled:opacity-50"
-                            >
-                                Instalar
-                            </button>
-                        </div>
+            <Dialog open={addDepsOpen} onOpenChange={setAddDepsOpen}>
+                <DialogContent className="max-w-md bg-slate-900 border-slate-700">
+                    <DialogHeader>
+                        <DialogTitle className="text-slate-200">Agregar dependencias</DialogTitle>
+                        <p className="text-[10px] text-slate-500 font-mono truncate">{projectPath}</p>
+                    </DialogHeader>
+
+                    <Input
+                        value={addDepsPackages}
+                        onChange={e => setAddDepsPackages(e.target.value)}
+                        placeholder="lodash axios react"
+                        className="bg-slate-950 border-slate-700 focus:border-nexus-neon"
+                        onKeyDown={e => e.key === 'Enter' && handleAddDepsInstall()}
+                        autoFocus
+                    />
+
+                    <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name={`depsType-${projectPath}`} checked={!addDepsDev}
+                                onChange={() => setAddDepsDev(false)} className="accent-nexus-neon" />
+                            <span className="text-xs text-slate-300">Dependencies</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name={`depsType-${projectPath}`} checked={addDepsDev}
+                                onChange={() => setAddDepsDev(true)} className="accent-nexus-neon" />
+                            <span className="text-xs text-slate-300">Dev Dependencies</span>
+                        </label>
                     </div>
-                </div>
-            )}
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setAddDepsOpen(false)}
+                            className="text-slate-400">Cancelar</Button>
+                        <Button
+                            onClick={handleAddDepsInstall}
+                            disabled={!addDepsPackages.trim()}
+                            className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">
+                            Instalar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {envManagerOpen && (
                 <EnvManager

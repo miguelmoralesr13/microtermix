@@ -1,13 +1,35 @@
 @import "tailwindcss";
 
 @theme {
-  --color-nexus-dark: #0f172a;
-  --color-nexus-darker: #020617;
-  --color-nexus-neon: #38bdf8;
-  --color-nexus-accent: #818cf8;
+  /* ── Nexus design tokens ──────────────────────────── */
+  --color-nexus-dark:    #0f172a;
+  --color-nexus-darker:  #020617;
+  --color-nexus-neon:    #38bdf8;
+  --color-nexus-accent:  #818cf8;
   --color-nexus-success: #34d399;
-  --color-nexus-danger: #fb7185;
-  --color-nexus-warn: #fbbf24;
+  --color-nexus-danger:  #fb7185;
+  --color-nexus-warn:    #fbbf24;
+
+  /* ── shadcn/ui color tokens (TailwindCSS v4 format) ─ */
+  --color-background:          #0f172a;  /* slate-900 */
+  --color-foreground:          #e2e8f0;  /* slate-200 */
+  --color-card:                #0f172a;
+  --color-card-foreground:     #e2e8f0;
+  --color-popover:             #0f172a;  /* fondo de dropdowns y popovers */
+  --color-popover-foreground:  #e2e8f0;
+  --color-primary:             #38bdf8;  /* nexus-neon */
+  --color-primary-foreground:  #020617;  /* nexus-darker */
+  --color-secondary:           #1e293b;  /* slate-800 */
+  --color-secondary-foreground:#94a3b8;  /* slate-400 */
+  --color-muted:               #1e293b;  /* slate-800 */
+  --color-muted-foreground:    #64748b;  /* slate-500 */
+  --color-accent:              #1e293b;  /* hover en items de dropdown */
+  --color-accent-foreground:   #e2e8f0;
+  --color-destructive:         #fb7185;  /* nexus-danger */
+  --color-destructive-foreground:#fff;
+  --color-border:              #334155;  /* slate-700 */
+  --color-input:               #1e293b;  /* slate-800 */
+  --color-ring:                #38bdf8;  /* nexus-neon focus ring */
 }
 
 :root {

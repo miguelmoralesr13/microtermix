@@ -364,14 +364,13 @@ export const CommandsPanel: React.FC = () => {
             </div>
 
             {/* Builder modal */}
-            {builderOpen && (
-                <CommandBuilderModal
-                    onClose={() => { setBuilderOpen(false); setEditingCommandName(null); }}
-                    onSave={handleBuilderSave}
-                    initialName={editingCommandName || undefined}
-                    initialSteps={editingInitialSteps}
-                />
-            )}
+            <CommandBuilderModal
+                open={builderOpen}
+                onOpenChange={(open) => { setBuilderOpen(open); if (!open) setEditingCommandName(null); }}
+                onSave={handleBuilderSave}
+                initialName={editingCommandName || undefined}
+                initialSteps={editingInitialSteps}
+            />
         </div>
     );
 };

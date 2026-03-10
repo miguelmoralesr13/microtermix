@@ -401,13 +401,12 @@ export const ServiceManager: React.FC = () => {
                                     selectedCount={selectedProjects.length}
                                 />
 
-                                {viteWrapperModalOpen && (
-                                    <ViteWrapperModal
-                                        onClose={() => setViteWrapperModalOpen(false)}
-                                        workspacePath={state.currentPath || ''}
-                                        candidates={viteWrapperCandidates}
-                                    />
-                                )}
+                                <ViteWrapperModal
+                                    open={viteWrapperModalOpen}
+                                    onOpenChange={setViteWrapperModalOpen}
+                                    workspacePath={state.currentPath || ''}
+                                    candidates={viteWrapperCandidates}
+                                />
 
                                 {processIds.length === 0 ? (
                                     <div className="flex-1 flex items-center justify-center text-slate-500 text-sm bg-slate-900/50">

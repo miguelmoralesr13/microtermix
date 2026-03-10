@@ -128,7 +128,7 @@ const STALE: Record<'branches' | 'status' | 'timeline' | 'aheadBehind', number> 
     branches: 60_000,
     status: 30_000,
     timeline: 60_000,
-    aheadBehind: 120_000,
+    aheadBehind: 30_000,
 };
 
 // ── Default repo state ────────────────────────────────────────────────────────

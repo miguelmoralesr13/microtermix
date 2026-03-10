@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const VITE_WRAPPER_STORAGE_PREFIX = 'nexus-vite-wrapper-';
 
@@ -33,13 +36,15 @@ export interface ProxyCandidateItem {
 }
 
 interface ViteWrapperModalProps {
-    onClose: () => void;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
     workspacePath: string;
     candidates: ProxyCandidateItem[];
 }
 
 export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
-    onClose,
+    open,
+    onOpenChange,
     candidates,
 }) => {
     const candidatePaths = useMemo(() => candidates.map(c => c.project_path), [candidates]);
@@ -119,7 +124,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
     const handleSave = () => {
         const config: ViteWrapperConfig = { enabled, remotes, disabledRemotes: [...disabledRemotes], base: base || undefined, sourcemap: sourcemap || undefined, host: host || undefined };
         localStorage.setItem(storageKey(selectedPath), JSON.stringify(config));
-        onClose();
+        onOpenChange(false);
     };
 
     const toggleRemote = (name: string) => {
@@ -153,20 +158,21 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
-            <div
-                className="bg-slate-900 border border-slate-700 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-                onClick={e => e.stopPropagation()}
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent
+                className="max-w-2xl w-[90vw] max-h-[90vh] flex flex-col bg-slate-900 border border-slate-700 p-0"
+                showCloseButton={false}
             >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-                    <h2 className="text-lg font-bold text-slate-100">Vite wrapper (MFE remotes)</h2>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg transition-colors"
+                <DialogHeader className="flex flex-row items-center gap-2 px-4 py-3 border-b border-slate-700">
+                    <DialogTitle className="text-slate-100 flex-1">Vite wrapper (MFE remotes)</DialogTitle>
+                    <Button
+                        variant="ghost" size="icon-sm"
+                        onClick={() => onOpenChange(false)}
+                        className="text-slate-400 hover:text-slate-200"
                     >
-                        <X size={20} />
-                    </button>
-                </div>
+                        <X size={18} />
+                    </Button>
+                </DialogHeader>
 
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                     {candidatePaths.length === 0 ? (
@@ -175,17 +181,18 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                         <>
                             <div>
                                 <label className="block text-xs text-slate-400 mb-1">Proyecto</label>
-                                <select
-                                    value={selectedPath}
-                                    onChange={e => handleProjectChange(e.target.value)}
-                                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-nexus-neon focus:outline-none"
-                                >
-                                    {candidatePaths.map(p => (
-                                        <option key={p} value={p}>
-                                            {p.split(/[/\\]/).filter(Boolean).pop() ?? p}
-                                        </option>
-                                    ))}
-                                </select>
+                                <Select value={selectedPath} onValueChange={(v) => v && handleProjectChange(v)}>
+                                    <SelectTrigger className="w-full h-9 border-slate-600 bg-slate-800 text-slate-200 focus-visible:border-nexus-neon">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {candidatePaths.map(p => (
+                                            <SelectItem key={p} value={p}>
+                                                {p.split(/[/\\]/).filter(Boolean).pop() ?? p}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
 
                             {loading ? (
@@ -343,22 +350,19 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                     )}
                 </div>
 
-                <div className="flex justify-end gap-2 px-4 py-3 border-t border-slate-700">
-                    <button
-                        onClick={onClose}
-                        className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200 rounded-lg transition-colors"
-                    >
+                <div className="flex justify-end gap-2 px-4 py-3 border-t border-slate-700 shrink-0">
+                    <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-slate-400">
                         Cancelar
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={handleSave}
-                        className="px-4 py-1.5 text-sm font-bold bg-nexus-neon text-nexus-darker rounded-lg hover:bg-opacity-90 transition-colors"
+                        className="bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/80 font-bold"
                     >
                         Guardar
-                    </button>
+                    </Button>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };
 
