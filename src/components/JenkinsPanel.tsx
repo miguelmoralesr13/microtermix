@@ -34,6 +34,16 @@ interface LogTarget {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function useTick(active: boolean) {
+    const [now, setNow] = useState(Date.now());
+    useEffect(() => {
+        if (!active) return;
+        const id = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(id);
+    }, [active]);
+    return now;
+}
+
 function ResultBadge({ result, building }: { result: BuildResult; building: boolean }) {
     const color = colorFromResult(result, building);
     const label = building ? 'RUNNING' : (result ?? 'NO BUILD');
@@ -240,7 +250,7 @@ function PipelineStagesBar({
 
     useEffect(() => {
         if (!live || !supported) return;
-        intervalRef.current = setInterval(fetchStages, 3000);
+        intervalRef.current = setInterval(fetchStages, 6000); // Changed from 3000 to 6000
         return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
     }, [live, supported, fetchStages]);
 
@@ -379,7 +389,7 @@ function ConsoleLogView({
 
     useEffect(() => {
         if (!live) return;
-        intervalRef.current = setInterval(fetchChunk, 2000);
+        intervalRef.current = setInterval(fetchChunk, 4000); // Changed from 2000 to 4000
         return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
     }, [live, fetchChunk]);
 
@@ -479,12 +489,15 @@ function BuildRow({
     onOpenLog: () => void;
     onAbort: () => void;
 }) {
+    const now = useTick(build.building);
+    const durDisplay = build.building ? Math.max(0, now - build.timestamp) : build.duration;
+
     return (
         <div className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/40 rounded transition-colors text-xs">
             <ResultBadge result={build.result} building={build.building} />
             <span className="font-mono text-slate-400 w-10 shrink-0">#{build.number}</span>
             <span className="text-slate-400 w-20 shrink-0">{formatAgo(build.timestamp)}</span>
-            <span className="text-slate-500 w-16 shrink-0">{formatDuration(build.duration)}</span>
+            <span className="text-slate-500 w-16 shrink-0">{formatDuration(durDisplay)}</span>
             <div className="flex items-center gap-1.5 ml-auto">
                 <button
                     onClick={onOpenLog}
@@ -527,6 +540,7 @@ function JobRow({
     onToggleFavorite,
     search,
     alwaysPoll = false,
+    isChildOfMulti,
 }: {
     job: JenkinsJobSummary;
     cfg: JenkinsConfig;
@@ -537,6 +551,7 @@ function JobRow({
     onToggleFavorite: (job: JenkinsJobSummary) => void;
     search: string;
     alwaysPoll?: boolean;
+    isChildOfMulti?: boolean;
 }) {
     // Auto-expand when a search query matches a child but not the top name directly
     const childMatchesSearch =
@@ -566,13 +581,16 @@ function JobRow({
     const lb = liveJob.lastBuild;
     const jobPath = jobApiPath(liveJob.url, cfg.baseUrl);
 
+    // Live tick for duration rendering if building
+    const now = useTick(isBuilding(liveJob));
+
     // Per-job polling: runs when expanded OR alwaysPoll (favorites).
-    // Rate: 8s if building, 20s if idle. Stops when collapsed (unless alwaysPoll).
+    // Rate: 15s if building, 45s if idle. Stops when collapsed (unless alwaysPoll).
     const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     useEffect(() => {
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
         if ((!expanded && !alwaysPoll) || folder) return;
-        const rate = isBuilding(liveJob) ? 8_000 : 20_000;
+        const rate = isBuilding(liveJob) ? 15_000 : 45_000; // Increased intervals to reduce requests
         pollIntervalRef.current = setInterval(async () => {
             const fresh = await jenkinsGetJobStatus(cfg, jobPath);
             if (fresh) setLiveJob(fresh);
@@ -580,7 +598,7 @@ function JobRow({
         return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
     }, [expanded, alwaysPoll, folder, isBuilding(liveJob), jobPath, cfg]);
 
-    const loadContent = async () => {
+    const loadContent = useCallback(async () => {
         setLoading(true);
         try {
             if (folder || multi) {
@@ -594,7 +612,17 @@ function JobRow({
             }
         } catch { /* ignore */ }
         setLoading(false);
-    };
+    }, [folder, multi, cfg, jobPath]);
+
+    // Polling list children/builds while expanded
+    const contentPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => {
+        if (contentPollIntervalRef.current) clearInterval(contentPollIntervalRef.current);
+        if (!expanded) return;
+        const rate = isBuilding(liveJob) ? 15_000 : 45_000; // Increased intervals to reduce requests
+        contentPollIntervalRef.current = setInterval(loadContent, rate);
+        return () => { if (contentPollIntervalRef.current) clearInterval(contentPollIntervalRef.current); };
+    }, [expanded, isBuilding(liveJob), loadContent]);
 
     const handleToggle = () => {
         const next = !expanded;
@@ -646,6 +674,8 @@ function JobRow({
         ? <GitBranch size={11} className="text-slate-500 shrink-0" />
         : null;
 
+    const canFavorite = !folder && !isChildOfMulti;
+
     const rowContent = (
         <div className={headerClass} style={indentStyle} onClick={handleToggle}>
             {expanded
@@ -662,7 +692,7 @@ function JobRow({
                     <ResultBadge result={lb.result} building={lb.building} />
                     <span className="text-[10px] text-slate-500 hidden sm:block">{formatAgo(lb.timestamp)}</span>
                     {isTopLevel && (
-                        <span className="text-[10px] text-slate-500 hidden md:block">{formatDuration(lb.duration)}</span>
+                        <span className="text-[10px] text-slate-500 hidden md:block">{formatDuration(lb.building ? Math.max(0, now - lb.timestamp) : lb.duration)}</span>
                     )}
                 </div>
             )}
@@ -704,24 +734,26 @@ function JobRow({
                 >
                     <ExternalLink size={10} />
                 </button>
-                <button
-                    onClick={e => { e.stopPropagation(); onToggleFavorite(liveJob); }}
-                    className={`p-1 rounded transition-colors ${
-                        favorites.has(normalizeUrl(liveJob.url))
-                            ? 'text-amber-400 hover:text-amber-300'
-                            : 'text-slate-600 hover:text-amber-400'
-                    }`}
-                    title={favorites.has(normalizeUrl(liveJob.url)) ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                    <Star size={11} className={favorites.has(normalizeUrl(liveJob.url)) ? 'fill-current' : ''} />
-                </button>
+                {canFavorite && (
+                    <button
+                        onClick={e => { e.stopPropagation(); onToggleFavorite(liveJob); }}
+                        className={`p-1 rounded transition-colors ${
+                            favorites.has(normalizeUrl(liveJob.url))
+                                ? 'text-amber-400 hover:text-amber-300'
+                                : 'text-slate-600 hover:text-amber-400'
+                        }`}
+                        title={favorites.has(normalizeUrl(liveJob.url)) ? 'Remove from favorites' : 'Add to favorites'}
+                    >
+                        <Star size={11} className={favorites.has(normalizeUrl(liveJob.url)) ? 'fill-current' : ''} />
+                    </button>
+                )}
             </div>
         </div>
     );
 
     const expandedContent = expanded && (
         <div className={isTopLevel ? 'bg-slate-900/30 border-t border-slate-800' : 'border-l border-slate-800 ml-5 pl-1'}>
-            {loading && (
+            {loading && children.length === 0 && builds.length === 0 && (
                 <div className="flex items-center gap-2 text-xs text-slate-500 px-4 py-2">
                     <Loader2 size={11} className="animate-spin" />
                     {folder ? 'Loading folder…' : multi ? 'Loading branches…' : 'Loading builds…'}
@@ -729,7 +761,7 @@ function JobRow({
             )}
 
             {/* Folder / Multibranch → recurse into child JobRows */}
-            {(folder || multi) && !loading && (
+            {(folder || multi) && (children.length > 0 || !loading) && (
                 <div className={isTopLevel ? 'p-2' : 'py-1'}>
                     {children.length === 0 && (
                         <p className="text-[11px] text-slate-600 px-3 py-1">
@@ -747,13 +779,14 @@ function JobRow({
                             favorites={favorites}
                             onToggleFavorite={onToggleFavorite}
                             search={search}
+                            isChildOfMulti={multi || isChildOfMulti}
                         />
                     ))}
                 </div>
             )}
 
             {/* Simple job / branch → build history */}
-            {!folder && !multi && !loading && (
+            {!folder && !multi && (builds.length > 0 || !loading) && (
                 <div className={isTopLevel ? 'p-2' : 'py-1'}>
                     {builds.length === 0 && (
                         <p className="text-[11px] text-slate-600 px-3 py-1">No builds yet.</p>

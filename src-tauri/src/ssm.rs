@@ -81,9 +81,12 @@ fn plugin_path_finder(_app: &tauri::AppHandle, custom_path: Option<&str>) -> Res
 
     // 3. Search PATH
     #[cfg(target_os = "windows")]
-    let which_result = std::process::Command::new("where")
-        .arg("session-manager-plugin")
-        .output();
+    let which_result = {
+        let mut cmd = std::process::Command::new("where");
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+        cmd.arg("session-manager-plugin").output()
+    };
     #[cfg(not(target_os = "windows"))]
     let which_result = std::process::Command::new("which")
         .arg("session-manager-plugin")
@@ -113,7 +116,15 @@ fn plugin_path_finder(_app: &tauri::AppHandle, custom_path: Option<&str>) -> Res
 #[tauri::command]
 pub fn ssm_check_plugin(app: tauri::AppHandle, plugin_path: Option<String>) -> Result<String, String> {
     let path = plugin_path_finder(&app, plugin_path.as_deref())?;
-    let out = std::process::Command::new(&path)
+    
+    #[allow(unused_mut)]
+    let mut cmd = std::process::Command::new(&path);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let out = cmd
         .arg("--version")
         .output()
         .map_err(|e| format!("No se pudo ejecutar el plugin: {e}"))?;

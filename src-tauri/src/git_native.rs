@@ -343,11 +343,16 @@ pub struct AheadBehindResult {
 /// ahead of / behind its upstream tracking branch.
 pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadBehindResult, String> {
     // Fetch from remote — ignore errors (offline / no remote)
-    let _ = tokio::process::Command::new("git")
-        .args(["fetch", "--quiet", "--no-tags"])
-        .current_dir(&project_path)
-        .output()
-        .await;
+    #[allow(unused_mut)]
+    let mut fetch_cmd = tokio::process::Command::new("git");
+    fetch_cmd.args(["fetch", "--quiet", "--no-tags"])
+        .current_dir(&project_path);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        fetch_cmd.creation_flags(0x08000000);
+    }
+    let _ = fetch_cmd.output().await;
 
     let repo = repo_open(&project_path)?;
 
