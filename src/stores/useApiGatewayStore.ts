@@ -65,17 +65,29 @@ export type SelectedApi =
     | { type: 'http'; id: string; name: string }
     | null;
 
+const FAVORITES_KEY = 'microtermix_apigw_favorites';
+
+const loadFavorites = (): string[] => {
+    try {
+        const raw = localStorage.getItem(FAVORITES_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+};
+
 interface ApiGatewayState {
     restApis: RestApiInfo[];
     httpApis: HttpApiInfo[];
     selectedApi: SelectedApi;
-    restResources: Record<string, RestApiResource[]>; // Keys are rest_api_id
-    httpRoutes: Record<string, HttpApiRoute[]>; // Keys are api_id
-    methodDetails: Record<string, RestMethodDetails | HttpRouteIntegrationDetails>; // Key: `<api_id>|<resource_id/route_id>|<method>`
+    restResources: Record<string, RestApiResource[]>;
+    httpRoutes: Record<string, HttpApiRoute[]>;
+    methodDetails: Record<string, RestMethodDetails | HttpRouteIntegrationDetails>;
     loadingApis: boolean;
     loadingDetails: Record<string, boolean>;
     loadingMethodDetails: Record<string, boolean>;
     exportedSwagger: Record<string, string>;
+    favoriteApis: string[];
     error: string | null;
 
     fetchApis: (creds: AwsCredentials) => Promise<void>;
@@ -83,6 +95,7 @@ interface ApiGatewayState {
     fetchApiDetails: (api: SelectedApi, creds: AwsCredentials) => Promise<void>;
     fetchMethodDetails: (creds: AwsCredentials, apiId: string, resourceId: string, method: string, isRest: boolean) => Promise<void>;
     exportSwagger: (creds: AwsCredentials, apiId: string, stageName: string, isRest: boolean) => Promise<string | null>;
+    toggleFavorite: (id: string) => void;
 }
 
 export const useApiGatewayStore = create<ApiGatewayState>((set, get) => ({
@@ -96,7 +109,17 @@ export const useApiGatewayStore = create<ApiGatewayState>((set, get) => ({
     loadingDetails: {},
     loadingMethodDetails: {},
     exportedSwagger: {},
+    favoriteApis: loadFavorites(),
     error: null,
+
+    toggleFavorite: (id: string) => {
+        const current = get().favoriteApis;
+        const updated = current.includes(id)
+            ? current.filter(f => f !== id)
+            : [...current, id];
+        localStorage.setItem(FAVORITES_KEY, JSON.stringify(updated));
+        set({ favoriteApis: updated });
+    },
 
     fetchApis: async (creds: AwsCredentials) => {
         set({ loadingApis: true, error: null });
