@@ -3,6 +3,8 @@ import { Play, Plus, Edit2, Trash2, ChevronRight, TerminalSquare } from 'lucide-
 import { useWorkspace } from '../context/WorkspaceContext';
 import { CommandBuilderModal } from './services/CommandBuilderModal';
 import type { CommandStep } from '../types/commands';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
 export const CommandsPanel: React.FC = () => {
     const {
@@ -157,12 +159,14 @@ export const CommandsPanel: React.FC = () => {
                         </span>
                     )}
                 </div>
-                <button
+                <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => { setEditingCommandName(null); setBuilderOpen(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-nexus-neon/10 hover:bg-nexus-neon/20 text-nexus-neon text-xs font-semibold rounded border border-nexus-neon/30 hover:border-nexus-neon/50 transition-colors"
+                    className="flex items-center gap-1.5 h-8 bg-nexus-neon/10 hover:bg-nexus-neon/20 text-nexus-neon border-nexus-neon/30 hover:border-nexus-neon/50 text-xs font-semibold"
                 >
                     <Plus size={13} /> New Command
-                </button>
+                </Button>
             </div>
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -202,20 +206,22 @@ export const CommandsPanel: React.FC = () => {
                                     {name}
                                 </span>
                                 <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                    <button
+                                    <Button
+                                        variant="ghost" size="icon-sm"
                                         onClick={(e) => { e.stopPropagation(); handleEditCommand(name); }}
-                                        className="p-1 text-slate-500 hover:text-nexus-neon rounded transition-colors"
+                                        className="h-6 w-6 text-slate-500 hover:text-nexus-neon hover:bg-slate-800/80 transition-colors"
                                         title="Edit"
                                     >
                                         <Edit2 size={11} />
-                                    </button>
-                                    <button
+                                    </Button>
+                                    <Button
+                                        variant="ghost" size="icon-sm"
                                         onClick={(e) => { e.stopPropagation(); handleDeleteCommand(name); }}
-                                        className="p-1 text-slate-500 hover:text-red-400 rounded transition-colors"
+                                        className="h-6 w-6 text-slate-500 hover:text-red-400 hover:bg-slate-800/80 transition-colors"
                                         title="Delete"
                                     >
                                         <Trash2 size={11} />
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         ))}
@@ -262,52 +268,55 @@ export const CommandsPanel: React.FC = () => {
                         {/* Command */}
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Command</label>
-                            <select
-                                value={selectedCommand}
-                                onChange={e => setSelectedCommand(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 focus:border-nexus-neon rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none transition-colors"
-                            >
-                                <option value="">-- Select a command --</option>
-                                {savedCommandNames.length > 0 && (
-                                    <optgroup label="Saved Commands">
-                                        {savedCommandNames.map(n => <option key={n} value={n}>{n}</option>)}
-                                    </optgroup>
-                                )}
-                                {projectScripts.length > 0 && (
-                                    <optgroup label="Package Scripts">
-                                        {projectScripts.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </optgroup>
-                                )}
-                            </select>
+                            <Select value={selectedCommand || undefined} onValueChange={(v) => v != null && setSelectedCommand(v)}>
+                                <SelectTrigger className="w-full bg-slate-950 border-slate-700 focus:ring-nexus-neon">
+                                    <SelectValue placeholder="-- Select a command --" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {savedCommandNames.length > 0 && (
+                                        <SelectGroup>
+                                            <SelectLabel>Saved Commands</SelectLabel>
+                                            {savedCommandNames.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+                                        </SelectGroup>
+                                    )}
+                                    {projectScripts.length > 0 && (
+                                        <SelectGroup>
+                                            <SelectLabel>Package Scripts</SelectLabel>
+                                            {projectScripts.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                        </SelectGroup>
+                                    )}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         {/* Project */}
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Project</label>
-                            <select
-                                value={selectedProjectPath}
-                                onChange={e => handleProjectChange(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 focus:border-nexus-neon rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none transition-colors"
-                            >
-                                <option value="">-- Select a project --</option>
-                                {state.projects.map(p => (
-                                    <option key={p.path as string} value={p.path as string}>{p.name as string}</option>
-                                ))}
-                            </select>
+                            <Select value={selectedProjectPath || undefined} onValueChange={(v) => v != null && handleProjectChange(v)}>
+                                <SelectTrigger className="w-full bg-slate-950 border-slate-700 focus:ring-nexus-neon">
+                                    <SelectValue placeholder="-- Select a project --" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {state.projects.map(p => (
+                                        <SelectItem key={p.path as string} value={p.path as string}>{p.name as string}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         {/* Environment */}
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Environment</label>
-                            <select
-                                value={selectedEnv}
-                                onChange={e => setSelectedEnv(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 focus:border-nexus-neon rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none transition-colors"
-                            >
-                                {projectEnvOptions.map(env => (
-                                    <option key={env} value={env}>{env === 'none' ? 'None (no env)' : env}</option>
-                                ))}
-                            </select>
+                            <Select value={selectedEnv || undefined} onValueChange={(v) => v != null && setSelectedEnv(v)}>
+                                <SelectTrigger className="w-full bg-slate-950 border-slate-700 focus:ring-nexus-neon">
+                                    <SelectValue placeholder="-- Select an environment --" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {projectEnvOptions.map(env => (
+                                        <SelectItem key={env} value={env}>{env === 'none' ? 'None (no env)' : env}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
 
@@ -347,14 +356,14 @@ export const CommandsPanel: React.FC = () => {
 
                     {/* Run button */}
                     <div className="flex gap-2 pt-1">
-                        <button
+                        <Button
                             onClick={handleExecute}
                             disabled={!selectedCommand || !selectedProjectPath || running}
-                            className="flex items-center gap-2 px-5 py-2 bg-nexus-neon text-slate-900 font-bold text-sm rounded-lg hover:bg-[#00ffd5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="flex items-center gap-2 h-9 px-5 bg-nexus-neon hover:bg-[#00ffd5] text-slate-900 font-bold text-sm disabled:opacity-40"
                         >
                             <Play size={14} fill="currentColor" />
                             {running ? 'Running...' : 'Run'}
-                        </button>
+                        </Button>
                     </div>
 
                     {!selectedCommand && (

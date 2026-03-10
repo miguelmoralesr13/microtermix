@@ -758,7 +758,11 @@ export async function getTempoWorklogs(
     if (authorAccountId) params.set('authorAccountId', authorAccountId);
     if (issueId) params.set('issueId', String(issueId));
     const data = await tempoFetch(`/worklogs?${params.toString()}`);
-    return (data.results ?? []).map((r: any): TempoWorklogEntry => ({
+    let results = data.results ?? [];
+    if (authorAccountId) {
+        results = results.filter((r: any) => r.author?.accountId === authorAccountId);
+    }
+    return results.map((r: any): TempoWorklogEntry => ({
         tempoWorklogId: r.tempoWorklogId,
         issue: { id: r.issue?.id ?? 0, key: r.issue?.key },
         timeSpentSeconds: r.timeSpentSeconds ?? 0,

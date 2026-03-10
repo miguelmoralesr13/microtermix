@@ -4,6 +4,8 @@ import type { CommandStep } from '../../types/commands';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
 interface CommandBuilderModalProps {
     open: boolean;
@@ -159,27 +161,29 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                             <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
                                 <FolderOpen size={12} /> Cargar comando guardado
                             </label>
-                            <select
-                                defaultValue=""
-                                onChange={(e) => { loadCommand(e.target.value); e.target.value = ''; }}
-                                className="w-full bg-slate-900 border border-slate-700 focus:border-nexus-neon rounded px-3 py-2 text-sm text-slate-300 focus:outline-none transition-colors"
+                            <Select
+                                value={undefined}
+                                onValueChange={(v) => { if (v) loadCommand(v); }}
                             >
-                                <option value="" disabled>-- Seleccionar para editar --</option>
-                                {savedCommandNames.map(n => (
-                                    <option key={n} value={n}>{n}</option>
-                                ))}
-                            </select>
+                                <SelectTrigger className="w-full bg-slate-900 border-slate-700 focus:ring-nexus-neon text-sm text-slate-300">
+                                    <SelectValue placeholder="-- Seleccionar para editar --" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {savedCommandNames.map(n => (
+                                        <SelectItem key={n} value={n}>{n}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     )}
 
                     <div className="mb-6">
                         <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nombre del Comando</label>
-                        <input
-                            type="text"
+                        <Input
                             placeholder="Ej: Build & Preview"
                             value={commandName}
                             onChange={(e) => setCommandName(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 focus:border-nexus-neon rounded px-3 py-2 text-sm text-slate-200 focus:outline-none transition-colors"
+                            className="bg-slate-950 border-slate-700 focus-visible:ring-nexus-neon text-sm"
                             autoFocus
                         />
                     </div>
@@ -209,22 +213,23 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                                         </div>
                                     </div>
                                 ) : (
-                                    <input
-                                        type="text"
+                                    <Input
                                         placeholder="Ej: npm run build"
                                         value={step.value}
                                         onChange={(e) => updateStep(step.id, e.target.value)}
                                         draggable={false}
-                                        className="flex-1 bg-slate-900 border border-slate-700 focus:border-nexus-neon hover:border-slate-600 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none transition-colors font-mono"
+                                        className="flex-1 bg-slate-900 border-slate-700 focus-visible:ring-nexus-neon hover:border-slate-600 h-8 font-mono text-sm"
                                     />
                                 )}
 
-                                <button
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
                                     onClick={() => removeStep(step.id)}
-                                    className="p-1.5 text-slate-500 hover:text-nexus-danger hover:bg-slate-900 rounded transition-colors shrink-0"
+                                    className="h-7 w-7 text-slate-500 hover:text-nexus-danger hover:bg-slate-900 transition-colors shrink-0"
                                 >
                                     <X size={16} />
-                                </button>
+                                </Button>
                             </div>
                         ))}
 
@@ -236,18 +241,22 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                     </div>
 
                     <div className="flex gap-2 p-4 pt-0">
-                        <button
+                        <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => addStep('command')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded border border-slate-700 hover:border-slate-600 transition-colors"
+                            className="flex items-center gap-1.5 h-8 bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 hover:border-slate-600 transition-colors"
                         >
                             <Plus size={14} /> Comando
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => addStep('env')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nexus-neon/10 hover:bg-nexus-neon/20 text-nexus-neon text-xs font-semibold rounded border border-nexus-neon/30 hover:border-nexus-neon/50 transition-colors"
+                            className="flex items-center gap-1.5 h-8 bg-nexus-neon/10 hover:bg-nexus-neon/20 text-nexus-neon border-nexus-neon/30 hover:border-nexus-neon/50 transition-colors"
                         >
                             <Plus size={14} /> Variables de Entorno (ENVS)
-                        </button>
+                        </Button>
                     </div>
                 </div>
 

@@ -90,11 +90,9 @@ fn format_relative(secs: i64) -> String {
 }
 
 /// Build a map of oid → ref labels once, instead of scanning all refs per commit.
-/// This is O(branches + tags) vs the old O(commits × branches).
 fn build_refs_map(repo: &Repository) -> HashMap<git2::Oid, Vec<String>> {
     let mut map: HashMap<git2::Oid, Vec<String>> = HashMap::new();
 
-    // Local branches
     if let Ok(branches) = repo.branches(Some(BranchType::Local)) {
         for b in branches.flatten() {
             if let Ok(ref_obj) = b.0.get().peel_to_commit() {
@@ -110,7 +108,6 @@ fn build_refs_map(repo: &Repository) -> HashMap<git2::Oid, Vec<String>> {
         }
     }
 
-    // Remote branches (skip remote HEAD symrefs)
     if let Ok(branches) = repo.branches(Some(BranchType::Remote)) {
         for b in branches.flatten() {
             if let Ok(ref_obj) = b.0.get().peel_to_commit() {
@@ -123,7 +120,6 @@ fn build_refs_map(repo: &Repository) -> HashMap<git2::Oid, Vec<String>> {
         }
     }
 
-    // Tags
     let _ = repo.tag_foreach(|tag_oid, name_bytes| {
         if let Ok(name) = std::str::from_utf8(name_bytes) {
             let tag_name = name.trim_start_matches("refs/tags/");
@@ -141,7 +137,6 @@ fn build_refs_map(repo: &Repository) -> HashMap<git2::Oid, Vec<String>> {
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 
-/// Check if a directory is a git repository and if it has any commits.
 pub fn git_is_repo_native_impl(project_path: String) -> IsRepoResult {
     match repo_open(&project_path) {
         Err(_) => IsRepoResult { is_git_repo: false, has_commits: false },
@@ -152,11 +147,9 @@ pub fn git_is_repo_native_impl(project_path: String) -> IsRepoResult {
     }
 }
 
-/// Return local branches, remote branches, and stash list.
 pub fn git_branches_native_impl(project_path: String) -> Result<BranchesResult, String> {
     let mut repo = repo_open(&project_path)?;
 
-    // Local branches
     let mut local: Vec<LocalBranch> = Vec::new();
     let branches = repo.branches(Some(BranchType::Local)).map_err(|e| e.to_string())?;
     for b in branches.flatten() {
@@ -168,12 +161,10 @@ pub fn git_branches_native_impl(project_path: String) -> Result<BranchesResult, 
         }
     }
 
-    // Remote branches (exclude HEAD pointers like "origin/HEAD -> origin/main")
     let mut remote: Vec<String> = Vec::new();
     if let Ok(remotes) = repo.branches(Some(BranchType::Remote)) {
         for b in remotes.flatten() {
             if let Ok(Some(name)) = b.0.name() {
-                // Skip remote HEAD symrefs
                 if !name.ends_with("/HEAD") {
                     remote.push(name.to_string());
                 }
@@ -181,21 +172,18 @@ pub fn git_branches_native_impl(project_path: String) -> Result<BranchesResult, 
         }
     }
 
-    // Stashes: git2 stash_foreach gives us the message for each stash entry
     let mut stashes: Vec<String> = Vec::new();
-    let _ = repo.stash_foreach(|_idx, message, _oid| {
-        stashes.push(message.to_string());
+    let _ = repo.stash_foreach(|idx, message, _oid| {
+        stashes.push(format!("stash@{{{}}}: {}", idx, message));
         true
     });
 
     Ok(BranchesResult { local, remote, stashes })
 }
 
-/// Return working-tree status, current branch name, and merge-in-progress flag.
 pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, String> {
     let repo = repo_open(&project_path)?;
 
-    // Current branch
     let current_branch = match repo.head() {
         Ok(head) => {
             if head.is_branch() {
@@ -207,10 +195,8 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
         Err(_) => String::new(),
     };
 
-    // Merge in progress: MERGE_HEAD file exists
     let is_merge_in_progress = repo.path().join("MERGE_HEAD").exists();
 
-    // File statuses
     let mut opts = StatusOptions::new();
     opts.include_untracked(true)
         .recurse_untracked_dirs(true)
@@ -222,8 +208,6 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
     for entry in statuses.iter() {
         let path = entry.path().unwrap_or("").to_string();
         let s = entry.status();
-
-        // Map git2 status flags to a 2-char XY state code (like `git status --short`)
         let (x, y) = status_to_xy(s);
         let state_code = format!("{}{}", x, y);
 
@@ -246,11 +230,9 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
     Ok(StatusResult { files, current_branch, is_merge_in_progress })
 }
 
-/// Map git2 Status flags to XY chars (index char, worktree char).
 fn status_to_xy(s: git2::Status) -> (char, char) {
     use git2::Status;
 
-    // Conflicted states
     if s.contains(Status::CONFLICTED) {
         return ('U', 'U');
     }
@@ -269,7 +251,6 @@ fn status_to_xy(s: git2::Status) -> (char, char) {
         else if s.contains(Status::WT_TYPECHANGE) { 'T' }
         else { ' ' };
 
-    // Untracked: both chars are '?'
     if x == ' ' && y == '?' {
         return ('?', '?');
     }
@@ -277,59 +258,76 @@ fn status_to_xy(s: git2::Status) -> (char, char) {
     (x, y)
 }
 
+// ── Git Log via gix (fast parallel traversal) ─────────────────────────────────
+
 /// Return ALL local (unpushed) commits + up to 100 pushed commits from HEAD.
-/// local_hashes contains the full hashes of every unpushed commit (no limit).
+/// Uses `gix` for the O(n log n) commit graph walk — much faster than git2 on large repos.
 pub fn git_log_native_impl(project_path: String) -> Result<LogResult, String> {
-    let repo = repo_open(&project_path)?;
 
-    // Build refs map once — O(branches + tags), not O(commits × branches)
-    let refs_map = build_refs_map(&repo);
 
-    // Collect all local (unpushed) oids into a set — no limit
-    let local_oid_set = collect_local_oids(&repo);
-    let local_hashes: Vec<String> = local_oid_set.iter().map(|o| format!("{}", o)).collect();
+    // Open with gix (read-only, thread-safe)
+    let gix_repo = gix::open(&project_path).map_err(|e| e.to_string())?;
 
-    // Walk HEAD: include every local commit + up to 100 pushed commits
-    let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
-    revwalk.push_head().map_err(|e| e.to_string())?;
-    revwalk.set_sorting(git2::Sort::TIME).map_err(|e| e.to_string())?;
+    // We still need git2 for the refs map & local-hash detection (it's already cached).
+    let git2_repo = repo_open(&project_path)?;
+    let refs_map = build_refs_map(&git2_repo);
+    let local_oid_set_git2 = collect_local_oids(&git2_repo);
+    // Convert to gix ObjectId set for easy lookup
+    let local_hashes_str: Vec<String> = local_oid_set_git2.iter().map(|o| format!("{}", o)).collect();
+    let local_hash_set: HashSet<String> = local_hashes_str.iter().cloned().collect();
+
+    // Walk commits from HEAD using gix
+    let head_id = gix_repo.head_id().map_err(|e| e.to_string())?;
 
     let mut commits: Vec<CommitEntry> = Vec::new();
     let mut pushed_count: usize = 0;
     const MAX_PUSHED: usize = 100;
 
-    for oid_res in revwalk {
-        let oid = oid_res.map_err(|e| e.to_string())?;
-        let is_local = local_oid_set.contains(&oid);
+    let walk = head_id
+        .ancestors()
+        .sorting(gix::traverse::commit::simple::Sorting::ByCommitTimeNewestFirst)
+        .all()
+        .map_err(|e| e.to_string())?;
+
+    for info in walk {
+        let info = info.map_err(|e| e.to_string())?;
+        let oid = info.id;
+        let hash = oid.to_string();
+        let is_local = local_hash_set.contains(&hash);
 
         if !is_local {
             if pushed_count >= MAX_PUSHED { break; }
             pushed_count += 1;
         }
 
-        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
-        let hash = format!("{}", oid);
+        let commit = gix_repo.find_commit(oid).map_err(|e| e.to_string())?;
         let short_hash = hash[..7.min(hash.len())].to_string();
 
-        let parents: Vec<String> = (0..commit.parent_count())
-            .map(|i| {
-                let p = format!("{}", commit.parent_id(i).unwrap_or(oid));
-                p[..7.min(p.len())].to_string()
+        let parents: Vec<String> = commit.parent_ids()
+            .map(|p| {
+                let s = p.to_string();
+                s[..7.min(s.len())].to_string()
             })
             .collect();
 
-        let author = commit.author().name().unwrap_or("").to_string();
-        let date = format_relative(commit.author().when().seconds());
-        let message = commit.summary().unwrap_or("").to_string();
-        let refs = refs_map.get(&oid).map(|v| v.join(", ")).unwrap_or_default();
+        let sig = commit.author().map_err(|e| e.to_string())?;
+        let author = sig.name.to_string();
+        let seconds = sig.time.seconds;
+        let date = format_relative(seconds);
+        let message = commit.message_raw().map_err(|e| e.to_string())?;
+        let message = message.to_string().lines().next().unwrap_or("").to_string();
+
+        // Refs label via git2 refs_map (already built)
+        let git2_oid = git2::Oid::from_str(&hash).unwrap_or(git2::Oid::zero());
+        let refs = refs_map.get(&git2_oid).map(|v| v.join(", ")).unwrap_or_default();
 
         commits.push(CommitEntry { hash, short_hash, parents, author, date, message, refs });
     }
 
-    Ok(LogResult { commits, local_hashes })
+    Ok(LogResult { commits, local_hashes: local_hashes_str })
 }
 
-// ── Ahead / Behind ────────────────────────────────────────────────────────────
+// ── Ahead / Behind  (git2 — network safe) ─────────────────────────────────────
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -339,9 +337,29 @@ pub struct AheadBehindResult {
     pub has_upstream: bool,
 }
 
-/// Run `git fetch` then compute how many commits the current branch is
-/// ahead of / behind its upstream tracking branch.
+/// Run `git fetch` (via tokio::process with GIT_TERMINAL_PROMPT=0) then compute
+/// ahead/behind using git2's graph API — no subprocess for the count itself.
 pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadBehindResult, String> {
+    // Fetch from remote — ignore errors (offline / no remote)
+    #[allow(unused_mut)]
+    let mut fetch_cmd = tokio::process::Command::new("git");
+    fetch_cmd.args(["fetch", "--quiet", "--no-tags"])
+        .current_dir(&project_path)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_ASKPASS", "echo")
+        .env("GIT_HTTP_LOW_SPEED_LIMIT", "100")
+        .env("GIT_HTTP_LOW_SPEED_TIME", "10")
+        .env("GIT_CONFIG_COUNT", "1")
+        .env("GIT_CONFIG_KEY_0", "http.connectTimeout")
+        .env("GIT_CONFIG_VALUE_0", "10")
+        .env("GIT_SSH_COMMAND", "ssh -o ConnectTimeout=10 -o BatchMode=yes");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        fetch_cmd.creation_flags(0x08000000);
+    }
+    let _ = fetch_cmd.output().await;
+
     let repo = repo_open(&project_path)?;
 
     let head = repo.head().map_err(|e| e.to_string())?;
@@ -367,8 +385,8 @@ pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadB
     Ok(AheadBehindResult { ahead, behind, has_upstream: true })
 }
 
-/// Collect all oids reachable from HEAD but not from upstream (unpushed).
-/// If no upstream is configured, treats ALL commits as local.
+// ── Internal helpers (git2) ───────────────────────────────────────────────────
+
 fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
     let upstream_oid = repo
         .head().ok()
@@ -386,11 +404,8 @@ fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
     if revwalk.push_head().is_err() { return HashSet::new(); }
 
     if let Some(upstream) = upstream_oid {
-        // Only commits not reachable from upstream
         if revwalk.hide(upstream).is_err() { return HashSet::new(); }
     }
-    // If no upstream: all commits are "local" — we limit this to avoid huge sets
-    // on repos with no remote by capping at 500
     let _ = revwalk.set_sorting(git2::Sort::TIME);
 
     revwalk

@@ -3,6 +3,8 @@ import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
+import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
 
 interface GitStatusEntry {
     file: string;
@@ -353,9 +355,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                     <Layers size={16} className="mr-2 text-nexus-accent" /> Source Control
                 </h3>
                 <div className="flex space-x-1">
-                    <button onClick={() => { invalidate(projectPath, 'status'); fetchStatus(projectPath, true); }} className={`p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors ${loading ? 'animate-spin' : ''}`} title="Refresh">
+                    <Button variant="ghost" size="icon-sm" onClick={() => { invalidate(projectPath, 'status'); fetchStatus(projectPath, true); }} className={`text-slate-400 hover:text-white hover:bg-slate-800 ${loading ? 'animate-spin' : ''}`} title="Refresh">
                         <RefreshCw size={16} />
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -374,15 +376,17 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                         <span className="text-xs font-bold text-slate-400 group-hover:text-slate-200 uppercase tracking-wider">Changes ({totalFiles})</span>
                     </div>
                     {totalFiles > 0 && (
-                        <button
+                        <Button
+                            variant="destructive"
+                            size="xs"
                             onClick={handleDiscardSelected}
                             disabled={loading || selectedForRollback.size === 0}
-                            className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium rounded bg-nexus-danger/20 text-nexus-danger border border-nexus-danger/40 hover:bg-nexus-danger/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="flex items-center gap-1.5 rounded bg-nexus-danger/20 text-nexus-danger hover:bg-nexus-danger/30 border border-nexus-danger/40 disabled:opacity-50"
                             title="Discard selected files (no confirmation)"
                         >
                             <RotateCcw size={12} />
                             Rollback selected ({selectedForRollback.size})
-                        </button>
+                        </Button>
                     )}
                 </div>
                 {totalFiles === 0 ? (
@@ -421,35 +425,39 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                             </button>
                         </div>
                         {conflictedFilesCount > 0 && (
-                            <button
+                            <Button
+                                variant="outline"
                                 onClick={onOpenConflictModal}
-                                className="w-full py-1.5 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-300 text-xs font-bold rounded transition-colors flex items-center justify-center gap-1.5"
+                                className="w-full bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/30 text-orange-300 hover:text-orange-200 mt-2 text-xs font-bold font-sans"
                             >
-                                <GitMerge size={12} />
+                                <GitMerge size={12} className="mr-1.5" />
                                 Resolver conflictos ({conflictedFilesCount} {conflictedFilesCount === 1 ? 'archivo' : 'archivos'})
-                            </button>
+                            </Button>
                         )}
                     </div>
                 )}
-                <textarea
+                <Textarea
                     value={commitMessage}
-                    onChange={(e) => setCommitMessage(e.target.value)}
+                    onChange={(e: any) => setCommitMessage(e.target.value)}
                     placeholder="Commit message (Ctrl+Enter)"
-                    className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-nexus-accent min-h-[80px] mb-3 resize-none scrollbar-hide"
-                    onKeyDown={(e) => {
+                    className="w-full bg-slate-950 border-slate-800 text-sm text-slate-200 focus-visible:ring-1 focus-visible:ring-nexus-accent min-h-[80px] mb-3 resize-none"
+                    onKeyDown={(e: any) => {
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                             handleCommit();
                         }
                     }}
                 />
-                <button
+                <Button
                     onClick={handleCommit}
                     disabled={isCommitting || !isAnythingStaged || !commitMessage.trim()}
-                    className="w-full flex items-center justify-center py-2 bg-nexus-accent hover:bg-opacity-80 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-bold rounded transition-all"
+                    className="w-full bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold mb-3 flex items-center justify-center font-sans"
                 >
-                    <GitCommit size={16} className="mr-2" />
-                    {isCommitting ? 'Committing...' : 'Commit'}
-                </button>
+                    {isCommitting ? (
+                        <>Committing...</>
+                    ) : (
+                        <><GitCommit size={16} className="mr-2" /> Commit</>
+                    )}
+                </Button>
                 <GitJiraCommitButton
                     projectPath={projectPath}
                     commitMessage={commitMessage}

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X, GitMerge, Loader2, GitCommit, AlertCircle, Info } from 'lucide-react';
 import { RawCommit } from '../stores/gitStore';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface MergeConfirmModalProps {
     projectPath: string;
@@ -66,6 +69,12 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
         return () => { isMounted = false; };
     }, [projectPath, sourceBranch, currentBranch]);
 
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
+
     const handleMerge = async () => {
         setIsMerging(true);
         setMergeError(null);
@@ -103,18 +112,17 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] select-none">
-            <div className="bg-slate-900 border border-slate-700 w-[550px] max-h-[85vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <GitMerge className="text-nexus-accent" size={18} />
-                        <h2 className="text-base font-bold text-white">Merge Branch</h2>
-                    </div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 rounded-full p-1" disabled={isMerging}>
-                        <X size={16} />
-                    </button>
-                </div>
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="sm:max-w-[550px] select-none p-0 overflow-hidden flex flex-col gap-0 border-slate-700 bg-slate-900" showCloseButton={false}>
+                <DialogHeader className="px-5 py-4 border-b border-slate-800 bg-slate-900 flex flex-row items-center justify-between w-full m-0 space-y-0 relative text-left">
+                    <DialogTitle className="flex items-center justify-between w-full m-0 gap-2 text-white text-base font-bold">
+                        <span className="flex items-center gap-2"><GitMerge className="text-nexus-accent" size={18} /> Merge Branch</span>
+                        <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 rounded-full p-1" disabled={isMerging}>
+                            <X size={16} />
+                        </button>
+                    </DialogTitle>
+                    <DialogDescription className="hidden">Confirm merge</DialogDescription>
+                </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
                     {/* Resumen */}
@@ -138,16 +146,16 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
                         <label className="text-xs font-semibold text-slate-400 uppercase mb-2 block tracking-wider">
                             Estrategia de Merge
                         </label>
-                        <select
-                            value={strategy}
-                            onChange={e => setStrategy(e.target.value as MergeStrategy)}
-                            disabled={isMerging}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-nexus-neon focus:ring-1 focus:ring-nexus-neon transition-colors"
-                        >
-                            <option value="--no-ff">Merge commit (--no-ff) - Conserva la rama entera y crea commit</option>
-                            <option value="--ff-only">Fast-forward (--ff-only) - Mueve la rama (falla si hay desvíos)</option>
-                            <option value="--squash">Squash (--squash) - Junta todo en tus cambios listos para commit</option>
-                        </select>
+                        <Select value={strategy} onValueChange={(val: any) => setStrategy(val)} disabled={isMerging}>
+                            <SelectTrigger className="w-full bg-slate-950 border-slate-700 text-slate-200 h-10">
+                                <SelectValue placeholder="Selecciona estrategia" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-slate-900 border-slate-800 flex flex-col">
+                                <SelectItem value="--no-ff">Merge commit (--no-ff) - Conserva la rama entera y crea commit</SelectItem>
+                                <SelectItem value="--ff-only">Fast-forward (--ff-only) - Mueve la rama (falla si hay desvíos)</SelectItem>
+                                <SelectItem value="--squash">Squash (--squash) - Junta todo en tus cambios listos para commit</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     {/* Preview de Commits */}
@@ -204,34 +212,28 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
                     )}
                 </div>
 
-                {/* Actions */}
-                <div className="px-5 py-4 border-t border-slate-800 bg-slate-900 flex justify-end gap-3 shrink-0">
-                    <button
+                <DialogFooter className="px-5 py-4 border-t border-slate-800 bg-slate-900 flex sm:justify-end gap-3 shrink-0 rounded-b-xl m-0 w-full sm:space-x-0 !flex-row !justify-end">
+                    <Button
+                        variant="ghost"
                         onClick={onClose}
                         disabled={isMerging}
-                        className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors disabled:opacity-50"
+                        className="text-slate-400 hover:text-white hover:bg-slate-800"
                     >
                         Cancelar
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={handleMerge}
                         disabled={isMerging || (commits.length === 0 && !loading)}
-                        className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/90 focus:ring-2 focus:ring-nexus-neon focus:ring-offset-2 focus:ring-offset-slate-900 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center gap-2 bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/90 transition-all font-bold"
                     >
                         {isMerging ? (
-                            <>
-                                <Loader2 size={16} className="animate-spin" />
-                                Merging...
-                            </>
+                            <><Loader2 size={16} className="animate-spin" /> Merging...</>
                         ) : (
-                            <>
-                                <GitMerge size={16} />
-                                Mergear a {currentBranch}
-                            </>
+                            <><GitMerge size={16} /> Mergear a {currentBranch}</>
                         )}
-                    </button>
-                </div>
-            </div>
-        </div>
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 };

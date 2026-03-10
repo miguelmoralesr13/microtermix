@@ -386,11 +386,15 @@ export const useGitStore = create<GitStore>()(
                         patchRepo(set, path, r => ({
                             aheadBehind: res,
                             lastFetched: { ...r.lastFetched, aheadBehind: Date.now() },
+                            loading: { ...r.loading, aheadBehind: false },
                         }));
                     } catch {
                         // Silently ignore — offline or no remote
-                    } finally {
-                        patchRepo(set, path, r => ({ loading: { ...r.loading, aheadBehind: false } }));
+                        patchRepo(set, path, r => ({
+                            aheadBehind: null,
+                            lastFetched: { ...r.lastFetched, aheadBehind: Date.now() },
+                            loading: { ...r.loading, aheadBehind: false },
+                        }));
                     }
                 },
 

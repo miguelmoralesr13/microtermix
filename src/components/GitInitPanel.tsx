@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useGitStore } from '../stores/gitStore';
 import { GitBranch, GitCommit, AlertTriangle, ChevronRight, Github, Gitlab } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 interface GitInitPanelProps {
     projectPath: string;
@@ -119,14 +122,14 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                     <div className="bg-slate-950 border border-slate-800 rounded-lg p-6 flex flex-col items-center justify-center min-h-[160px]">
                         <h3 className="text-lg font-bold text-slate-200 mb-2">Step 1: Initialize Git</h3>
                         <p className="text-sm text-slate-400 text-center mb-6">This will create a hidden <code>.git</code> folder and start tracking changes.</p>
-                        <button
+                        <Button
                             onClick={handleInit}
                             disabled={loading || step !== 1}
-                            className="bg-nexus-accent hover:bg-opacity-80 text-white font-bold py-2.5 px-8 rounded flex items-center shadow-lg transition-all"
+                            className="bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold h-11 px-8 rounded shadow-lg transition-all"
                         >
                             <GitCommit className="mr-2" size={18} />
                             {loading && step === 1 ? 'Initializing...' : 'Initialize Repository'}
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
@@ -142,10 +145,10 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Configure <code>.gitignore</code></label>
                                 <p className="text-xs text-slate-500 mb-2">Review and edit the files/folders you want Git to ignore.</p>
-                                <textarea
+                                <Textarea
                                     value={gitignoreContent}
                                     onChange={e => setGitignoreContent(e.target.value)}
-                                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-300 focus:outline-none focus:border-nexus-neon font-mono text-xs min-h-[100px]"
+                                    className="resize-none w-full bg-slate-900 border-slate-700 text-slate-300 font-mono text-xs min-h-[100px]"
                                     placeholder="node_modules/&#10;.env"
                                 />
                             </div>
@@ -156,19 +159,21 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
 
                                 <div className="flex bg-slate-900 p-1 rounded-lg mb-4 w-fit">
                                     {activeProvider !== 'none' && (
-                                        <button
+                                        <Button
+                                            variant="ghost"
                                             onClick={() => setRemoteType('provider')}
-                                            className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${remoteType === 'provider' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+                                            className={`h-8 px-4 text-xs font-bold transition-all ${remoteType === 'provider' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
                                         >
                                             Use {activeProvider === 'github' ? 'GitHub' : activeProvider === 'gitlab' ? 'GitLab' : 'Provider'}
-                                        </button>
+                                        </Button>
                                     )}
-                                    <button
+                                    <Button
+                                        variant="ghost"
                                         onClick={() => setRemoteType('custom')}
-                                        className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${remoteType === 'custom' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+                                        className={`h-8 px-4 text-xs font-bold transition-all ${remoteType === 'custom' ? 'bg-slate-800 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
                                     >
                                         Custom URL
-                                    </button>
+                                    </Button>
                                 </div>
 
                                 {remoteType === 'provider' && activeProvider !== 'none' ? (
@@ -178,12 +183,12 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                                                 {activeProvider === 'github' && <Github size={16} className="text-slate-500" />}
                                                 {activeProvider === 'gitlab' && <Gitlab size={16} className="text-slate-500" />}
                                             </div>
-                                            <input
+                                            <Input
                                                 type="text"
                                                 value={providerRepoName}
                                                 onChange={e => setProviderRepoName(e.target.value)}
                                                 placeholder="username/repository-name"
-                                                className="w-full bg-slate-900 border border-slate-700 rounded pl-10 pr-3 py-2 text-slate-200 focus:outline-none focus:border-nexus-neon text-sm"
+                                                className="w-full bg-slate-900 border-slate-700 pl-10 h-9 text-sm"
                                             />
                                         </div>
                                         {providerRepoName && (
@@ -193,12 +198,12 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                                         )}
                                     </div>
                                 ) : (
-                                    <input
+                                    <Input
                                         type="url"
                                         value={customRemoteUrl}
                                         onChange={e => setCustomRemoteUrl(e.target.value)}
                                         placeholder="https://github.com/user/project.git"
-                                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-nexus-neon text-sm"
+                                        className="w-full bg-slate-900 border-slate-700 h-9 text-sm"
                                     />
                                 )}
                             </div>
@@ -206,19 +211,19 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                             {/* Initial Commit Message */}
                             <div className="border-t border-slate-800 pt-6">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Initial Commit Message</label>
-                                <input
+                                <Input
                                     type="text"
                                     value={commitMessage}
                                     onChange={e => setCommitMessage(e.target.value)}
                                     placeholder="Initial commit"
-                                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-slate-200 focus:outline-none focus:border-nexus-neon text-sm"
+                                    className="w-full bg-slate-900 border-slate-700 h-9 text-sm"
                                 />
                             </div>
 
-                            <button
+                            <Button
                                 onClick={handleFinish}
                                 disabled={loading || !commitMessage.trim()}
-                                className="w-full bg-nexus-neon hover:bg-opacity-80 text-black font-bold py-3 px-6 rounded flex items-center justify-center shadow-lg transition-all mt-4"
+                                className="w-full bg-nexus-neon hover:bg-nexus-neon/80 text-black font-bold h-12 rounded shadow-lg transition-all mt-4"
                             >
                                 {loading ? (
                                     'Processing...'
@@ -227,7 +232,7 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                                         Finish Setup <ChevronRight className="ml-2" size={18} />
                                     </>
                                 )}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}

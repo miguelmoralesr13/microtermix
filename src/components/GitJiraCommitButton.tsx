@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, Zap, RefreshCw, X, Check, ChevronDown } from 'lucide-react';
+import { Settings, Zap, RefreshCw, Check } from 'lucide-react';
 import {
     JiraIssue, createSubTask, transitionIssue, getIssue, loadConfig,
     getProjects, getEpics, getStoriesByEpic, getActivityOptions, getLastWorkingIssue
 } from './jiraApi';
 import { TempoLogModal } from './TempoLogModal';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,7 +86,7 @@ function stepLabel(step: FlowStep): string {
 // ── Select helper ─────────────────────────────────────────────────────────────
 
 function SelectField({
-    label, value, options, loading, disabled, placeholder, onChange,
+    label, value, options, loading, disabled, placeholder, onChange, showFilter
 }: {
     label: string;
     value: string;
@@ -93,26 +95,45 @@ function SelectField({
     disabled?: boolean;
     placeholder: string;
     onChange: (v: string) => void;
+    showFilter?: boolean;
 }) {
+    const [filter, setFilter] = useState('');
+    const filteredOptions = options.filter(o => o.label.toLowerCase().includes(filter.toLowerCase()));
     return (
         <div>
             <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</label>
-            <div className="relative">
-                <select
-                    value={value}
-                    onChange={e => onChange(e.target.value)}
-                    disabled={disabled || loading}
-                    className="w-full appearance-none bg-slate-950 border border-slate-700 rounded px-2 py-1.5 pr-6 text-xs text-slate-100 focus:outline-none focus:border-nexus-accent disabled:text-slate-600 disabled:cursor-not-allowed font-mono"
-                >
-                    <option value="">{loading ? 'Cargando…' : placeholder}</option>
-                    {options.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                </select>
-                <div className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500">
-                    {loading ? <RefreshCw size={10} className="animate-spin" /> : <ChevronDown size={10} />}
-                </div>
-            </div>
+            <Select
+                value={value || null}
+                onValueChange={(val: string | null) => onChange(val || '')}
+                disabled={disabled || loading}
+            >
+                <SelectTrigger className="w-full h-8 bg-slate-950 border-slate-700 text-xs text-slate-100 placeholder:text-slate-500 focus:ring-nexus-accent [&>span]:truncate text-left">
+                    <SelectValue placeholder={loading ? 'Cargando…' : placeholder} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 min-w-[340px] w-[--anchor-width]">
+                    {showFilter && options.length > 5 && (
+                        <div className="p-1 pb-2 sticky top-0 bg-popover z-10 border-b border-slate-800">
+                            <input 
+                                className="w-full bg-slate-950 border border-slate-700 text-xs text-slate-200 px-2 py-1.5 rounded focus:outline-none focus:border-nexus-accent font-sans" 
+                                placeholder="Filtrar..."
+                                value={filter}
+                                onChange={e => setFilter(e.target.value)}
+                                onClick={e => e.stopPropagation()}
+                                onKeyDown={e => e.stopPropagation()}
+                            />
+                        </div>
+                    )}
+                    {filteredOptions.length === 0 ? (
+                        <div className="p-3 text-xs text-slate-500 text-center">No hay resultados</div>
+                    ) : (
+                        filteredOptions.map(o => (
+                            <SelectItem key={o.value} value={o.value}>
+                                <span className="text-xs whitespace-normal block leading-tight py-0.5">{o.label}</span>
+                            </SelectItem>
+                        ))
+                    )}
+                </SelectContent>
+            </Select>
         </div>
     );
 }
@@ -132,9 +153,6 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
     const [flowStep, setFlowStep] = useState<FlowStep>('idle');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [createdTask, setCreatedTask] = useState<JiraIssue | null>(null);
-
-    const gearRef = useRef<HTMLButtonElement>(null);
-    const [popoverPos, setPopoverPos] = useState<{ top: number; right: number } | null>(null);
 
     // Cascading select data
     const [projects, setProjects] = useState<{ value: string; label: string }[]>([]);
@@ -161,7 +179,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
         if (!showPopover) return;
         setLoadingProjects(true);
         getProjects()
-            .then(list => setProjects(list.map(p => ({ value: p.key, label: `${p.key} — ${p.name}` }))))
+            .then(list => setProjects(list.map(p => ({ value: p.key, label: `[${p.key}] ${p.name}` }))))
             .catch(() => setProjects([]))
             .finally(() => setLoadingProjects(false));
     }, [showPopover]);
@@ -172,7 +190,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
         setLoadingEpics(true);
         setEpics([]);
         getEpics(draft.projectKey)
-            .then(list => setEpics(list.map(e => ({ value: e.key, label: `${e.key} — ${e.fields.summary}` }))))
+            .then(list => setEpics(list.map(e => ({ value: e.key, label: `[${e.key}] ${e.fields.summary}` }))))
             .catch(() => setEpics([]))
             .finally(() => setLoadingEpics(false));
     }, [draft.projectKey]);
@@ -183,7 +201,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
         setLoadingStories(true);
         setStories([]);
         getStoriesByEpic(draft.epicKey)
-            .then(list => setStories(list.map(s => ({ value: s.key, label: `${s.key} — ${s.fields.summary}` }))))
+            .then(list => setStories(list.map(s => ({ value: s.key, label: `[${s.key}] ${s.fields.summary}` }))))
             .catch(() => setStories([]))
             .finally(() => setLoadingStories(false));
     }, [draft.epicKey]);
@@ -294,123 +312,105 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
         onSuccess();
     };
 
-    const openPopover = () => {
-        if (gearRef.current) {
-            const rect = gearRef.current.getBoundingClientRect();
-            setPopoverPos({
-                top: rect.top - 8,   // will be translated upward via transform
-                right: window.innerWidth - rect.right,
-            });
-        }
-        setShowPopover(v => !v);
-    };
-
-    // Hide entirely if Jira is not configured
     if (!isJiraConnected()) return null;
 
     return (
         <div className="relative">
-            {/* Popover rendered via portal to escape overflow:hidden parents */}
-            {showPopover && popoverPos && createPortal(
-                <div
-                    className="fixed w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl z-[9999] p-4 space-y-3"
-                    style={{ top: popoverPos.top, right: popoverPos.right, transform: 'translateY(-100%) translateY(-8px)' }}
-                >
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jira Git Config</span>
-                        <button onClick={() => setShowPopover(false)} className="text-slate-600 hover:text-slate-300">
-                            <X size={12} />
-                        </button>
-                    </div>
-
-                    <SelectField
-                        label="Proyecto"
-                        value={draft.projectKey}
-                        options={projects}
-                        loading={loadingProjects}
-                        placeholder="Selecciona un proyecto"
-                        onChange={v => setDraft(d => ({ ...d, projectKey: v, epicKey: '', storyKey: '', activityId: '', activityValue: '' }))}
-                    />
-
-                    <div className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                        <span className="text-[10px] font-bold text-slate-300 uppercase">Crear nueva sub-tarea</span>
-                        <button
-                            onClick={() => setDraft(d => ({ ...d, createTask: !d.createTask }))}
-                            className={`w-8 h-4 rounded-full relative transition-colors ${draft.createTask ? 'bg-nexus-neon' : 'bg-slate-700'}`}
-                        >
-                            <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${draft.createTask ? 'left-[18px]' : 'left-0.5'}`} />
-                        </button>
-                    </div>
-
-                    {draft.createTask && (
-                        <>
-                            <SelectField
-                                label="Épica"
-                                value={draft.epicKey}
-                                options={epics}
-                                loading={loadingEpics}
-                                disabled={!draft.projectKey}
-                                placeholder={draft.projectKey ? 'Selecciona una épica' : 'Primero selecciona proyecto'}
-                                onChange={v => setDraft(d => ({ ...d, epicKey: v, storyKey: '' }))}
-                            />
-
-                            <SelectField
-                                label="Historia Técnica"
-                                value={draft.storyKey}
-                                options={stories}
-                                loading={loadingStories}
-                                disabled={!draft.epicKey}
-                                placeholder={draft.epicKey ? 'Selecciona una historia' : 'Primero selecciona épica'}
-                                onChange={v => setDraft(d => ({ ...d, storyKey: v }))}
-                            />
-
-                            <SelectField
-                                label="Tipo de Actividad"
-                                value={draft.activityValue}
-                                options={activityOpts.map(a => ({ value: a.value, label: a.value }))}
-                                loading={loadingActivities}
-                                disabled={!draft.projectKey || activityOpts.length === 0}
-                                placeholder={draft.projectKey ? 'Selecciona una actividad' : 'Primero selecciona proyecto'}
-                                onChange={v => {
-                                    const found = activityOpts.find(a => a.value === v);
-                                    setDraft(d => ({ ...d, activityValue: v, activityId: found?.id ?? '' }));
-                                }}
-                            />
-                        </>
-                    )}
-
-                    <button
-                        onClick={handleSaveConfig}
-                        disabled={!isConfigComplete(draft)}
-                        className="w-full py-1.5 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center gap-1"
-                    >
-                        <Check size={11} /> Guardar
-                    </button>
-                </div>,
-                document.body,
-            )}
-
             <div className="flex items-center gap-1.5 mt-2">
-                <button
-                    ref={gearRef}
-                    onClick={openPopover}
-                    title="Configurar Jira Git"
-                    className={`p-1.5 rounded transition-colors ${isConfigComplete(config) ? 'text-nexus-accent hover:bg-nexus-accent/10' : 'text-slate-600 hover:text-slate-400'}`}
-                >
-                    <Settings size={14} />
-                </button>
+                <Popover open={showPopover} onOpenChange={setShowPopover}>
+                    <PopoverTrigger
+                        title="Configurar Jira Git"
+                        className={`flex items-center justify-center w-7 h-7 rounded transition-colors ${isConfigComplete(config) ? 'text-nexus-accent hover:bg-nexus-accent/10' : 'text-slate-600 hover:text-slate-400'}`}
+                    >
+                        <Settings size={14} />
+                    </PopoverTrigger>
+                    {showPopover && (
+                        <PopoverContent side="top" align="end" className="w-96 bg-slate-900 border-slate-700 p-4 space-y-3 z-[9999]" sideOffset={8}>
+                            <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jira Git Config</span>
+                            </div>
+
+                            <SelectField
+                                label="Proyecto"
+                                value={draft.projectKey}
+                                options={projects}
+                                loading={loadingProjects}
+                                showFilter
+                                placeholder="Selecciona un proyecto"
+                                onChange={v => setDraft(d => ({ ...d, projectKey: v, epicKey: '', storyKey: '', activityId: '', activityValue: '' }))}
+                            />
+
+                            <div className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                                <span className="text-[10px] font-bold text-slate-300 uppercase">Crear nueva sub-tarea</span>
+                                <button
+                                    onClick={() => setDraft(d => ({ ...d, createTask: !d.createTask }))}
+                                    className={`w-8 h-4 rounded-full relative transition-colors ${draft.createTask ? 'bg-nexus-neon' : 'bg-slate-700'}`}
+                                >
+                                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${draft.createTask ? 'left-[18px]' : 'left-0.5'}`} />
+                                </button>
+                            </div>
+
+                            {draft.createTask && (
+                                <>
+                                    <SelectField
+                                        label="Épica"
+                                        value={draft.epicKey}
+                                        options={epics}
+                                        loading={loadingEpics}
+                                        disabled={!draft.projectKey}
+                                        showFilter
+                                        placeholder={draft.projectKey ? 'Selecciona una épica' : 'Primero selecciona proyecto'}
+                                        onChange={v => setDraft(d => ({ ...d, epicKey: v, storyKey: '' }))}
+                                    />
+
+                                    <SelectField
+                                        label="Historia Técnica"
+                                        value={draft.storyKey}
+                                        options={stories}
+                                        loading={loadingStories}
+                                        disabled={!draft.epicKey}
+                                        showFilter
+                                        placeholder={draft.epicKey ? 'Selecciona una historia' : 'Primero selecciona épica'}
+                                        onChange={v => setDraft(d => ({ ...d, storyKey: v }))}
+                                    />
+
+                                    <SelectField
+                                        label="Tipo de Actividad"
+                                        value={draft.activityValue}
+                                        options={activityOpts.map(a => ({ value: a.value, label: a.value }))}
+                                        loading={loadingActivities}
+                                        disabled={!draft.projectKey || activityOpts.length === 0}
+                                        placeholder={draft.projectKey ? 'Selecciona una actividad' : 'Primero elige un proyecto'}
+                                        onChange={v => {
+                                            const found = activityOpts.find(a => a.value === v);
+                                            setDraft(d => ({ ...d, activityValue: v, activityId: found?.id ?? '' }));
+                                        }}
+                                    />
+                                </>
+                            )}
+
+                            <Button
+                                onClick={handleSaveConfig}
+                                disabled={!isConfigComplete(draft)}
+                                className="w-full h-8 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-lg"
+                            >
+                                <Check size={11} className="mr-1" /> Guardar
+                            </Button>
+                        </PopoverContent>
+                    )}
+                </Popover>
 
                 {isConfigComplete(config) && (
-                    <button
+                    <Button
                         onClick={handleCommitAndPush}
                         disabled={!canCommit}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-nexus-neon text-xs font-bold rounded border border-nexus-neon/20 hover:border-nexus-neon/40 transition-all"
+                        className="flex-1 h-8 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 text-nexus-neon text-xs font-bold rounded border border-nexus-neon/20 hover:border-nexus-neon/40 transition-all font-sans"
                     >
                         {isRunning
-                            ? <><RefreshCw size={12} className="animate-spin" />{stepLabel(flowStep)}</>
-                            : <><Zap size={13} />{stepLabel('idle')}</>
+                            ? <><RefreshCw size={12} className="animate-spin mr-1.5" />{stepLabel(flowStep)}</>
+                            : <><Zap size={13} className="mr-1.5" />{stepLabel('idle')}</>
                         }
-                    </button>
+                    </Button>
                 )}
             </div>
 

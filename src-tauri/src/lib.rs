@@ -148,7 +148,14 @@ async fn git_execute(
     project_path: String,
     args: Vec<String>,
 ) -> Result<GitResult, String> {
-    git_diff::git_execute_impl(app_handle, project_path, args).await
+    let label = format!("git {}", args.join(" "));
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        git_diff::git_execute_impl(app_handle, project_path, args),
+    ).await {
+        Ok(result) => result,
+        Err(_) => Err(format!("'{}' timed out after 30 seconds", label)),
+    }
 }
 
 /// Runs `git status -s -u`, `git branch --show-current`, and `git rev-parse MERGE_HEAD`
@@ -209,7 +216,13 @@ fn git_log_native(project_path: String) -> Result<git_native::LogResult, String>
 
 #[tauri::command]
 async fn git_ahead_behind_native(project_path: String) -> Result<git_native::AheadBehindResult, String> {
-    git_native::git_ahead_behind_native_impl(project_path).await
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        git_native::git_ahead_behind_native_impl(project_path),
+    ).await {
+        Ok(result) => result,
+        Err(_) => Err("git fetch timed out (network unreachable or credentials needed)".into()),
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

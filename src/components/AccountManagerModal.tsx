@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
-import { X, Github, Gitlab, Plus, Pencil, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Github, Gitlab, Plus, Pencil, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { useGitStore, type GitAccount } from '../stores/gitStore';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface AccountManagerModalProps {
     repoPath: string | null;
@@ -106,15 +110,11 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-slate-900 border border-slate-700 w-[540px] max-h-[85vh] rounded-xl shadow-2xl flex flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
-                    <h2 className="text-base font-bold text-white">Cuentas Git</h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
-                        <X size={18} />
-                    </button>
-                </div>
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="w-[540px] max-w-[95vw] max-h-[85vh] p-0 flex flex-col bg-slate-900 border-slate-700">
+                <DialogHeader className="px-6 py-4 border-b border-slate-800 shrink-0">
+                    <DialogTitle className="text-base font-bold text-white">Cuentas Git</DialogTitle>
+                </DialogHeader>
 
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
                     {/* Sección A: Repo actual */}
@@ -133,16 +133,20 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
                                     )}
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <select
-                                        value={activeAccountId ?? ''}
-                                        onChange={e => setRepoAccount(repoPath, e.target.value || null)}
-                                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon"
+                                    <Select
+                                        value={activeAccountId ?? 'none'}
+                                        onValueChange={(v) => setRepoAccount(repoPath, v === 'none' ? null : v)}
                                     >
-                                        <option value="">Sin cuenta</option>
-                                        {accounts.map(a => (
-                                            <option key={a.id} value={a.id}>{a.alias}</option>
-                                        ))}
-                                    </select>
+                                        <SelectTrigger className="w-[180px] h-8 bg-slate-950 border-slate-700 text-xs">
+                                            <SelectValue placeholder="Sin cuenta" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">Sin cuenta</SelectItem>
+                                            {accounts.map(a => (
+                                                <SelectItem key={a.id} value={a.id}>{a.alias}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </div>
                         </section>
@@ -212,18 +216,19 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
                             )}
 
                             {editingId === null && (
-                                <button
+                                <Button
+                                    variant="ghost"
                                     onClick={startAdd}
-                                    className="flex items-center gap-1.5 text-xs text-nexus-neon hover:text-white transition-colors py-1"
+                                    className="flex items-center gap-1.5 text-xs text-nexus-neon hover:text-nexus-neon hover:bg-nexus-neon/10 transition-colors h-8 px-2"
                                 >
                                     <Plus size={13} /> Añadir cuenta
-                                </button>
+                                </Button>
                             )}
                         </div>
                     </section>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };
 
@@ -243,22 +248,22 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
     const canSave = form.alias.trim().length > 0 && form.token.trim().length > 0;
 
     return (
-        <div className="rounded-lg border border-nexus-accent/40 bg-slate-800/60 p-4 space-y-3">
+        <div className="rounded-lg border border-nexus-accent/40 bg-slate-800/60 p-4 space-y-4">
             {/* Alias */}
             <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Alias</label>
-                <input
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Alias</label>
+                <Input
                     type="text"
                     value={form.alias}
                     onChange={e => onChange({ ...form, alias: e.target.value })}
                     placeholder="Trabajo GitHub, Personal GitLab..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-nexus-neon"
+                    className="bg-slate-950 border-slate-700 h-9"
                 />
             </div>
 
             {/* Proveedor */}
             <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Proveedor</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Proveedor</label>
                 <div className="flex gap-2">
                     {(['github', 'gitlab'] as const).map(p => (
                         <button
@@ -280,66 +285,68 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
 
             {/* URL */}
             <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">URL</label>
-                <input
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">URL</label>
+                <Input
                     type="url"
                     value={form.url}
                     onChange={e => onChange({ ...form, url: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-nexus-neon"
+                    className="bg-slate-950 border-slate-700 h-9"
                 />
             </div>
 
             {/* Token + Verificar */}
             <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Token (PAT)</label>
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">Token (PAT)</label>
                 <div className="flex gap-2">
-                    <input
+                    <Input
                         type="password"
                         value={form.token}
                         onChange={e => onChange({ ...form, token: e.target.value })}
                         placeholder={form.provider === 'github' ? 'ghp_...' : 'glpat-...'}
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 font-mono focus:outline-none focus:border-nexus-neon"
+                        className="flex-1 bg-slate-950 border-slate-700 font-mono h-9"
                     />
-                    <button
+                    <Button
                         type="button"
+                        variant="secondary"
                         onClick={onVerify}
                         disabled={!form.token || verifyState === 'loading'}
-                        className="px-3 py-1.5 rounded text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                        className="h-9"
                     >
                         {verifyState === 'loading' ? <Loader2 size={12} className="animate-spin" /> : 'Verificar'}
-                    </button>
+                    </Button>
                 </div>
 
                 {/* Resultado verificación */}
                 {typeof verifyState === 'object' && verifyState.ok && (
-                    <p className="flex items-center gap-1 text-xs text-green-400 mt-1">
+                    <p className="flex items-center gap-1 text-xs text-green-400 mt-2">
                         <CheckCircle size={11} /> Autenticado como <strong>{verifyState.username}</strong>
                     </p>
                 )}
                 {typeof verifyState === 'object' && !verifyState.ok && (
-                    <p className="flex items-center gap-1 text-xs text-red-400 mt-1">
+                    <p className="flex items-center gap-1 text-xs text-red-400 mt-2">
                         <XCircle size={11} /> {verifyState.error}
                     </p>
                 )}
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-2 pt-1">
-                <button
+            <div className="flex justify-end gap-2 pt-2">
+                <Button
                     type="button"
+                    variant="ghost"
                     onClick={onCancel}
-                    className="px-3 py-1.5 rounded text-xs text-slate-400 hover:bg-slate-700 transition-colors"
+                    className="text-slate-400 hover:text-white"
                 >
                     Cancelar
-                </button>
-                <button
+                </Button>
+                <Button
                     type="button"
                     onClick={onSave}
                     disabled={!canSave}
-                    className="px-4 py-1.5 rounded text-xs font-bold bg-nexus-neon text-slate-900 hover:bg-opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
                 >
                     Guardar
-                </button>
+                </Button>
             </div>
         </div>
     );

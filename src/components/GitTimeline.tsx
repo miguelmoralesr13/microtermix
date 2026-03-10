@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
 import { useGitStore, EMPTY_REPO_DATA, RawCommit } from '../stores/gitStore';
+import { Button } from './ui/button';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -271,6 +272,17 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         }
     }, [nodes, projectPath, fetchTimeline, invalidate]);
 
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setEditingHash(null);
+                setDeletingHash(null);
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, []);
+
     const searchLower = searchText.trim().toLowerCase();
 
     const isMatch = useCallback((n: GraphNode): boolean => {
@@ -301,7 +313,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     if (error) return (
         <div className="flex-1 flex flex-col items-center justify-center text-nexus-danger gap-3 p-8 text-sm text-center">
             {error}
-            <button onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="text-xs px-3 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700">Reintentar</button>
+            <Button variant="outline" size="sm" onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="bg-slate-800 text-slate-300 border-none hover:bg-slate-700 hover:text-white">Reintentar</Button>
         </div>
     );
 
@@ -317,41 +329,41 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-7 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon transition-colors"
                     />
                     {searchText && (
-                        <button onClick={() => setSearchText('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                        <Button variant="ghost" size="icon" onClick={() => setSearchText('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 h-6 w-6">
                             <X size={12} />
-                        </button>
+                        </Button>
                     )}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                     {/* View toggle: Locales / Todos */}
-                    <button onClick={() => setTimelineView('local')}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${timelineView === 'local'
-                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                            : 'text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'}`}
+                    <Button variant="outline" size="sm" onClick={() => setTimelineView('local')}
+                        className={`h-6 rounded-full text-[10px] px-2.5 transition-colors border ${timelineView === 'local'
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                            : 'bg-transparent text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'}`}
                     >
                         Locales {localHashes.size > 0 && <span className="ml-0.5 opacity-70">({localHashes.size})</span>}
-                    </button>
-                    <button onClick={() => setTimelineView('all')}
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${timelineView === 'all'
-                            ? 'bg-slate-600/40 text-slate-200 border-slate-500'
-                            : 'text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'}`}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setTimelineView('all')}
+                        className={`h-6 rounded-full text-[10px] px-2.5 transition-colors border ${timelineView === 'all'
+                            ? 'bg-slate-600/40 text-slate-200 border-slate-500 hover:bg-slate-600/60'
+                            : 'bg-transparent text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'}`}
                     >
                         Todos
-                    </button>
+                    </Button>
                     <div className="w-px h-3 bg-slate-700 mx-0.5" />
                     {filters.map(f => (
-                        <button key={f.id} onClick={() => setFilter(f.id)}
-                            className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${filter === f.id
-                                ? 'bg-nexus-neon text-nexus-darker border-transparent'
-                                : 'text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'
+                        <Button variant="outline" size="sm" key={f.id} onClick={() => setFilter(f.id)}
+                            className={`h-6 flex items-center gap-1.5 rounded-full text-[10px] px-2.5 transition-colors border ${filter === f.id
+                                ? 'bg-nexus-neon text-nexus-darker border-transparent hover:bg-nexus-neon/80 hover:text-nexus-darker'
+                                : 'bg-transparent text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'
                                 }`}
                         >
                             {f.icon}{f.label}
-                        </button>
+                        </Button>
                     ))}
-                    <button onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="ml-auto p-1 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors" title="Refrescar">
+                    <Button variant="ghost" size="icon" onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="ml-auto h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-slate-800" title="Refrescar">
                         <RefreshCw size={12} />
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -446,26 +458,26 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                             value={editValue}
                                             onChange={e => setEditValue(e.target.value)}
                                             onKeyDown={e => { if (e.key === 'Enter') handleEditSave(n); if (e.key === 'Escape') setEditingHash(null); }}
-                                            className="flex-1 bg-slate-900 border border-nexus-neon/50 rounded px-2 py-0.5 text-xs text-slate-100 focus:outline-none"
+                                            className="flex-1 bg-slate-900 border border-nexus-neon/50 rounded px-2 py-0.5 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon"
                                         />
-                                        <button onClick={() => handleEditSave(n)} disabled={editSaving} className="p-0.5 text-nexus-success hover:bg-slate-700 rounded" title="Guardar (Enter)">
-                                            <Check size={13} />
-                                        </button>
-                                        <button onClick={() => setEditingHash(null)} className="p-0.5 text-slate-500 hover:bg-slate-700 rounded" title="Cancelar (Esc)">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEditSave(n)} disabled={editSaving} className="h-6 w-6 text-nexus-success hover:bg-slate-700 hover:text-nexus-success" title="Guardar (Enter)">
+                                            {editSaving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={() => setEditingHash(null)} className="h-6 w-6 text-slate-500 hover:bg-slate-700 hover:text-white" title="Cancelar (Esc)">
                                             <X size={13} />
-                                        </button>
+                                        </Button>
                                     </div>
                                 ) : isDeleting ? (
                                     /* ── DELETE CONFIRM mode ── */
                                     <div className="flex-1 flex items-center gap-2">
                                         <AlertTriangle size={12} className="text-nexus-danger shrink-0" />
                                         <span className="text-xs text-nexus-danger">¿Eliminar este commit?</span>
-                                        <button onClick={() => handleDelete(n)} disabled={deleteWorking} className="px-2 py-0.5 text-[10px] rounded bg-nexus-danger/20 text-nexus-danger border border-nexus-danger/40 hover:bg-nexus-danger/30 font-bold disabled:opacity-50">
+                                        <Button variant="destructive" size="sm" onClick={() => handleDelete(n)} disabled={deleteWorking} className="h-6 text-[10px] px-2.5">
                                             {deleteWorking ? '...' : 'Eliminar'}
-                                        </button>
-                                        <button onClick={() => setDeletingHash(null)} className="px-2 py-0.5 text-[10px] rounded text-slate-400 border border-slate-700 hover:bg-slate-700">
+                                        </Button>
+                                        <Button variant="outline" size="sm" onClick={() => setDeletingHash(null)} className="h-6 text-[10px] px-2.5 bg-transparent border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-slate-200">
                                             Cancelar
-                                        </button>
+                                        </Button>
                                     </div>
                                 ) : (
                                     /* ── Normal mode ── */
@@ -482,20 +494,22 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                         {/* Action buttons — only on hover and only for local (unpushed) commits */}
                                         {isLocal && (
                                             <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
+                                                <Button
+                                                    variant="ghost" size="icon"
                                                     onClick={e => { e.stopPropagation(); setEditingHash(n.hash); setEditValue(n.message); }}
-                                                    className="p-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-700 rounded transition-colors"
+                                                    className="h-6 w-6 text-slate-500 hover:text-nexus-neon hover:bg-slate-700"
                                                     title="Editar mensaje"
                                                 >
                                                     <Pencil size={11} />
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
+                                                    variant="ghost" size="icon"
                                                     onClick={e => { e.stopPropagation(); setDeletingHash(n.hash); }}
-                                                    className="p-1 text-slate-500 hover:text-nexus-danger hover:bg-slate-700 rounded transition-colors"
+                                                    className="h-6 w-6 text-slate-500 hover:text-nexus-danger hover:bg-slate-700"
                                                     title="Eliminar commit (solo local)"
                                                 >
                                                     <Trash2 size={11} />
-                                                </button>
+                                                </Button>
                                             </div>
                                         )}
                                     </>

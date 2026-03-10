@@ -5,6 +5,8 @@ import {
     ChevronRight, User, Clock, Hash, CheckCircle
 } from 'lucide-react';
 import { CommitDiffModal } from './CommitDiffModal';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { Button } from './ui/button';
 
 interface PendingCommit {
     hash: string;
@@ -135,34 +137,38 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
     }
 
     return (
-        <div
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-        >
-            <div className="flex flex-col w-full max-w-2xl max-h-[80vh] bg-slate-950 rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="sm:max-w-2xl max-h-[80vh] p-0 overflow-hidden flex flex-col bg-slate-950 border-slate-700" showCloseButton={false}>
 
                 {/* Header */}
-                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0">
-                    <UploadCloud size={18} className="text-nexus-accent shrink-0" />
-                    <div className="flex-1 min-w-0">
-                        <div className="text-sm font-bold text-slate-100">Vista previa de Push</div>
-                        {currentBranch && (
-                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
-                                <Hash size={10} />
-                                <span className="font-mono text-nexus-neon">{currentBranch}</span>
-                                {commits.length > 0 && (
-                                    <span className="text-slate-500">— {commits.length} commit{commits.length !== 1 ? 's' : ''} pendiente{commits.length !== 1 ? 's' : ''}</span>
-                                )}
-                            </div>
-                        )}
+                <DialogHeader className="flex flex-row items-center justify-between gap-3 px-5 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0 m-0 space-y-0 text-left relative">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <UploadCloud size={18} className="text-nexus-accent shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            <DialogTitle className="text-sm font-bold text-slate-100 flex items-center m-0">
+                                Vista previa de Push
+                            </DialogTitle>
+                            <DialogDescription className="hidden">Preview commits to push</DialogDescription>
+                            {currentBranch && (
+                                <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                    <Hash size={10} />
+                                    <span className="font-mono text-nexus-neon">{currentBranch}</span>
+                                    {commits.length > 0 && (
+                                        <span className="text-slate-500">— {commits.length} commit{commits.length !== 1 ? 's' : ''} pendiente{commits.length !== 1 ? 's' : ''}</span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={onClose}
-                        className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                        className="text-slate-500 hover:text-white hover:bg-slate-800"
                     >
                         <X size={16} />
-                    </button>
-                </div>
+                    </Button>
+                </DialogHeader>
 
                 {/* Commit list */}
                 <div className="flex-1 overflow-y-auto scrollbar-hide">
@@ -244,23 +250,24 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                         }
                     </span>
                     <div className="flex gap-2">
-                        <button
+                        <Button
+                            variant="outline"
                             onClick={onClose}
-                            className="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors"
+                            className="bg-transparent border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                         >
                             Cancelar
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={handlePush}
                             disabled={pushing || pushSuccess || commits.length === 0}
-                            className="flex items-center gap-2 px-4 py-1.5 text-sm font-medium bg-nexus-accent text-white rounded-lg hover:bg-nexus-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="bg-nexus-accent text-white hover:bg-nexus-accent/80 font-medium"
                         >
-                            {pushing ? <RefreshCw size={14} className="animate-spin" /> : <UploadCloud size={14} />}
+                            {pushing ? <RefreshCw size={14} className="animate-spin mr-2" /> : <UploadCloud size={14} className="mr-2" />}
                             {pushing ? 'Subiendo...' : 'Push'}
-                        </button>
+                        </Button>
                     </div>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };

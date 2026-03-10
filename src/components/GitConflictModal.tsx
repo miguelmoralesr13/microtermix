@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitMerge, AlertTriangle, Check, RefreshCw, X } from 'lucide-react';
 import { GitConflictResolver } from './GitConflictResolver';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { Button } from './ui/button';
 
 interface GitConflictModalProps {
     projectPath: string;
@@ -21,6 +23,12 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
     const [aborting, setAborting] = useState(false);
     const [committing, setCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [onClose]);
 
     const allResolved = conflictedFiles.length > 0 && conflictedFiles.every(f => resolvedFiles.has(f));
     const progress = conflictedFiles.length > 0
@@ -70,51 +78,58 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
     };
 
     return (
-        // Backdrop
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            {/* Modal */}
-            <div className="w-[90vw] h-[85vh] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="sm:max-w-[90vw] h-[85vh] p-0 overflow-hidden flex flex-col bg-slate-900 border-slate-700" showCloseButton={false}>
 
                 {/* Header */}
-                <div className="flex items-center gap-3 px-4 py-3 bg-slate-950 border-b border-slate-800 shrink-0">
-                    <GitMerge size={18} className="text-orange-400 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                        <h2 className="text-sm font-bold text-slate-100">Resolver conflictos de Merge</h2>
-                        {/* Progress bar */}
-                        <div className="flex items-center gap-2 mt-1">
-                            <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                                    style={{ width: `${progress}%` }}
-                                />
+                <DialogHeader className="flex flex-row items-center gap-3 px-4 py-3 bg-slate-950 border-b border-slate-800 shrink-0 m-0 space-y-0 text-left relative justify-between">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <GitMerge size={18} className="text-orange-400 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                            <DialogTitle className="text-sm font-bold text-slate-100 flex items-center m-0">
+                                Resolver conflictos de Merge
+                            </DialogTitle>
+                            <DialogDescription className="hidden">Resolver conflictos</DialogDescription>
+                            {/* Progress bar */}
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden max-w-[200px]">
+                                    <div
+                                        className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                                        style={{ width: `${progress}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] text-slate-400 shrink-0">
+                                    {resolvedFiles.size} / {conflictedFiles.length} resueltos
+                                </span>
                             </div>
-                            <span className="text-[10px] text-slate-400 shrink-0">
-                                {resolvedFiles.size} / {conflictedFiles.length} resueltos
-                            </span>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                            variant="ghost"
                             onClick={onClose}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded transition-colors"
+                            className="h-8 px-3 text-slate-300 hover:text-white"
                         >
-                            <X size={12} />
-                            Cancelar
-                        </button>
-                        <button
+                            <X size={12} className="mr-1.5" /> Cancelar
+                        </Button>
+                        <Button
+                            variant="destructive"
                             onClick={handleAbortClick}
                             disabled={aborting}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950 hover:bg-red-900 disabled:opacity-50 disabled:cursor-not-allowed text-red-400 border border-red-900 text-xs font-bold rounded transition-colors"
+                            className="h-8 px-3 bg-red-950 hover:bg-red-900 text-red-400 border border-red-900"
                         >
-                            {aborting ? <RefreshCw size={12} className="animate-spin" /> : <AlertTriangle size={12} />}
+                            {aborting ? <RefreshCw size={12} className="animate-spin mr-1.5" /> : <AlertTriangle size={12} className="mr-1.5" />}
                             Abort Merge
-                        </button>
+                        </Button>
                     </div>
-                </div>
+                </DialogHeader>
 
                 {error && (
-                    <div className="px-4 py-2 bg-red-950/50 text-red-400 text-xs border-b border-red-900/30">
-                        {error}
+                    <div className="p-3 bg-red-900/30 border-b border-red-900/50 flex items-start gap-3 text-red-200 text-sm max-h-32 overflow-y-auto shrink-0">
+                        <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0 break-words whitespace-pre-wrap font-mono text-xs">
+                            {error}
+                        </div>
                     </div>
                 )}
 
@@ -160,17 +175,17 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
 
                         {/* Commit Merge button */}
                         <div className="p-3 border-t border-slate-800">
-                            <button
+                            <Button
                                 onClick={handleCommitMerge}
                                 disabled={!allResolved || committing}
-                                className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs font-bold rounded transition-colors"
+                                className="w-full bg-emerald-700 hover:bg-emerald-600 disabled:bg-slate-800 flex items-center justify-center gap-2 h-9 text-xs font-bold text-white transition-colors"
                             >
                                 {committing
                                     ? <RefreshCw size={13} className="animate-spin" />
                                     : <Check size={13} />
                                 }
                                 Commit Merge
-                            </button>
+                            </Button>
                             {!allResolved && (
                                 <p className="text-[10px] text-slate-600 text-center mt-1">
                                     Resuelve todos los archivos primero
@@ -196,7 +211,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                         )}
                     </div>
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };
