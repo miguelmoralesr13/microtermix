@@ -25,9 +25,11 @@ function syncLegacyKeys(accounts: JiraAccount[], activeAccountId: string | null)
 
 export interface StoriesSelection {
     epicKey: string | null;
+    businessStoryKey?: string | null;
     storyKey: string | null;
     // Cached issue objects (populated after fetch, not persisted — too heavy)
     epic: JiraIssue | null;
+    businessStory?: JiraIssue | null;
     story: JiraIssue | null;
 }
 
@@ -131,7 +133,7 @@ const DEFAULT_STATE = {
     activeAccountId: null as string | null,
     boardFilter: { assignees: ['me'] } as BoardFilter,
     boardProjectKey: '',
-    storiesSelection: { epicKey: null, storyKey: null, epic: null, story: null },
+    storiesSelection: { epicKey: null, businessStoryKey: null, storyKey: null, epic: null, businessStory: null, story: null },
     pinnedEpics: [] as string[],
     pinnedStories: [] as string[],
 };
@@ -252,8 +254,10 @@ export const useJiraStore = create<JiraStoreState>()(
                     boardProjectKey: s.boardProjectKey,
                     storiesSelection: {
                         epicKey: s.storiesSelection.epicKey,
+                        businessStoryKey: s.storiesSelection.businessStoryKey,
                         storyKey: s.storiesSelection.storyKey,
-                        epic: null,   // don't persist full issue objects
+                        epic: null,
+                        businessStory: null,
                         story: null,
                     },
                     pinnedEpics: s.pinnedEpics,

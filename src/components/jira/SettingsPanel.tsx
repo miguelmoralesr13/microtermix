@@ -353,9 +353,12 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                 <p className="text-xs text-slate-500">Configura los tipos de issues y el campo Activity para la vista de 3 columnas.</p>
                             </div>
                             {field('Proyecto para vista Stories (ej. MYPROJ)', 'storiesProject')}
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3">
                                 {field('Tipo Epic', 'epicType')}
-                                {field('Tipo Story', 'storyType')}
+                                {field('Tipo Business Story', 'businessStoryType')}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                {field('Tipo Story (Técnica)', 'storyType')}
                                 {field('Tipo Task', 'taskType')}
                             </div>
                             {field('ID campo Activity (ej. customfield_10115)', 'activityFieldId')}

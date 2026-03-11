@@ -15,18 +15,15 @@ export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials })
     const fetchApis = useApiGatewayStore(state => state.fetchApis);
     const loadingApis = useApiGatewayStore(state => state.loadingApis);
     const error = useApiGatewayStore(state => state.error);
-    const restApis = useApiGatewayStore(state => state.restApis);
-    const httpApis = useApiGatewayStore(state => state.httpApis);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
-        // Initial fetch just once if empty
-        if (credentials?.accessKeyId && restApis.length === 0 && httpApis.length === 0) {
+        if (credentials?.accessKeyId && credentials?.region) {
             fetchApis(credentials);
         }
-    }, [fetchApis, restApis.length, httpApis.length, credentials]);
+    }, [fetchApis, credentials?.accessKeyId, credentials?.region, credentials?.sessionToken]);
 
     const handleRefresh = () => {
         if (credentials?.accessKeyId) {

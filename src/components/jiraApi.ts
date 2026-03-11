@@ -23,7 +23,7 @@ export interface JiraApiLogEntry {
 
 type LogListener = (entry: JiraApiLogEntry) => void;
 let _logListeners: LogListener[] = [];
-let _logSeq = 0;
+let _logSeq = Date.now(); // Use timestamp as base to avoid duplicate keys after hot-reload
 
 export const jiraApiLog = {
     on(fn: LogListener) { _logListeners.push(fn); },
@@ -48,6 +48,7 @@ export interface JiraConfig {
     epicType: string;            // issue type name for Business Stories (default: "Epic")
     storyType: string;           // issue type name for Technical Stories (default: "Story")
     taskType: string;            // issue type name for Tasks (default: "Task")
+    businessStoryType?: string;  // issue type name for Business Stories between epics and technical stories (default: "Business Story")
     defectType?: string;         // issue type name for Defects (default: "Defect")
     defectProjects?: string[];   // Project keys to search for defects (e.g. ["NTCQA", "BUGS"]); empty = search all projects
     activityFieldId: string;     // custom field ID for Type of Activity (e.g. "customfield_10115")
@@ -77,6 +78,7 @@ export const emptyConfig = (): JiraConfig => ({
     epicType: 'Epic',
     storyType: 'Story',
     taskType: 'Task',
+    businessStoryType: 'Business Story',
     defectType: 'Defect',
     defectProjects: [],
     activityFieldId: '',
@@ -469,32 +471,60 @@ export async function getStoriesByEpic(epicKey: string): Promise<JiraIssue[]> {
     return searchIssues(jql, 100);
 }
 
+export async function getBusinessStoriesByEpic(epicKey: string): Promise<JiraIssue[]> {
+    const cfg = loadConfig();
+    const businessStoryType = cfg.businessStoryType || 'Business Story';
+    const proj = cfg.storiesProject || cfg.defaultProject;
+    const jql = `project = "${proj}" AND issuetype = "${businessStoryType}" AND (parent = "${epicKey}" OR "Epic Link" = "${epicKey}") ORDER BY updated DESC`;
+    return searchIssues(jql, 100);
+}
+
+export async function getTechnicalStoriesByBusinessStory(businessKey: string): Promise<JiraIssue[]> {
+    const cfg = loadConfig();
+    const storyType = cfg.storyType || 'Story';
+    const proj = cfg.storiesProject || cfg.defaultProject;
+    // Use linkedIssues because Technical Stories are linked to Business Stories via issue links, not standard hierarchy
+    const jql = `project = "${proj}" AND issuetype = "${storyType}" AND issue in linkedIssues("${businessKey}") ORDER BY updated DESC`;
+    console.log(`[getTechnicalStoriesByBusinessStory] JQL: ${jql}`);
+    return searchIssues(jql, 100);
+}
+
 export async function getLinkedDefects(parentKey: string): Promise<JiraIssue[]> {
     const cfg = loadConfig();
-    const projects = (cfg.defectProjects ?? []).filter(p => p.trim());
-    const defectType = (cfg.defectType ?? '').trim().toLowerCase();
+    const projects = (cfg.defectProjects ?? []).map(p => p.trim().toUpperCase()).filter(Boolean);
+    const defectType = (cfg.defectType ?? '').trim();
 
-    // Fetch the parent issue's issuelinks field — this is what Jira shows as "Linked work items"
-    const data = await jiraFetch(`/issue/${parentKey}?fields=issuelinks`);
-    const links: any[] = data?.fields?.issuelinks ?? [];
+    let jql = `issue in linkedIssues("${parentKey}")`;
 
-    console.log(`[getLinkedDefects] ${parentKey}: ${links.length} links raw`, links);
-
-    // Each link has either inwardIssue or outwardIssue — collect all
-    const allLinked: JiraIssue[] = [];
-    for (const link of links) {
-        const issue = link.outwardIssue ?? link.inwardIssue;
-        if (issue) {
-            console.log(`  → linked: ${issue.key} type="${issue.fields?.issuetype?.name}" project="${issue.key.split('-')[0]}"`);
-            allLinked.push(issue);
-        }
+    if (projects.length > 0) {
+        jql += ` AND project in (${projects.join(',')})`;
     }
 
-    console.log(`[getLinkedDefects] defectType="${defectType}" defectProjects=${JSON.stringify(projects)}`);
+    if (defectType) {
+        jql += ` AND issuetype = "${defectType}"`;
+    }
 
-    // Temporarily return ALL linked issues to diagnose — filtering skipped
-    // TODO: re-enable filtering once we confirm data arrives correctly
-    return allLinked;
+    jql += ` ORDER BY updated DESC`;
+
+    console.log(`[getLinkedDefects] JQL: ${jql}`);
+
+    try {
+        const result = await searchIssues(jql, 100);
+        console.log(`[getLinkedDefects] result: ${result.length} issues`, result.map(i => i.key));
+        return result;
+    } catch (e: any) {
+        // If linkedIssues() JQL function is not supported, fall back to issuelinks approach
+        console.warn(`[getLinkedDefects] JQL error (linkedIssues may not be supported): ${e?.message}`);
+        // Fallback: search for defects in configured projects that ARE linked to the parent
+        const fallbackJql = projects.length > 0
+            ? `project in (${projects.join(',')}) ${defectType ? `AND issuetype = "${defectType}"` : ''} AND issuekey in linkedIssues("${parentKey}") ORDER BY updated DESC`
+            : '';
+        if (fallbackJql) {
+            console.log(`[getLinkedDefects] Fallback JQL: ${fallbackJql}`);
+            return searchIssues(fallbackJql, 100).catch(() => []);
+        }
+        return [];
+    }
 }
 
 export function isReleased(issue: JiraIssue): boolean {

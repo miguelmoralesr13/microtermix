@@ -5,8 +5,10 @@ import {
     JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
     loadConfig, saveConfig, testConnection,
     statusColor,
-    getEpics, getStoriesByEpic, getTasksByStory, transitionIssue,
+    getEpics, getBusinessStoriesByEpic, getTechnicalStoriesByBusinessStory, getTasksByStory, transitionIssue,
     getTransitions, assignIssue,
+    getStoriesByEpic,
+    isReleased,
 } from '../jiraApi';
 import { TempoLogModal } from '../TempoLogModal';
 import { TransitionFieldsModal, TransitionTarget } from './TransitionFieldsModal';
@@ -51,23 +53,38 @@ export function StoriesView() {
 
     // Ephemeral issue lists — not persisted (re-fetched on mount, fast enough)
     const [epics, setEpics] = useState<JiraIssue[]>([]);
+    const [businessStories, setBusinessStories] = useState<JiraIssue[]>([]);
     const [stories, setStories] = useState<JiraIssue[]>([]);
     const [tasks, setTasks] = useState<JiraIssue[]>([]);
 
     // Restore persisted selection objects from store (may be null after reload — re-fetched by effects)
     const [selectedEpic, setSelectedEpicLocal] = useState<JiraIssue | null>(storeSelection.epic);
+    const [selectedBusinessStory, setSelectedBusinessStoryLocal] = useState<JiraIssue | null>(storeSelection.businessStory ?? null);
     const [selectedStory, setSelectedStoryLocal] = useState<JiraIssue | null>(storeSelection.story);
 
     // Cascade setters — update both local state and store
     const setSelectedEpic = (v: JiraIssue | null) => {
+        if (v && selectedEpic?.key === v.key) return; // Guard: do nothing if already selected
         setSelectedEpicLocal(v);
-        storeSetSelection({ epicKey: v?.key ?? null, storyKey: null, epic: v, story: null });
+        storeSetSelection({ epicKey: v?.key ?? null, businessStoryKey: null, storyKey: null, epic: v, businessStory: null, story: null });
+        setSelectedBusinessStoryLocal(null);
+        setSelectedStoryLocal(null);
+        setSelectedTask(null);
+        setBusinessStories([]);
+        setStories([]);
+        setTasks([]);
+    };
+    const setSelectedBusinessStory = (v: JiraIssue | null) => {
+        if (v && selectedBusinessStory?.key === v.key) return; // Guard
+        setSelectedBusinessStoryLocal(v);
+        storeSetSelection({ businessStoryKey: v?.key ?? null, storyKey: null, businessStory: v, story: null });
         setSelectedStoryLocal(null);
         setSelectedTask(null);
         setStories([]);
         setTasks([]);
     };
     const setSelectedStory = (v: JiraIssue | null) => {
+        if (v && selectedStory?.key === v.key) return; // Guard
         setSelectedStoryLocal(v);
         storeSetSelection({ storyKey: v?.key ?? null, story: v });
         setSelectedTask(null);
@@ -89,9 +106,11 @@ export function StoriesView() {
     const pinnedStories = storePinnedStories;
 
     const [loadingEpics, setLoadingEpics] = useState(false);
-    const [loadingStories, setLoadingStories] = useState(false);
+    const [loadingBusinessStories, setLoadingBusinessStories] = useState(false);
+    const [loadingTechStories, setLoadingTechStories] = useState(false);
     const [loadingTasks, setLoadingTasks] = useState(false);
     const [epicError, setEpicError] = useState<string | null>(null);
+    const [businessStoryError, setBusinessStoryError] = useState<string | null>(null);
     const [storyError, setStoryError] = useState<string | null>(null);
     const [taskError, setTaskError] = useState<string | null>(null);
 
@@ -102,6 +121,13 @@ export function StoriesView() {
     const [transitioningTask, setTransitioningTask] = useState<string | null>(null);
     const [apiLog, setApiLog] = useState<JiraApiLogEntry[]>([]);
     const [expandedLog, setExpandedLog] = useState<number | null>(null);
+    const [hideReleased, setHideReleased] = useState(() => {
+        const saved = localStorage.getItem('jira_hide_released');
+        return saved === null ? true : saved === 'true';
+    });
+    useEffect(() => {
+        localStorage.setItem('jira_hide_released', String(hideReleased));
+    }, [hideReleased]);
     const [copiedId, setCopiedId] = useState<number | null>(null);
     const [logVisible, setLogVisible] = useState(true);
 
@@ -139,17 +165,27 @@ export function StoriesView() {
     // Only reload when epicSearch (committed on Enter) changes
     useEffect(() => { loadEpics(epicSearch || undefined); }, [epicSearch, loadEpics]);
 
-    // Load stories when epic selected
+    // Load business stories when epic selected
     useEffect(() => {
-        if (!selectedEpic) { setStories([]); setSelectedStory(null); setTasks([]); return; }
-        setLoadingStories(true);
-        setStoryError(null);
-        setTasks([]);
-        getStoriesByEpic(selectedEpic.key)
-            .then(data => { setStories(data); })
-            .catch((e: any) => setStoryError(e?.message ?? 'Error cargando Stories'))
-            .finally(() => setLoadingStories(false));
+        if (!selectedEpic) { setBusinessStories([]); return; }
+        setLoadingBusinessStories(true);
+        setBusinessStoryError(null);
+        getBusinessStoriesByEpic(selectedEpic.key)
+            .then(data => { setBusinessStories(data); })
+            .catch((e: any) => setBusinessStoryError(e?.message ?? 'Error cargando Business Stories'))
+            .finally(() => setLoadingBusinessStories(false));
     }, [selectedEpic?.key]);
+
+    // Load technical stories when business story selected
+    useEffect(() => {
+        if (!selectedBusinessStory) { setStories([]); return; }
+        setLoadingTechStories(true);
+        setStoryError(null);
+        getTechnicalStoriesByBusinessStory(selectedBusinessStory.key)
+            .then(data => { setStories(data); })
+            .catch((e: any) => setStoryError(e?.message ?? 'Error cargando Stories Técnicas'))
+            .finally(() => setLoadingTechStories(false));
+    }, [selectedBusinessStory?.key]);
 
     // Load tasks when story selected
     useEffect(() => {
@@ -238,7 +274,7 @@ export function StoriesView() {
             await transitionIssue(task.key, status, comment, fields);
 
             // Check where this task belongs to refresh the proper list
-            if (selectedStory && tasks.some(t => t.key === task.key)) {
+            if (selectedStory && filteredTasks.some(t => t.key === task.key)) {
                 const updated = await getTasksByStory(selectedStory.key);
                 setTasks(updated);
                 const refreshed = updated.find(t => t.key === task.key);
@@ -246,12 +282,20 @@ export function StoriesView() {
                     setSelectedTask(refreshed);
                     setTaskDetailTarget(prev => prev?.key === refreshed.key ? refreshed : prev);
                 }
-            } else if (selectedEpic && stories.some(s => s.key === task.key)) {
-                const updated = await getStoriesByEpic(selectedEpic.key);
+            } else if (selectedBusinessStory && stories.some(s => s.key === task.key)) {
+                const updated = await getTechnicalStoriesByBusinessStory(selectedBusinessStory.key);
                 setStories(updated);
                 const refreshed = updated.find(s => s.key === task.key);
                 if (refreshed) {
                     setSelectedStoryLocal(refreshed);
+                    setTaskDetailTarget(prev => prev?.key === refreshed.key ? refreshed : prev);
+                }
+            } else if (selectedEpic && businessStories.some(b => b.key === task.key)) {
+                const updated = await getBusinessStoriesByEpic(selectedEpic.key);
+                setBusinessStories(updated);
+                const refreshed = updated.find(b => b.key === task.key);
+                if (refreshed) {
+                    setSelectedBusinessStoryLocal(refreshed);
                     setTaskDetailTarget(prev => prev?.key === refreshed.key ? refreshed : prev);
                 }
             } else if (epics.some(e => e.key === task.key)) {
@@ -261,14 +305,6 @@ export function StoriesView() {
                 if (refreshed) {
                     setSelectedEpicLocal(refreshed);
                     setTaskDetailTarget(prev => prev?.key === refreshed.key ? refreshed : prev);
-                }
-            } else {
-                // If it's a selectedTask but from nowhere (fallback)
-                if (selectedStory) {
-                    const updated = await getTasksByStory(selectedStory.key);
-                    setTasks(updated);
-                    const refreshed = updated.find(t => t.key === task.key);
-                    if (refreshed) { setSelectedTask(refreshed); setTaskDetailTarget(refreshed); }
                 }
             }
         } catch (e: any) {
@@ -292,9 +328,17 @@ export function StoriesView() {
     }
 
 
-    const sortedEpics = sortWithPins(epics, pinnedEpics);
+    const sortedEpics = sortWithPins(
+        hideReleased ? epics.filter(e => !isReleased(e)) : epics,
+        pinnedEpics
+    );
+    const sortedBusinessStories = sortWithPins(
+        hideReleased ? businessStories.filter(s => !isReleased(s)) : businessStories,
+        []
+    );
     const sortedStories = sortWithPins(
         stories.filter(s => {
+            if (hideReleased && isReleased(s)) return false;
             const matchText = !storySearch.trim() || (
                 s.key.toLowerCase().includes(storySearch.toLowerCase()) ||
                 s.fields.summary.toLowerCase().includes(storySearch.toLowerCase())
@@ -310,16 +354,25 @@ export function StoriesView() {
         }),
         pinnedStories
     );
+    const filteredTasks = hideReleased ? tasks.filter(t => !isReleased(t)) : tasks;
     const hasStoryFilters = !!(storySearch || storyFilterAssignee || storyFilterStatus);
 
     return (
         <div className="flex flex-col h-full min-h-0">
-            {/* 3 columns */}
+            {/* 4 columns */}
             <div className="flex flex-1 min-h-0">
-                {/* Column 1: Epics */}
-                <div className={`${colCls} w-1/4`}>
+                <div className={`${colCls} w-1/5`}>
                     <div className={colHeaderCls}>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Business ({epics.length})</p>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Business ({epics.length})</p>
+                            <button
+                                onClick={() => setHideReleased(!hideReleased)}
+                                className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${hideReleased ? 'bg-nexus-neon/10 border-nexus-neon/30 text-nexus-neon' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                                title={hideReleased ? "Mostrando solo activos" : "Mostrando todo (incl. Released)"}
+                            >
+                                {hideReleased ? 'ACTIVOS' : 'TODO'}
+                            </button>
+                        </div>
                         <div className="relative">
                             <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
                             <input
@@ -356,7 +409,6 @@ export function StoriesView() {
                                     if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
                                     try {
                                         await assignIssue(epic.key, accountId);
-                                        // Refresh epics
                                         const updated = await getEpics(project);
                                         setEpics(updated);
                                     } catch (e: any) {
@@ -368,15 +420,57 @@ export function StoriesView() {
                     </div>
                 </div>
 
-                {/* Column 2: Stories */}
-                <div className={`${colCls} w-1/4`}>
+                {/* Column 2: Business Stories */}
+                <div className={`${colCls} w-1/5`}>
+                    <div className={colHeaderCls}>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            Business {selectedEpic ? `(${sortedBusinessStories.length})` : ''}
+                        </p>
+                        {selectedEpic && <p className="text-[10px] text-nexus-neon/60 mt-0.5 truncate">{selectedEpic.key}</p>}
+                    </div>
+                    <div className={colBodyCls}>
+                        {!selectedEpic && <p className="text-xs text-slate-600 text-center py-8">← Selecciona un Epic</p>}
+                        {businessStoryError && <p className="text-xs text-red-400 p-2">{businessStoryError}</p>}
+                        {selectedEpic && loadingBusinessStories ? (
+                            <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div>
+                        ) : sortedBusinessStories.map(bStory => (
+                            <HierarchyCard
+                                key={bStory.id}
+                                issue={bStory}
+                                selected={selectedBusinessStory?.key === bStory.key}
+                                pinned={false}
+                                onSelect={() => setSelectedBusinessStory(bStory)}
+                                onPin={() => { }}
+                                showPin={false}
+                                onDetail={() => setTaskDetailTarget(bStory)}
+                                onLinkedIssues={() => setLinkedIssuesTarget(bStory.key)}
+                                onAssign={bStory.fields.assignee?.accountId === myAccountId ? undefined : async () => {
+                                    const accountId = myAccountId || loadConfig().defaultAssigneeId;
+                                    if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
+                                    try {
+                                        await assignIssue(bStory.key, accountId);
+                                        if (selectedEpic) {
+                                            const updated = await getBusinessStoriesByEpic(selectedEpic.key);
+                                            setBusinessStories(updated);
+                                        }
+                                    } catch (e: any) {
+                                        setTransitionError(e?.message ?? 'Error al asignar');
+                                    }
+                                }}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Column 3: Technical Stories */}
+                <div className={`${colCls} w-1/5`}>
                     <div className={colHeaderCls}>
                         {/* title + filter toggle */}
                         <div className="flex items-center gap-1 mb-1">
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex-1">
-                                Technical {selectedEpic ? `(${sortedStories.length})` : ''}
+                                Technical {selectedBusinessStory ? `(${sortedStories.length})` : ''}
                             </p>
-                            {selectedEpic && (
+                            {selectedBusinessStory && (
                                 <>
                                     {hasStoryFilters && (
                                         <button onClick={() => { setStorySearch(''); setStoryFilterAssignee(''); setStoryFilterStatus(''); }}
@@ -394,9 +488,9 @@ export function StoriesView() {
                                 </>
                             )}
                         </div>
-                        {selectedEpic && <p className="text-[10px] text-nexus-neon/60 mb-1 truncate">{selectedEpic.key}</p>}
+                        {selectedBusinessStory && <p className="text-[10px] text-nexus-neon/60 mb-1 truncate">{selectedBusinessStory.key}</p>}
                         {/* Collapsible filter panel */}
-                        {selectedEpic && showStoryFilters && (
+                        {selectedBusinessStory && showStoryFilters && (
                             <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-2 space-y-1.5 mt-1">
                                 {/* Text search */}
                                 <div className="relative">
@@ -429,9 +523,9 @@ export function StoriesView() {
                         )}
                     </div>
                     <div className={colBodyCls}>
-                        {!selectedEpic && <p className="text-xs text-slate-600 text-center py-8">← Selecciona un Epic</p>}
+                        {!selectedBusinessStory && <p className="text-xs text-slate-600 text-center py-8">← Selecciona una Business Story</p>}
                         {storyError && <p className="text-xs text-red-400 p-2">{storyError}</p>}
-                        {selectedEpic && loadingStories ? (
+                        {selectedBusinessStory && loadingTechStories ? (
                             <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div>
                         ) : sortedStories.map(story => (
                             <div key={story.id} className="relative group/story">
@@ -445,13 +539,14 @@ export function StoriesView() {
                                         setSelectedTask(null);
                                         setTaskDetailTarget(story);
                                     }}
+                                    onLinkedIssues={() => setLinkedIssuesTarget(story.key)}
                                     onAssign={story.fields.assignee?.accountId === myAccountId ? undefined : async () => {
                                         const accountId = myAccountId || loadConfig().defaultAssigneeId;
                                         if (!accountId) { setTransitionError('Falta Account ID en Settings'); return; }
                                         try {
                                             await assignIssue(story.key, accountId);
-                                            if (selectedEpic) {
-                                                const updated = await getStoriesByEpic(selectedEpic.key);
+                                            if (selectedBusinessStory) {
+                                                const updated = await getTechnicalStoriesByBusinessStory(selectedBusinessStory.key);
                                                 setStories(updated);
                                             }
                                         } catch (e: any) {
@@ -471,11 +566,11 @@ export function StoriesView() {
                     </div>
                 </div>
 
-                {/* Column 3: Tasks */}
-                <div className={`${colCls} w-1/4`}>
+                {/* Column 4: Tasks */}
+                <div className={`${colCls} w-1/5`}>
                     <div className={colHeaderCls}>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                            Tasks {selectedStory ? `(${tasks.length})` : ''}
+                            Tasks {selectedStory ? `(${filteredTasks.length})` : ''}
                         </p>
                         {selectedStory && <p className="text-[10px] text-nexus-neon/60 mt-0.5 truncate">{selectedStory.key}</p>}
                     </div>
@@ -484,9 +579,9 @@ export function StoriesView() {
                         {taskError && <p className="text-xs text-red-400 p-2">{taskError}</p>}
                         {selectedStory && loadingTasks ? (
                             <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div>
-                        ) : tasks.length === 0 && selectedStory && !loadingTasks ? (
+                        ) : filteredTasks.length === 0 && selectedStory && !loadingTasks ? (
                             <p className="text-xs text-slate-600 text-center py-8">Sin tasks todavía</p>
-                        ) : tasks.map(task => (
+                        ) : filteredTasks.map(task => (
                             <HierarchyCard
                                 key={task.id}
                                 issue={task}
@@ -520,8 +615,8 @@ export function StoriesView() {
                     </div>
                 </div>
 
-                {/* Column 4: Task Detail + Transitions */}
-                <div className="flex flex-col w-1/4 h-full border-slate-800">
+                {/* Column 5: Task Detail + Transitions */}
+                <div className="flex flex-col w-1/5 h-full border-slate-800">
                     <div className={colHeaderCls}>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Detalle / Acción</p>
                     </div>
@@ -622,8 +717,8 @@ export function StoriesView() {
                     <div className="h-36 overflow-y-auto scrollbar-hide">
                         {apiLog.length === 0 ? (
                             <p className="text-[10px] text-slate-700 py-3 px-3 font-mono">Waiting for requests...</p>
-                        ) : apiLog.map((entry) => (
-                            <div key={entry.id} className="border-b border-slate-900">
+                        ) : apiLog.map((entry, idx) => (
+                            <div key={`${entry.id}-${idx}`} className="border-b border-slate-900">
                                 {/* Row summary */}
                                 <div
                                     className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-900/60 group"

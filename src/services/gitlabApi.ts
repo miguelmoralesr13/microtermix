@@ -218,3 +218,90 @@ export async function closeGitlabMR(
         throw new Error(`GitLab API Error: ${res.status} ${err?.message || res.statusText}`);
     }
 }
+
+export interface GitlabTreeNode {
+    id: string;
+    name: string;
+    type: 'tree' | 'blob';
+    path: string;
+    mode: string;
+}
+
+export async function fetchGitlabRepositoryTree(
+    projectPath: string, 
+    token: string, 
+    ref?: string, 
+    path?: string, 
+    apiUrl?: string
+): Promise<GitlabTreeNode[]> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    let url = `${base}/api/v4/projects/${encoded}/repository/tree?per_page=100`;
+    if (ref) url += `&ref=${encodeURIComponent(ref)}`;
+    if (path) url += `&path=${encodeURIComponent(path)}`;
+    
+    const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': token } });
+    if (!res.ok) throw new Error(`GitLab API Error: ${res.status}`);
+    return res.json();
+}
+
+export interface GitlabFile {
+    file_name: string;
+    file_path: string;
+    size: number;
+    encoding: string;
+    content: string;
+    ref: string;
+    blob_id: string;
+    commit_id: string;
+    last_commit_id: string;
+}
+
+export async function fetchGitlabFileContent(
+    projectPath: string,
+    token: string,
+    filePath: string,
+    ref: string,
+    apiUrl?: string
+): Promise<GitlabFile> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    const encodedPath = encodeURIComponent(filePath);
+    const url = `${base}/api/v4/projects/${encoded}/repository/files/${encodedPath}?ref=${encodeURIComponent(ref)}`;
+    
+    const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': token } });
+    if (!res.ok) throw new Error(`GitLab API Error: ${res.status}`);
+    return res.json();
+}
+
+export interface GitlabBranch {
+    name: string;
+    merged: boolean;
+    protected: boolean;
+    developers_can_push: boolean;
+    developers_can_merge: boolean;
+    can_push: boolean;
+    default: boolean;
+    web_url: string;
+    commit: { id: string; short_id: string; title: string; created_at: string };
+}
+
+export async function fetchGitlabBranches(
+    projectPath: string,
+    token: string,
+    apiUrl?: string
+): Promise<GitlabBranch[]> {
+    const glPath = await getGitlabProjectPath(projectPath);
+    if (!glPath) throw new Error("Could not determine GitLab project.");
+    const base = (apiUrl || 'https://gitlab.com').replace(/\/$/, '');
+    const encoded = encodeURIComponent(glPath);
+    const url = `${base}/api/v4/projects/${encoded}/repository/branches?per_page=100`;
+    
+    const res = await fetch(url, { headers: { 'PRIVATE-TOKEN': token } });
+    if (!res.ok) throw new Error(`GitLab API Error: ${res.status}`);
+    return res.json();
+}

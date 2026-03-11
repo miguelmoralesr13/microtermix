@@ -16,10 +16,10 @@ export function HierarchyCard({
         <div
             onClick={onSelect}
             className={`group flex items-start gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${selected
-                ? 'bg-nexus-neon/10 border-nexus-neon/50 shadow-[0_0_8px_rgba(0,255,170,0.1)]'
+                ? 'bg-nexus-neon/20 border-nexus-neon/60 shadow-[0_0_12px_rgba(0,255,170,0.15)] border-l-4'
                 : released
                     ? 'bg-slate-900/40 border-slate-800/50 opacity-60 hover:opacity-80'
-                    : 'bg-slate-900/60 border-slate-800 hover:bg-slate-800/60 hover:border-slate-600'
+                    : 'bg-slate-900/60 border-slate-800 hover:bg-slate-800/60 hover:border-slate-600 border-l-4 border-l-transparent'
                 }`}
         >
             {showPin && (

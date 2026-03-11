@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen } from 'lucide-react';
+import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen, Eye } from 'lucide-react';
+import { GitlabBranchViewerModal } from './gitlab/GitlabBranchViewerModal';
 import { PushPreviewModal } from './PushPreviewModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { MergeConfirmModal } from './MergeConfirmModal';
@@ -36,6 +37,8 @@ const DraggableBranchItem = ({
     handleCheckout,
     handleDeleteLocalBranch,
     setShowMergeModal,
+    showViewCode,
+    onViewCode,
 }: {
     id: string;
     branchName: string;
@@ -43,6 +46,8 @@ const DraggableBranchItem = ({
     handleCheckout: (b: string, remote: boolean) => void;
     handleDeleteLocalBranch?: (b: string) => void;
     setShowMergeModal: (b: string) => void;
+    showViewCode?: boolean;
+    onViewCode?: (b: string) => void;
 }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id,
@@ -73,6 +78,15 @@ const DraggableBranchItem = ({
                 >
                     <GitMerge size={10} />
                 </button>
+                {showViewCode && onViewCode && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onViewCode(branchName); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity"
+                        title="Ver código en GitLab (remoto)"
+                    >
+                        <Eye size={12} />
+                    </button>
+                )}
                 <button
                     onClick={(e) => { e.stopPropagation(); handleCheckout(branchName, !!isRemote); }}
                     className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity"
@@ -160,6 +174,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const [pullError, setPullError] = useState<{ message: string; raw: string } | null>(null);
     const [isResolvingPull, setIsResolvingPull] = useState(false);
     const [isPulling, setIsPulling] = useState(false);
+    const [viewCodeBranch, setViewCodeBranch] = useState<string | null>(null);
 
     const searchLower = branchSearch.trim().toLowerCase();
     const filteredLocal = useMemo(() =>
@@ -504,6 +519,11 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                                 isRemote
                                                 handleCheckout={handleCheckout}
                                                 setShowMergeModal={setShowMergeModal}
+                                                showViewCode={activeAccount?.provider === 'gitlab'}
+                                                onViewCode={(b) => {
+                                                    const parts = b.split('/');
+                                                    setViewCodeBranch(parts.length > 1 ? parts.slice(1).join('/') : b);
+                                                }}
                                             />
                                         ))
                                     )}
@@ -586,6 +606,17 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                     currentBranch={activeBranch?.name || ''}
                     onClose={() => setShowMergeModal(null)}
                     onMergeComplete={() => onRefreshRequest?.()}
+                />
+            )}
+
+            {viewCodeBranch && activeAccount && (
+                <GitlabBranchViewerModal
+                    isOpen={!!viewCodeBranch}
+                    onClose={() => setViewCodeBranch(null)}
+                    projectPath={projectPath}
+                    token={activeAccount.token}
+                    branch={viewCodeBranch}
+                    apiUrl={activeAccount.url}
                 />
             )}
 

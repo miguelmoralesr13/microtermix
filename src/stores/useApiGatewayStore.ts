@@ -124,7 +124,17 @@ export const useApiGatewayStore = create<ApiGatewayState>((set, get) => ({
     },
 
     fetchApis: async (creds: AwsCredentials) => {
-        set({ loadingApis: true, error: null });
+        set({ 
+            loadingApis: true, 
+            error: null, 
+            restApis: [], 
+            httpApis: [], 
+            selectedApi: null,
+            restResources: {},
+            httpRoutes: {},
+            methodDetails: {},
+            exportedSwagger: {}
+        });
         try {
             const rustCreds = {
                 access_key_id: creds.accessKeyId,
