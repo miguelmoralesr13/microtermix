@@ -107,10 +107,10 @@ export const GitPanel: React.FC = () => {
     }, [ui.activeTab, invalidate, fetchAll, fetchAheadBehind]);
 
     useEffect(() => {
-        if (!repoData.status.isMergeInProgress) {
+        if (!repoData.status.isMergeInProgress && !repoData.status.isRebaseInProgress) {
             setIsConflictModalOpen(false);
         }
-    }, [repoData.status.isMergeInProgress]);
+    }, [repoData.status.isMergeInProgress, repoData.status.isRebaseInProgress]);
 
     useEffect(() => {
         if (!ui.activeTab) { setDetectedAccounts([]); return; }
@@ -334,10 +334,11 @@ export const GitPanel: React.FC = () => {
                 />
             )}
 
-            {isConflictModalOpen && repoData.status.isMergeInProgress && ui.activeTab && (
+            {isConflictModalOpen && (repoData.status.isMergeInProgress || repoData.status.isRebaseInProgress) && ui.activeTab && (
                 <GitConflictModal
                     projectPath={ui.activeTab}
                     conflictedFiles={repoData.status.files.filter(f => f.isConflicted).map(f => f.file)}
+                    isRebase={!!repoData.status.isRebaseInProgress}
                     onClose={() => setIsConflictModalOpen(false)}
                     onRefreshAll={handleRefreshAll}
                 />

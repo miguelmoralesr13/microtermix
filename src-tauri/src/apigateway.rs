@@ -156,6 +156,7 @@ pub struct RestMethodDetails {
     pub integration_http_method: Option<String>,
     pub integration_uri: Option<String>,
     pub integration_timeout: Option<i32>,
+    pub integration_request_templates: std::collections::HashMap<String, String>,
 
     // Responses
     pub method_responses: Vec<String>, // Just HTTP status codes
@@ -207,6 +208,15 @@ pub async fn apigw_get_rest_method_details(
     let inet_http_method = integration.and_then(|i| i.http_method().map(|s| s.to_string()));
     let inet_uri = integration.and_then(|i| i.uri().map(|s| s.to_string()));
     let inet_timeout = integration.and_then(|i| Some(i.timeout_in_millis()));
+    
+    let mut inet_request_templates = std::collections::HashMap::new();
+    if let Some(inet) = integration {
+        if let Some(templates) = inet.request_templates() {
+            for (k, v) in templates {
+                inet_request_templates.insert(k.clone(), v.clone());
+            }
+        }
+    }
 
     Ok(RestMethodDetails {
         http_method: resp.http_method().unwrap_or(&http_method).to_string(),
@@ -218,6 +228,7 @@ pub async fn apigw_get_rest_method_details(
         integration_http_method: inet_http_method,
         integration_uri: inet_uri,
         integration_timeout: inet_timeout,
+        integration_request_templates: inet_request_templates,
         method_responses,
     })
 }
@@ -331,6 +342,7 @@ pub struct HttpRouteIntegrationDetails {
     pub connection_type: Option<String>,
     pub payload_format_version: Option<String>,
     pub timeout_in_millis: Option<i32>,
+    pub integration_request_templates: std::collections::HashMap<String, String>,
 }
 
 #[tauri::command]
@@ -365,6 +377,7 @@ pub async fn apigw_get_http_route_integration(
                 connection_type: None,
                 payload_format_version: None,
                 timeout_in_millis: None,
+                integration_request_templates: std::collections::HashMap::new(),
             });
         }
     } else {
@@ -376,6 +389,7 @@ pub async fn apigw_get_http_route_integration(
             connection_type: None,
             payload_format_version: None,
             timeout_in_millis: None,
+            integration_request_templates: std::collections::HashMap::new(),
         });
     };
 
@@ -390,6 +404,13 @@ pub async fn apigw_get_http_route_integration(
         .await
         .map_err(|e| format!("Failed to get integration details: {:?}", e))?;
 
+    let mut request_templates = std::collections::HashMap::new();
+    if let Some(t) = int_resp.request_templates() {
+        for (k, v) in t {
+            request_templates.insert(k.clone(), v.clone());
+        }
+    }
+
     Ok(HttpRouteIntegrationDetails {
         integration_id: Some(int_id),
         integration_type: int_resp.integration_type().map(|t| t.as_str().to_string()),
@@ -398,6 +419,7 @@ pub async fn apigw_get_http_route_integration(
         connection_type: int_resp.connection_type().map(|t| t.as_str().to_string()),
         payload_format_version: int_resp.payload_format_version().map(|s| s.to_string()),
         timeout_in_millis: int_resp.timeout_in_millis(),
+        integration_request_templates: request_templates,
     })
 }
 

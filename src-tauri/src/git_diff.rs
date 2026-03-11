@@ -520,7 +520,13 @@ pub async fn git_execute_impl(
             }).await.map_err(|e| e.to_string())?
         }
         "fetch" => git2_fetch_native(&project_path).await,
-        "pull" => git2_pull_native(&project_path).await,
+        "pull" => {
+            if args.len() > 1 {
+                git_cli_fallback(&app_handle, &project_path, &args).await
+            } else {
+                git2_pull_native(&project_path).await
+            }
+        },
         "push" => git2_push_native(&project_path, &args).await,
 
         // ── Fallback for everything else (add, reset, stash, rebase, merge…) ──

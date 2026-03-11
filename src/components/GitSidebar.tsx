@@ -275,14 +275,25 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
         setIsResolvingPull(true);
         try {
-            if (action === 'stash') {
+            if (action === 'rebase') {
+                const result: any = await invoke('git_execute', { projectPath, args: ['pull', '--rebase'] });
+                // If there's a conflict preventing checkout, it's actually just a rebase conflict.
+                // It's not a terminal error; the rebase has started and now needs resolution. 
+                if (result && !result.success && (result.stderr?.includes('conflict') || result.stderr?.includes('Conflict'))) {
+                    // Do nothing, let the system detect isRebaseInProgress and show the resolution UI
+                    console.log("[Pull Rebase] Detected conflict, deferring to conflict resolution UI");
+                } else if (!result.success && result.stderr) {
+                    throw new Error(result.stderr);
+                }
+            } else if (action === 'stash') {
                 await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Auto-stash before pull'] });
                 await invoke('git_execute', { projectPath, args: ['pull'] });
                 await invoke('git_execute', { projectPath, args: ['stash', 'pop'] });
-            } else if (action === 'rebase') {
-                await invoke('git_execute', { projectPath, args: ['pull', '--rebase'] });
             }
             onRefreshRequest?.();
+            // Force status fetch so the conflict modal opens immediately
+            invalidate(projectPath, 'status');
+            fetchAll(projectPath, true);
             setPullError(null);
         } catch (e: any) {
             alert(`Action failed:\n\n${e.message || String(e)}`);

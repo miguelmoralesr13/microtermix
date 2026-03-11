@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useApiGatewayStore } from '../stores/useApiGatewayStore';
 import { Badge } from './ui/badge';
-import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, Database, FileJson, X, Download, Copy, CheckCircle2 } from 'lucide-react';
+import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, Database, FileJson, X, Download, Copy, CheckCircle2, FileCode2 } from 'lucide-react';
 import SwaggerUI from 'swagger-ui-react';
 import 'swagger-ui-react/swagger-ui.css';
 import { Button } from './ui/button';
@@ -32,9 +32,9 @@ const renderMethodBadge = (method: string, onClick?: () => void, isSelected?: bo
     }
 
     return (
-        <Badge 
-            key={method} 
-            variant="outline" 
+        <Badge
+            key={method}
+            variant="outline"
             className={`font-mono text-[10px] px-2 py-0.5 h-6 mt-0.5 cursor-pointer transition-all ${colorClass} ${isSelected ? 'ring-2 ring-white/20 scale-105' : ''}`}
             onClick={(e) => {
                 e.stopPropagation();
@@ -49,7 +49,8 @@ const renderMethodBadge = (method: string, onClick?: () => void, isSelected?: bo
 const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: any }> = ({ node, level = 0, credentials }) => {
     const [expanded, setExpanded] = useState(true);
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
-    
+    const [showMappingsModal, setShowMappingsModal] = useState(false);
+
     const selectedApi = useApiGatewayStore(state => state.selectedApi);
     const fetchMethodDetails = useApiGatewayStore(state => state.fetchMethodDetails);
     const methodDetails = useApiGatewayStore(state => state.methodDetails);
@@ -70,7 +71,7 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
             return;
         }
         setSelectedMethod(method);
-        
+
         if (selectedApi && node.resourceId && credentials) {
             const isRest = selectedApi.type === 'rest';
             fetchMethodDetails(credentials, selectedApi.id, node.resourceId, method, isRest);
@@ -79,7 +80,7 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
 
     const renderDetailsPanel = () => {
         if (!selectedMethod || !selectedApi || !node.resourceId) return null;
-        
+
         const cacheKey = `${selectedApi.id}|${node.resourceId}|${selectedMethod}`;
         const isLoading = loadingMethodDetails[cacheKey];
         const details = methodDetails[cacheKey];
@@ -100,7 +101,7 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
             const restDetails = details as RestMethodDetails;
             return (
                 <div className="ml-6 mt-2 p-3 bg-slate-900/80 border border-slate-700/50 rounded-md shadow-inner text-xs space-y-3">
-                    
+
                     {/* Auth & Security */}
                     <div className="flex items-center gap-4 text-slate-300">
                         <div className="flex items-center gap-1.5" title="Authorization">
@@ -127,7 +128,7 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
                                     ))}
                                 </ul>
                             ) : <div className="text-slate-600 italic">No parameters</div>}
-                            
+
                             {Object.keys(restDetails.request_models).length > 0 && (
                                 <div className="mt-2 text-slate-400 flex items-center gap-1.5 border border-slate-800 px-1.5 py-0.5 rounded w-fit">
                                     <Database size={10} />
@@ -166,6 +167,17 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
                                         <span className="font-mono text-slate-400 break-all">{restDetails.integration_uri}</span>
                                     </div>
                                 )}
+                                {restDetails.integration_request_templates && Object.keys(restDetails.integration_request_templates).length > 0 && (
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); setShowMappingsModal(true); }}
+                                        className="mt-2 bg-indigo-900/40 hover:bg-indigo-900/60 text-indigo-300 text-xs h-7 self-start border border-indigo-900/50"
+                                    >
+                                        <FileCode2 size={12} className="mr-1.5" />
+                                        View Mapping Templates
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -189,12 +201,23 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
                                 {httpDetails.integration_method && <div><span className="text-slate-500">Method:</span> <span className="text-slate-300">{httpDetails.integration_method}</span></div>}
                                 {httpDetails.payload_format_version && <div><span className="text-slate-500">Payload v:</span> <span className="text-slate-300">{httpDetails.payload_format_version}</span></div>}
                             </div>
-                            
+
                             {httpDetails.integration_uri && (
                                 <div className="flex items-start gap-1.5 text-[10px] bg-slate-950 p-1.5 rounded border border-slate-800">
                                     <LinkIcon size={10} className="text-slate-500 shrink-0 mt-0.5" />
                                     <span className="font-mono text-slate-400 break-all">{httpDetails.integration_uri}</span>
                                 </div>
+                            )}
+                            {httpDetails.integration_request_templates && Object.keys(httpDetails.integration_request_templates).length > 0 && (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); setShowMappingsModal(true); }}
+                                    className="mt-2 bg-indigo-900/40 hover:bg-indigo-900/60 text-indigo-300 text-xs h-7 self-start border border-indigo-900/50"
+                                >
+                                    <FileCode2 size={12} className="mr-1.5" />
+                                    View Mapping Templates
+                                </Button>
                             )}
                         </div>
                     )}
@@ -205,11 +228,11 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
 
     return (
         <div className="flex flex-col w-full">
-            <div 
+            <div
                 className={`flex items-start py-1.5 px-2 hover:bg-slate-800/80 rounded-md transition-colors w-full border border-transparent hover:border-slate-800 ${level > 0 ? 'mt-0.5' : ''}`}
                 style={{ paddingLeft: `${(level * 16) + 8}px` }}
             >
-                <div 
+                <div
                     className="flex mt-1.5 items-center justify-center w-4 h-4 mr-1 shrink-0 cursor-pointer"
                     onClick={() => hasChildren && setExpanded(!expanded)}
                 >
@@ -223,18 +246,18 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
                         <span className={`font-mono text-[13px] ${node.segment.startsWith('{') ? 'text-amber-400 font-medium' : 'text-sky-200'}`}>
                             {node.segment === '/' ? '/' : `/${node.segment}`}
                         </span>
-                        
+
                         {node.resourceId && (
                             <span className="text-[10px] text-slate-600 font-mono ml-2">ID: {node.resourceId}</span>
                         )}
                     </div>
-                    
+
                     {node.methods.length > 0 && (
                         <div className="flex items-center flex-wrap gap-1.5 mt-1">
                             {node.methods.filter(m => m !== 'OPTIONS').map(m => renderMethodBadge(m, () => handleMethodClick(m), selectedMethod === m))}
                         </div>
                     )}
-                    
+
                     {node.target && !selectedMethod && (
                         <div className="flex items-start gap-1.5 mt-2 pt-1 border-t border-slate-800/60 w-full pb-0.5 opacity-60">
                             <ArrowRight size={12} className="text-slate-500 mt-0.5 shrink-0" />
@@ -254,6 +277,52 @@ const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; credentials?: a
                     {childNodes.map(child => (
                         <ApiTreeItem key={child.fullPath} node={child} level={level + 1} credentials={credentials} />
                     ))}
+                </div>
+            )}
+
+            {showMappingsModal && selectedMethod && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+                    onClick={() => setShowMappingsModal(false)}
+                >
+                    <div
+                        className="bg-slate-900 border border-slate-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col overflow-hidden max-h-[85vh]"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="px-4 py-3 flex items-center justify-between border-b border-slate-800 bg-slate-900/80">
+                            <h3 className="text-white font-medium flex items-center gap-2">
+                                <FileCode2 size={18} className="text-indigo-400" />
+                                Integration Request Mapping Templates
+                            </h3>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white" onClick={() => setShowMappingsModal(false)}>
+                                <X size={18} />
+                            </Button>
+                        </div>
+                        <div className="p-4 overflow-y-auto flex-1 space-y-4">
+                            {Object.entries(
+                                (selectedApi?.type === 'rest'
+                                    ? (methodDetails[`${selectedApi.id}|${node.resourceId}|${selectedMethod}`] as RestMethodDetails)?.integration_request_templates
+                                    : (methodDetails[`${selectedApi?.id}|${node.resourceId}|${selectedMethod}`] as HttpRouteIntegrationDetails)?.integration_request_templates)
+                                || {}
+                            ).map(([contentType, template]) => (
+                                <div key={contentType} className="flex flex-col gap-2">
+                                    <div className="px-2 py-1 bg-indigo-950/50 border border-indigo-900/50 rounded flex items-center gap-2 text-indigo-300 font-mono text-xs w-fit">
+                                        {contentType}
+                                    </div>
+                                    <div className="bg-[#1e1e1e] rounded-md p-3 overflow-x-auto border border-slate-800">
+                                        <pre className="text-slate-300 font-mono text-xs whitespace-pre">
+                                            {template}
+                                        </pre>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-4 border-t border-slate-800 bg-slate-900/50 flex justify-end">
+                            <Button variant="outline" className="text-white" onClick={() => setShowMappingsModal(false)}>
+                                Close
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
@@ -291,7 +360,7 @@ const buildHttpTree = (routes: HttpApiRoute[]): ApiTreeNode => {
     routes.forEach(route => {
         let method = "ANY";
         let pathStr = route.route_key;
-        
+
         if (route.route_key.includes(' ')) {
             const parts = route.route_key.split(' ');
             method = parts[0];
@@ -394,10 +463,10 @@ export const ApiGatewayDetails: React.FC<{ credentials?: any }> = ({ credentials
         setLoadingSwagger(true);
         setShowSwagger(true);
         const isRest = selectedApi.type === 'rest';
-        
+
         // Use a generic stage name for export "prod" or "$default", though AWS can export without it sometimes, it's safer to provide it.
-        const stageName = isRest ? 'prod' : '$default'; 
-        
+        const stageName = isRest ? 'prod' : '$default';
+
         const spec = await exportSwagger(credentials, selectedApi.id, stageName, isRest);
         setSwaggerSpec(spec);
         setLoadingSwagger(false);
@@ -443,10 +512,10 @@ export const ApiGatewayDetails: React.FC<{ credentials?: any }> = ({ credentials
                     </div>
                     <p className="text-sm text-slate-400 font-mono mt-2">API ID: {selectedApi.id}</p>
                 </div>
-                
-                <Button 
-                    variant="outline" 
-                    size="sm" 
+
+                <Button
+                    variant="outline"
+                    size="sm"
                     className="bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-300"
                     onClick={handlePreviewSwagger}
                     disabled={loadingSwagger}

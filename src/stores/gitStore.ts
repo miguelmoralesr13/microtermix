@@ -39,6 +39,7 @@ export interface GitRepoData {
         files: GitStatusEntry[];
         currentBranch: string;
         isMergeInProgress: boolean;
+        isRebaseInProgress?: boolean;
     };
     timeline: {
         commits: RawCommit[];
@@ -136,7 +137,7 @@ const STALE: Record<'branches' | 'status' | 'timeline' | 'aheadBehind', number> 
 export const EMPTY_REPO_DATA: GitRepoData = {
     isGitRepo: null,
     branches: { local: [], remote: [], stashes: [] },
-    status: { files: [], currentBranch: '', isMergeInProgress: false },
+    status: { files: [], currentBranch: '', isMergeInProgress: false, isRebaseInProgress: false },
     timeline: { commits: [], localHashes: [] },
     aheadBehind: null,
     loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
@@ -147,7 +148,7 @@ export const EMPTY_REPO_DATA: GitRepoData = {
 export const defaultRepoData = (): GitRepoData => ({
     isGitRepo: null,
     branches: { local: [], remote: [], stashes: [] },
-    status: { files: [], currentBranch: '', isMergeInProgress: false },
+    status: { files: [], currentBranch: '', isMergeInProgress: false, isRebaseInProgress: false },
     timeline: { commits: [], localHashes: [] },
     aheadBehind: null,
     loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
@@ -337,10 +338,16 @@ export const useGitStore = create<GitStore>()(
                             files: GitStatusEntry[];
                             currentBranch: string;
                             isMergeInProgress: boolean;
+                            isRebaseInProgress: boolean;
                         } = await invoke('git_status_native', { projectPath: path });
 
                         patchRepo(set, path, r => ({
-                            status: { files: res.files, currentBranch: res.currentBranch, isMergeInProgress: res.isMergeInProgress },
+                            status: { 
+                                files: res.files, 
+                                currentBranch: res.currentBranch, 
+                                isMergeInProgress: res.isMergeInProgress,
+                                isRebaseInProgress: res.isRebaseInProgress
+                            },
                             errors: { ...r.errors, status: undefined },
                             lastFetched: { ...r.lastFetched, status: Date.now() },
                         }));
@@ -421,6 +428,7 @@ export const useGitStore = create<GitStore>()(
                 name: 'nexus-git-store',
                 partialize: (s) => ({
                     ui: s.ui,
+                    repoAccounts: s.repoAccounts,
                     cloneFavorites: s.cloneFavorites,
                     repos: Object.fromEntries(
                         Object.entries(s.repos).map(([k, v]) => [

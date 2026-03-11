@@ -8,6 +8,7 @@ import { Button } from './ui/button';
 interface GitConflictModalProps {
     projectPath: string;
     conflictedFiles: string[];
+    isRebase?: boolean;
     onClose: () => void;
     onRefreshAll: () => void;
 }
@@ -15,6 +16,7 @@ interface GitConflictModalProps {
 export const GitConflictModal: React.FC<GitConflictModalProps> = ({
     projectPath,
     conflictedFiles,
+    isRebase,
     onClose,
     onRefreshAll,
 }) => {
@@ -50,8 +52,9 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
         setAborting(true);
         setError(null);
         try {
-            const res: any = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
-            if (!res.success) throw new Error(res.stderr || 'Error al abortar el merge');
+            const action = isRebase ? 'rebase' : 'merge';
+            const res: any = await invoke('git_execute', { projectPath, args: [action, '--abort'] });
+            if (!res.success) throw new Error(res.stderr || `Error al abortar el ${action}`);
             onRefreshAll();
             onClose();
         } catch (e: any) {
@@ -65,13 +68,23 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
         setCommitting(true);
         setError(null);
         try {
-            // --no-edit uses the auto-generated MERGE_MSG (includes merged branch info)
-            const res: any = await invoke('git_execute', { projectPath, args: ['commit', '--no-edit'] });
-            if (!res.success) throw new Error(res.stderr || 'Error al hacer commit del merge');
+            if (isRebase) {
+                // Ensure everything is added
+                await invoke('git_execute', { projectPath, args: ['add', '.'] });
+                // We use -c core.editor=true here because git rebase --continue will open an editor window if there's a commit msg
+                // and freeze the app unless we bypass it or use an inline editor. 
+                // Since `core.editor=true` essentially makes "true" the editor, it exits with 0 immediately using the default message.
+                const res: any = await invoke('git_execute', { projectPath, args: ['-c', 'core.editor=true', 'rebase', '--continue'] });
+                if (!res.success) throw new Error(res.stderr || 'Error al continuar el rebase');
+            } else {
+                // --no-edit uses the auto-generated MERGE_MSG (includes merged branch info)
+                const res: any = await invoke('git_execute', { projectPath, args: ['commit', '--no-edit'] });
+                if (!res.success) throw new Error(res.stderr || 'Error al hacer commit del merge');
+            }
             onRefreshAll();
             onClose();
         } catch (e: any) {
-            setError(e?.toString?.() || 'Error al hacer commit');
+            setError(e?.toString?.() || 'Error al guardar cambios de resolución');
         } finally {
             setCommitting(false);
         }
@@ -87,7 +100,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                         <GitMerge size={18} className="text-orange-400 shrink-0" />
                         <div className="flex-1 min-w-0">
                             <DialogTitle className="text-sm font-bold text-slate-100 flex items-center m-0">
-                                Resolver conflictos de Merge
+                                Resolver conflictos de {isRebase ? 'Rebase' : 'Merge'}
                             </DialogTitle>
                             <DialogDescription className="hidden">Resolver conflictos</DialogDescription>
                             {/* Progress bar */}
@@ -119,7 +132,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                             className="h-8 px-3 bg-red-950 hover:bg-red-900 text-red-400 border border-red-900"
                         >
                             {aborting ? <RefreshCw size={12} className="animate-spin mr-1.5" /> : <AlertTriangle size={12} className="mr-1.5" />}
-                            Abort Merge
+                            Abortar {isRebase ? 'Rebase' : 'Merge'}
                         </Button>
                     </div>
                 </DialogHeader>
@@ -184,7 +197,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                                     ? <RefreshCw size={13} className="animate-spin" />
                                     : <Check size={13} />
                                 }
-                                Commit Merge
+                                {isRebase ? 'Continue Rebase' : 'Commit Merge'}
                             </Button>
                             {!allResolved && (
                                 <p className="text-[10px] text-slate-600 text-center mt-1">

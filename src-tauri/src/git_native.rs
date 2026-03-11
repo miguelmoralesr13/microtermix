@@ -40,6 +40,7 @@ pub struct StatusResult {
     pub files: Vec<StatusEntry>,
     pub current_branch: String,
     pub is_merge_in_progress: bool,
+    pub is_rebase_in_progress: bool,
 }
 
 #[derive(Serialize)]
@@ -196,6 +197,7 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
     };
 
     let is_merge_in_progress = repo.path().join("MERGE_HEAD").exists();
+    let is_rebase_in_progress = repo.path().join("rebase-merge").exists() || repo.path().join("rebase-apply").exists();
 
     let mut opts = StatusOptions::new();
     opts.include_untracked(true)
@@ -227,7 +229,7 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
         });
     }
 
-    Ok(StatusResult { files, current_branch, is_merge_in_progress })
+    Ok(StatusResult { files, current_branch, is_merge_in_progress, is_rebase_in_progress })
 }
 
 fn status_to_xy(s: git2::Status) -> (char, char) {

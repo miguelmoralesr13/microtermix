@@ -47,6 +47,7 @@ export interface RestMethodDetails {
     integration_http_method: string | null;
     integration_uri: string | null;
     integration_timeout: number | null;
+    integration_request_templates: Record<string, string>;
     method_responses: string[];
 }
 
@@ -58,6 +59,7 @@ export interface HttpRouteIntegrationDetails {
     connection_type: string | null;
     payload_format_version: string | null;
     timeout_in_millis: number | null;
+    integration_request_templates: Record<string, string>;
 }
 
 export type SelectedApi =
