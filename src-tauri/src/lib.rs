@@ -314,7 +314,7 @@ pub fn run() {
             apigw_get_http_api_routes,
             apigw_get_http_route_integration,
             apigw_export_api_swagger_rest,
-            apigw_export_api_swagger_http
+            apigw_export_api_swagger_http,
             start_mock_server,
             stop_mock_server,
         ])
