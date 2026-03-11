@@ -12,7 +12,7 @@ export function EpicDetailModal({ epic, onClose }: { epic: JiraIssue; onClose: (
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div
-                className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-xl max-h-[75vh] overflow-y-auto shadow-2xl"
+                className="bg-slate-900 border border-slate-700 rounded-xl w-full sm:max-w-[70vw] max-h-[75vh] overflow-y-auto shadow-2xl"
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-start gap-3 p-4 border-b border-slate-800">

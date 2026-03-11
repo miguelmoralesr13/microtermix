@@ -38,9 +38,11 @@ export function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose
         : typeof fields.description === 'string' ? fields.description
             : fields.description?.content?.[0]?.content?.[0]?.text ?? null;
 
+    const closeAttachment = useCallback(() => setViewingAttachment(null), []);
+
     return (
         <Dialog open={true} onOpenChange={(open) => { if (!open) handleClose(); }}>
-            <DialogContent className="max-w-4xl max-h-[90vh] p-0 flex flex-col overflow-hidden bg-slate-900 border-slate-700 shadow-2xl" showCloseButton={false}>
+            <DialogContent className="sm:max-w-[70vw] max-h-[90vh] p-0 flex flex-col overflow-hidden bg-slate-900 border-slate-700 shadow-2xl" showCloseButton={false}>
                 {/* Header */}
                 <DialogHeader className="p-5 sm:p-6 border-b border-slate-800 shrink-0 bg-slate-900/50 flex-row items-start gap-4 space-y-0">
                     {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-6 h-6 mt-1 shrink-0" />}
@@ -91,7 +93,7 @@ export function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose
                                                 className={`group relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 flex flex-col ${isMedia ? 'cursor-pointer hover:border-nexus-neon/50' : ''}`}>
                                                 <div className="h-24 bg-slate-900 border-b border-slate-800 flex flex-col items-center justify-center p-2">
                                                     {att.thumbnail ? (
-                                                        <AuthenticatedMedia url={att.thumbnail} mimeType="image/png" className="max-w-full max-h-full object-contain" />
+                                                        <AuthenticatedMedia url={att.thumbnail} mimeType="image/png" autoLoad={true} className="max-w-full max-h-full object-contain" />
                                                     ) : isMedia ? (
                                                         <span className="text-xs text-slate-500 uppercase font-bold tracking-widest px-2 text-center break-all">{att.mimeType.split('/')[1]}</span>
                                                     ) : (
@@ -198,7 +200,7 @@ export function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose
                 <AttachmentViewer
                     attachments={detail.attachments.filter(a => a.mimeType.startsWith('image/') || a.mimeType.startsWith('video/'))}
                     initialIndex={detail.attachments.filter(a => a.mimeType.startsWith('image/') || a.mimeType.startsWith('video/')).findIndex(a => a.id === viewingAttachment.id)}
-                    onClose={() => setViewingAttachment(null)}
+                    onClose={closeAttachment}
                 />
             )}
         </Dialog>

@@ -32,7 +32,7 @@ export function TaskDetailModal({ task, onClose, onTransition, onAssign }: {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg max-h-[85vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full sm:max-w-[70vw] max-h-[85vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-start gap-3 p-4 border-b border-slate-800 shrink-0">
                     {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-5 h-5 mt-0.5 shrink-0" />}
