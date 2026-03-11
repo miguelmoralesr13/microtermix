@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import Editor from '@monaco-editor/react';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 export interface FileServerRouteEntry {
     path: string;
@@ -97,6 +98,7 @@ function save(port: number, bindHost: string, routes: FileServerRouteEntry[]) {
 
 export const FileServerPanel: React.FC = () => {
     const saved = loadSaved();
+    const monacoTheme = useMonacoTheme();
     const [running, setRunning] = useState(false);
     const [port, setPort] = useState(saved.port);
     const [routes, setRoutes] = useState<FileServerRouteEntry[]>(
@@ -459,7 +461,7 @@ export const FileServerPanel: React.FC = () => {
                             language={editLang}
                             value={editDraft}
                             onChange={v => setEditDraft(v ?? '')}
-                            theme="vs-dark"
+                            theme={monacoTheme}
                             options={{
                                 fontSize: 13,
                                 minimap: { enabled: false },

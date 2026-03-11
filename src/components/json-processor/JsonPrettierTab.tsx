@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlignLeft, Minimize2, Copy, ShieldCheck, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 type Indent = 'two' | 'four' | 'tab';
 
 export const JsonPrettierTab: React.FC = () => {
+    const monacoTheme = useMonacoTheme();
     const [input, setInput]   = useState('');
     const [output, setOutput] = useState('');
     const [indent, setIndent] = useState<Indent>('two');
@@ -67,7 +69,7 @@ export const JsonPrettierTab: React.FC = () => {
                 <div className="flex-1 min-w-0 border-r border-slate-800 flex flex-col">
                     <div className="shrink-0 px-3 py-1 text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-800 bg-slate-950">Entrada</div>
                     <div className="flex-1 min-h-0">
-                        <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={input}
+                        <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={input}
                             onChange={(v) => setInput(v ?? '')}
                             options={{ minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }} />
                     </div>
@@ -75,7 +77,7 @@ export const JsonPrettierTab: React.FC = () => {
                 <div className="flex-1 min-w-0 flex flex-col">
                     <div className="shrink-0 px-3 py-1 text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-800 bg-slate-950">Resultado</div>
                     <div className="flex-1 min-h-0">
-                        <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={output}
+                        <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={output}
                             options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false }} />
                     </div>
                 </div>

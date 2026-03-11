@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Eye, EyeOff, Copy, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { marked } from 'marked';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 // marked: configuración básica segura
 marked.setOptions({ breaks: true, gfm: true });
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export const NotesEditor: React.FC<Props> = ({ filePath, fileName }) => {
+    const monacoTheme = useMonacoTheme();
     const [content, setContent]     = useState('');
     const [preview, setPreview]     = useState(false);
     const [saving, setSaving]       = useState(false);
@@ -92,7 +94,7 @@ export const NotesEditor: React.FC<Props> = ({ filePath, fileName }) => {
                     <Editor
                         height="100%"
                         defaultLanguage="markdown"
-                        theme="vs-dark"
+                        theme={monacoTheme}
                         value={content}
                         onChange={handleChange}
                         options={{

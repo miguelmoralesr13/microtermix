@@ -5,6 +5,10 @@ import { ServiceManager } from "./components/ServiceManager";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
 import { Toaster } from 'sonner';
+import { registerMonacoThemes } from './lib/monacoThemes';
+
+// Register custom Monaco themes once at app startup
+registerMonacoThemes();
 
 // A wrapper to handle initial workspace loading logic
 function AppContent() {

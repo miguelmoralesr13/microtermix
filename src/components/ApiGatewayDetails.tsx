@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { useApiGatewayStore } from '../stores/useApiGatewayStore';
 import { Badge } from './ui/badge';
-import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, Database, FileJson, X } from 'lucide-react';
+import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, Database, FileJson, X, Download, Copy, CheckCircle2 } from 'lucide-react';
 import SwaggerUI from 'swagger-ui-react';
 import 'swagger-ui-react/swagger-ui.css';
 import { Button } from './ui/button';
+import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import type { RestApiResource, HttpApiRoute, RestMethodDetails, HttpRouteIntegrationDetails } from '../stores/useApiGatewayStore';
 
 interface ApiTreeNode {
@@ -345,7 +348,46 @@ export const ApiGatewayDetails: React.FC<{ credentials?: any }> = ({ credentials
     const [showSwagger, setShowSwagger] = useState(false);
     const [swaggerSpec, setSwaggerSpec] = useState<string | null>(null);
     const [loadingSwagger, setLoadingSwagger] = useState(false);
+    const [copied, setCopied] = useState(false);
     const errorStore = useApiGatewayStore(state => state.error);
+
+    const handleExportJson = async () => {
+        if (!swaggerSpec || !selectedApi) return;
+        try {
+            const path = await saveDialog({
+                title: 'Exportar contrato JSON',
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+                defaultPath: `${selectedApi.name}-api.json`,
+            });
+            if (!path) return;
+            // Pretty-print the JSON
+            const pretty = JSON.stringify(JSON.parse(swaggerSpec), null, 2);
+            await invoke('notes_write_file', { path, content: pretty });
+            toast.success(`Exportado: ${path}`);
+        } catch (e) { toast.error(`Error exportando: ${e}`); }
+    };
+
+    const handleExportYaml = async () => {
+        if (!swaggerSpec || !selectedApi) return;
+        try {
+            const path = await saveDialog({
+                title: 'Exportar contrato YAML',
+                filters: [{ name: 'YAML', extensions: ['yaml', 'yml'] }],
+                defaultPath: `${selectedApi.name}-api.yaml`,
+            });
+            if (!path) return;
+            const yaml = await invoke<string>('json_convert_format', { input: swaggerSpec, target: 'yaml' });
+            await invoke('notes_write_file', { path, content: yaml });
+            toast.success(`Exportado: ${path}`);
+        } catch (e) { toast.error(`Error exportando: ${e}`); }
+    };
+
+    const handleCopy = () => {
+        if (!swaggerSpec) return;
+        navigator.clipboard.writeText(swaggerSpec);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
     const handlePreviewSwagger = async () => {
         if (!selectedApi || !credentials) return;
@@ -421,9 +463,33 @@ export const ApiGatewayDetails: React.FC<{ credentials?: any }> = ({ credentials
                         <h3 className="text-white font-semibold flex items-center gap-2">
                             <span className="text-sky-400">Swagger UI</span> - {selectedApi.name}
                         </h3>
-                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white" onClick={() => setShowSwagger(false)}>
-                            <X size={20} />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            {swaggerSpec && (
+                                <>
+                                    <Button size="sm" variant="ghost"
+                                        onClick={handleCopy}
+                                        className="h-7 text-xs gap-1 text-slate-400 hover:text-slate-100">
+                                        {copied
+                                            ? <><CheckCircle2 size={13} className="text-emerald-400" /> Copiado</>
+                                            : <><Copy size={13} /> Copiar JSON</>}
+                                    </Button>
+                                    <Button size="sm" variant="ghost"
+                                        onClick={handleExportJson}
+                                        className="h-7 text-xs gap-1 text-slate-400 hover:text-slate-100">
+                                        <Download size={13} /> JSON
+                                    </Button>
+                                    <Button size="sm" variant="ghost"
+                                        onClick={handleExportYaml}
+                                        className="h-7 text-xs gap-1 text-slate-400 hover:text-slate-100">
+                                        <Download size={13} /> YAML
+                                    </Button>
+                                    <div className="w-px h-5 bg-slate-700 mx-1" />
+                                </>
+                            )}
+                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white" onClick={() => setShowSwagger(false)}>
+                                <X size={20} />
+                            </Button>
+                        </div>
                     </div>
                     <div className="flex-1 overflow-y-auto bg-white swagger-container p-4">
                         {loadingSwagger ? (

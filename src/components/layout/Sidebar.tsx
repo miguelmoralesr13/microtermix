@@ -1,6 +1,6 @@
 import React from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen } from 'lucide-react';
+import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();
@@ -19,7 +19,7 @@ export const Sidebar: React.FC = () => {
     };
 
     return (
-        <div className="w-12 h-full bg-slate-950 flex flex-col items-center py-2 border-r border-slate-800 shrink-0 gap-1 relative z-20">
+        <div className="w-12 h-full bg-slate-950 flex flex-col items-center py-2 border-r border-slate-800 shrink-0 gap-1 relative z-20 overflow-y-auto">
             {renderNavIcon('services', Server, "Services & Terminals")}
             {renderNavIcon('commands', TerminalSquare, "Commands")}
             {renderNavIcon('tests', FlaskConical, "Tests & Coverage")}
@@ -36,6 +36,7 @@ export const Sidebar: React.FC = () => {
             {renderNavIcon('mocks', Ghost, "Servidor de Mocks")}
             {renderNavIcon('json-processor', Braces, "JSON Processor")}
             {renderNavIcon('notes', NotebookPen, "Notas Markdown")}
+            {renderNavIcon('swagger', FileCode2, "Swagger / OpenAPI Editor")}
         </div>
     );
 };

@@ -3,8 +3,10 @@ import Editor from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { GitBranch, ShieldCheck } from 'lucide-react';
 import { JsonTreeNode } from './JsonTreeNode';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 export const JsonTreeViewTab: React.FC = () => {
+    const monacoTheme = useMonacoTheme();
     const [input, setInput]   = useState('');
     const [parsed, setParsed] = useState<unknown>(null);
     const [error, setError]   = useState<string | null>(null);
@@ -31,7 +33,7 @@ export const JsonTreeViewTab: React.FC = () => {
                     </Button>
                 </div>
                 <div className="flex-1 min-h-0">
-                    <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={input}
+                    <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={input}
                         onChange={(v) => setInput(v ?? '')}
                         options={{ minimap: { enabled: false }, fontSize: 13 }} />
                 </div>

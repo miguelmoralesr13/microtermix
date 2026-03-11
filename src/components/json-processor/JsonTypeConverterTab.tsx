@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Wand2, Copy, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 type Lang = 'typescript' | 'csharp' | 'go' | 'python';
 
@@ -24,6 +25,7 @@ const MONACO_LANG: Record<Lang, string> = {
 };
 
 export const JsonTypeConverterTab: React.FC = () => {
+    const monacoTheme = useMonacoTheme();
     const [input, setInput]       = useState('');
     const [output, setOutput]     = useState('');
     const [lang, setLang]         = useState<Lang>('typescript');
@@ -83,7 +85,7 @@ export const JsonTypeConverterTab: React.FC = () => {
                 <div className="flex-1 min-w-0 border-r border-slate-800 flex flex-col">
                     <div className="shrink-0 px-3 py-1 text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-800 bg-slate-950">JSON entrada</div>
                     <div className="flex-1 min-h-0">
-                        <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={input}
+                        <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={input}
                             onChange={(v) => setInput(v ?? '')}
                             options={{ minimap: { enabled: false }, fontSize: 13 }} />
                     </div>
@@ -91,7 +93,7 @@ export const JsonTypeConverterTab: React.FC = () => {
                 <div className="flex-1 min-w-0 flex flex-col">
                     <div className="shrink-0 px-3 py-1 text-[11px] text-slate-500 uppercase tracking-widest border-b border-slate-800 bg-slate-950">Código generado</div>
                     <div className="flex-1 min-h-0">
-                        <Editor height="100%" language={MONACO_LANG[lang]} theme="vs-dark" value={output}
+                        <Editor height="100%" language={MONACO_LANG[lang]} theme={monacoTheme} value={output}
                             options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }} />
                     </div>
                 </div>

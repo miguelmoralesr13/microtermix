@@ -3,6 +3,7 @@ import { Lock, Unlock, Copy, ArrowLeftRight, ChevronDown, ChevronRight, Trash2 }
 import Editor from '@monaco-editor/react';
 import { cipherUtils, CipherProperties } from 'lib-cipher';
 import { LibCipherKeysPanel, LCAlgorithm, LCKeyPair } from './LibCipherKeysPanel';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 const ALGORITHMS: { id: LCAlgorithm; label: string }[] = [
     { id: 'ECIES',      label: 'ECIES' },
@@ -123,6 +124,7 @@ interface LibCipherJsonTabProps {
 export const LibCipherJsonTab: React.FC<LibCipherJsonTabProps> = ({
     activeAlgorithm, onAlgorithmChange, keysByAlgorithm, onKeysChange,
 }) => {
+    const monacoTheme = useMonacoTheme();
     const [mode, setMode] = useState<'encrypt' | 'decrypt'>('decrypt');
 
     const [encData,  setEncData]  = useState(() => localStorage.getItem('lc-enc-data')  ?? DEFAULT_DATA_ENCRYPT);
@@ -341,7 +343,7 @@ export const LibCipherJsonTab: React.FC<LibCipherJsonTabProps> = ({
                             <div className="flex flex-col flex-[3] min-h-0 gap-1">
                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest shrink-0">Data Payload (JSON)</label>
                                 <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-700">
-                                    <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={encData}
+                                    <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={encData}
                                         onChange={v => { const s = v ?? ''; setEncData(s); localStorage.setItem('lc-enc-data', s); }}
                                         options={MONACO_OPTS} />
                                 </div>
@@ -352,7 +354,7 @@ export const LibCipherJsonTab: React.FC<LibCipherJsonTabProps> = ({
                                     <span className="text-[10px] text-slate-600 font-mono">— JSON espejo con <code className="text-violet-400">true</code> en campos a cifrar</span>
                                 </div>
                                 <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-violet-800/40">
-                                    <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={encProps}
+                                    <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={encProps}
                                         onChange={v => { const s = v ?? ''; setEncProps(s); localStorage.setItem('lc-enc-props', s); }}
                                         options={MONACO_OPTS} />
                                 </div>
@@ -368,7 +370,7 @@ export const LibCipherJsonTab: React.FC<LibCipherJsonTabProps> = ({
                                 <span className="text-[10px] text-slate-600">— JSON o valor suelto, descifra todos los strings</span>
                             </div>
                             <div className="flex-1 min-h-0 rounded-lg overflow-hidden border border-slate-700">
-                                <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={decData}
+                                <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={decData}
                                     onChange={v => { const s = v ?? ''; setDecData(s); localStorage.setItem('lc-dec-data', s); }}
                                     options={MONACO_OPTS} />
                             </div>
@@ -397,7 +399,7 @@ export const LibCipherJsonTab: React.FC<LibCipherJsonTabProps> = ({
                             )}
                         </div>
                         <div className={`flex-1 min-h-0 rounded-lg overflow-hidden border ${error ? 'border-red-500/40' : 'border-slate-700'}`}>
-                            <Editor height="100%" defaultLanguage="json" theme="vs-dark" value={outputValue}
+                            <Editor height="100%" defaultLanguage="json" theme={monacoTheme} value={outputValue}
                                 options={{ ...MONACO_OPTS, readOnly: true }} />
                         </div>
 

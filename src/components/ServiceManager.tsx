@@ -21,6 +21,7 @@ import { LibCipherPanel } from './LibCipherPanel';
 import { MockPanel } from './mocks/MockPanel';
 import { JsonProcessorPanel } from './json-processor/JsonProcessorPanel';
 import { NotesPanel } from './notes/NotesPanel';
+import { SwaggerPanel } from './swagger/SwaggerPanel';
 import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
 import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -565,6 +566,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'notes' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <NotesPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'swagger' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <SwaggerPanel />
                         </div>
                     )}
 

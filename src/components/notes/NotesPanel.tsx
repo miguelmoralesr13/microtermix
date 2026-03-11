@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { NotebookPen, FolderOpen, Pencil, Check, X } from 'lucide-react';
@@ -8,12 +8,16 @@ import { toast } from 'sonner';
 import { NotesSidebar } from './NotesSidebar';
 import { NotesEditor } from './NotesEditor';
 import { type NoteEntry } from './NotesTreeNode';
+import { useWorkspace } from '@/context/WorkspaceContext';
 
 const STORAGE_KEY = 'nexus-notes-base-path';
-const DEFAULT_DIR = 'notes-md';
-
+const DEFAULT_SUBDIR = 'notes-md';
+const SIDEBAR_MIN = 140;
+const SIDEBAR_MAX = 500;
 
 export const NotesPanel: React.FC = () => {
+    const { state: wsState } = useWorkspace();
+
     const [basePath, setBasePath] = useState<string>(() => {
         try { return localStorage.getItem(STORAGE_KEY) || ''; } catch { return ''; }
     });
@@ -21,6 +25,34 @@ export const NotesPanel: React.FC = () => {
     const [pathInput, setPathInput]       = useState('');
     const [entries, setEntries]           = useState<NoteEntry[]>([]);
     const [activeFile, setActiveFile]     = useState<string | null>(null);
+
+    // Sidebar resize
+    const [sidebarWidth, setSidebarWidth] = useState(224); // w-56 = 224px
+    const containerRef = useRef<HTMLDivElement>(null);
+    const draggingRef  = useRef(false);
+
+    const onResizeStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        draggingRef.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMove = (ev: MouseEvent) => {
+            if (!draggingRef.current || !containerRef.current) return;
+            const rect = containerRef.current.getBoundingClientRect();
+            const newW = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX - rect.left));
+            setSidebarWidth(newW);
+        };
+        const onUp = () => {
+            draggingRef.current = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
 
     // Cargar directorio
     const refresh = useCallback(async (bp?: string) => {
@@ -34,14 +66,15 @@ export const NotesPanel: React.FC = () => {
         }
     }, [basePath]);
 
-    // Al montar, si no hay basePath intentar usar el home + notes-md
+    // Al montar: si no hay path guardado, usar workspace + notes-md
     useEffect(() => {
         if (!basePath) {
-            // Obtener home vía Tauri (fallback a /tmp/notes-md)
-            const fallback = `${DEFAULT_DIR}`;
-            setBasePath(fallback);
-            localStorage.setItem(STORAGE_KEY, fallback);
-            refresh(fallback);
+            const workspaceBase = wsState.currentPath
+                ? `${wsState.currentPath}/${DEFAULT_SUBDIR}`
+                : DEFAULT_SUBDIR;
+            setBasePath(workspaceBase);
+            localStorage.setItem(STORAGE_KEY, workspaceBase);
+            refresh(workspaceBase);
         } else {
             refresh(basePath);
         }
@@ -137,7 +170,7 @@ export const NotesPanel: React.FC = () => {
                         </>
                     ) : (
                         <>
-                            <span className="text-xs text-slate-500 font-mono truncate max-w-xs">{basePath || DEFAULT_DIR}</span>
+                            <span className="text-xs text-slate-500 font-mono truncate max-w-xs">{basePath || DEFAULT_SUBDIR}</span>
                             <Button size="icon-xs" variant="ghost" title="Editar ruta"
                                 onClick={() => { setPathInput(basePath); setEditingPath(true); }}
                                 className="h-6 w-6 text-slate-500 hover:text-slate-200 shrink-0">
@@ -154,9 +187,12 @@ export const NotesPanel: React.FC = () => {
             </div>
 
             {/* Layout: sidebar + editor */}
-            <div className="flex-1 min-h-0 flex overflow-hidden">
+            <div ref={containerRef} className="flex-1 min-h-0 flex overflow-hidden">
                 {/* Sidebar */}
-                <div className="w-56 shrink-0 border-r border-slate-800 overflow-hidden flex flex-col">
+                <div
+                    style={{ width: sidebarWidth, minWidth: sidebarWidth }}
+                    className="shrink-0 border-r border-slate-800 overflow-hidden flex flex-col"
+                >
                     <NotesSidebar
                         entries={entries}
                         activeFile={activeFile}
@@ -169,6 +205,12 @@ export const NotesPanel: React.FC = () => {
                         onRefresh={refresh}
                     />
                 </div>
+
+                {/* Drag handle */}
+                <div
+                    onMouseDown={onResizeStart}
+                    className="w-1 shrink-0 cursor-col-resize bg-slate-800 hover:bg-violet-500/50 transition-colors"
+                />
 
                 {/* Editor */}
                 <div className="flex-1 min-w-0 overflow-hidden">

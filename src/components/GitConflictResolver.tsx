@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { Check, X, GitMerge, AlertCircle, Save, RefreshCw, Undo, RotateCcw } from 'lucide-react';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 interface GitConflictResolverProps {
     projectPath: string;
@@ -66,6 +67,7 @@ const parseConflictBlocks = (text: string): ConflictBlock[] => {
 };
 
 export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projectPath, file, onClose, onRefreshRequest, onSaved, showCloseButton }) => {
+    const monacoTheme = useMonacoTheme();
     const [fileContent, setFileContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -365,7 +367,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 <Editor
                     height="100%"
                     language={getMonacoLanguage(file)}
-                    theme="vs-dark"
+                    theme={monacoTheme}
                     value={fileContent}
                     onChange={(val) => {
                         setFileContent(val || '');

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
 import { CheckCircle2, XCircle, ShieldCheck } from 'lucide-react';
+import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
 function suggestFix(msg: string): string {
     if (msg.includes('Unexpected token'))  return 'Puede faltar una coma, comilla, o haya un carácter inválido.';
@@ -17,6 +18,7 @@ function errorLine(msg: string, input: string): number {
 }
 
 export const JsonValidatorTab: React.FC = () => {
+    const monacoTheme = useMonacoTheme();
     const [status, setStatus]       = useState<'idle' | 'valid' | 'invalid'>('idle');
     const [errorInfo, setErrorInfo] = useState<{ msg: string; line: number } | null>(null);
     const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
@@ -76,7 +78,7 @@ export const JsonValidatorTab: React.FC = () => {
                 <Editor
                     height="100%"
                     defaultLanguage="json"
-                    theme="vs-dark"
+                    theme={monacoTheme}
                     onChange={handleChange}
                     onMount={(editor, monaco) => { editorRef.current = editor; monacoRef.current = monaco; }}
                     options={{ minimap: { enabled: false }, fontSize: 13, glyphMargin: true, scrollBeyondLastLine: false }}
