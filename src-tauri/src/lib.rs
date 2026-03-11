@@ -13,6 +13,7 @@ mod ssm;
 mod crypto;
 mod mock_server;
 mod apigateway;
+mod json_processor;
 
 use std::fs;
 use std::path::Path;
@@ -317,6 +318,15 @@ pub fn run() {
             apigw_export_api_swagger_http,
             start_mock_server,
             stop_mock_server,
+            json_processor::json_format,
+            json_processor::json_minify,
+            json_processor::json_validate,
+            json_processor::json_flatten,
+            json_processor::json_generate_types,
+            json_processor::json_convert_format,
+            json_processor::yaml_to_json_cmd,
+            json_processor::json_query_path,
+            json_processor::json_diff,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
