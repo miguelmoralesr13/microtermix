@@ -10,8 +10,10 @@ import {
     fetchGitlabMRCommits, fetchGitlabMRChanges,
     type GitlabMRCommit, type GitlabMRChange,
 } from '../services/gitlabApi';
+import { useGitStore } from '../stores/gitStore';
 import type { GitAccount } from '../stores/gitStore';
 import type { NormalizedPR } from './PRSection';
+import { invoke } from '@tauri-apps/api/core';
 
 interface MergePRModalProps {
     pr: NormalizedPR;
@@ -72,9 +74,12 @@ export const MergePRModal: React.FC<MergePRModalProps> = ({ pr, projectPath, acc
     const [showMessage, setShowMessage] = useState(false);
 
     // Actions
-    const [actionLoading, setActionLoading] = useState<'merge' | 'close' | null>(null);
+    const [actionLoading, setActionLoading] = useState<'merge' | 'close' | 'resolveLocally' | null>(null);
     const [actionError, setActionError]     = useState<string | null>(null);
-    const [result, setResult]               = useState<'merged' | 'closed' | null>(null);
+    const [result, setResult]               = useState<'merged' | 'closed' | 'resolving' | null>(null);
+
+    const invalidate = useGitStore(s => s.invalidate);
+    const fetchAll = useGitStore(s => s.fetchAll);
 
     useEffect(() => {
         (async () => {
@@ -149,6 +154,34 @@ export const MergePRModal: React.FC<MergePRModalProps> = ({ pr, projectPath, acc
             onMerged(); // refresh list
         } catch (e: any) {
             setActionError(e.message || 'Error al cerrar');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleResolveLocally = async () => {
+        setActionLoading('resolveLocally');
+        setActionError(null);
+        try {
+            await invoke('git_execute', { projectPath, args: ['fetch', 'origin'] });
+            await invoke('git_execute', { projectPath, args: ['checkout', pr.headBranch] });
+            await invoke('git_execute', { projectPath, args: ['pull'] });
+            const mergeResult: any = await invoke('git_execute', { projectPath, args: ['merge', `origin/${pr.baseBranch}`] });
+            
+            if (mergeResult && !mergeResult.success && (mergeResult.stderr?.includes('conflict') || mergeResult.stderr?.includes('Conflict'))) {
+                console.log("[MergePRModal] Detected conflict during local resolution, deferring to conflict resolution UI");
+            } else if (!mergeResult.success && mergeResult.stderr) {
+                throw new Error(mergeResult.stderr);
+            }
+
+            // Force refresh so GitPanel detects MERGE_HEAD
+            invalidate(projectPath, 'status');
+            fetchAll(projectPath, true);
+            
+            setResult('resolving');
+            onClose(); // Just close to reveal the UI below
+        } catch (e: any) {
+            setActionError(e.message || 'Error al resolver localmente');
         } finally {
             setActionLoading(null);
         }
@@ -358,6 +391,15 @@ export const MergePRModal: React.FC<MergePRModalProps> = ({ pr, projectPath, acc
                         <button onClick={onClose} disabled={!!actionLoading}
                             className="px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-50 transition-colors">
                             Cancelar
+                        </button>
+                        <button
+                            onClick={handleResolveLocally}
+                            disabled={!!actionLoading}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-cyan-800/40 bg-cyan-900/20 text-cyan-400 hover:bg-cyan-900/40 hover:text-cyan-300 disabled:opacity-50 transition-colors"
+                            title="Haz checkout a la rama y fuerza el merge para resolver conflictos en Nexus"
+                        >
+                            {actionLoading === 'resolveLocally' ? <RefreshCw size={11} className="animate-spin" /> : <GitMerge size={11} />}
+                            Resolver localmente
                         </button>
                         <button
                             onClick={handleMerge}

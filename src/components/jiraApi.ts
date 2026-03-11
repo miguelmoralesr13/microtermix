@@ -48,6 +48,8 @@ export interface JiraConfig {
     epicType: string;            // issue type name for Business Stories (default: "Epic")
     storyType: string;           // issue type name for Technical Stories (default: "Story")
     taskType: string;            // issue type name for Tasks (default: "Task")
+    defectType?: string;         // issue type name for Defects (default: "Defect")
+    defectProjects?: string[];   // Project keys to search for defects (e.g. ["NTCQA", "BUGS"]); empty = search all projects
     activityFieldId: string;     // custom field ID for Type of Activity (e.g. "customfield_10115")
     activityId: string;          // option ID of the activity value (e.g. "10301")
     activityValue: string;       // label of the activity value (e.g. "Development")
@@ -75,6 +77,8 @@ export const emptyConfig = (): JiraConfig => ({
     epicType: 'Epic',
     storyType: 'Story',
     taskType: 'Task',
+    defectType: 'Defect',
+    defectProjects: [],
     activityFieldId: '',
     activityId: '',
     activityValue: 'Development',
@@ -375,7 +379,7 @@ export interface JiraIssue {
     fields: {
         summary: string;
         status: { name: string; statusCategory: { colorName: string } };
-        issuetype: { name: string; iconUrl: string };
+        issuetype: { name: string; iconUrl: string; subtask?: boolean };
         priority: { name: string; iconUrl: string };
         assignee: { accountId: string; displayName: string; avatarUrls: Record<string, string> } | null;
         labels: string[];
@@ -461,8 +465,42 @@ export async function getStoriesByEpic(epicKey: string): Promise<JiraIssue[]> {
     const cfg = loadConfig();
     const storyType = cfg.storyType || 'Story';
     const proj = cfg.storiesProject || cfg.defaultProject;
-    const jql = `project = "${proj}" AND issuetype = "${storyType}" AND parent = "${epicKey}" ORDER BY updated DESC`;
+    const jql = `project = "${proj}" AND issuetype = "${storyType}" AND (parent = "${epicKey}" OR "Epic Link" = "${epicKey}") ORDER BY updated DESC`;
     return searchIssues(jql, 100);
+}
+
+export async function getLinkedDefects(parentKey: string): Promise<JiraIssue[]> {
+    const cfg = loadConfig();
+    const projects = (cfg.defectProjects ?? []).filter(p => p.trim());
+    const defectType = (cfg.defectType ?? '').trim().toLowerCase();
+
+    // Fetch the parent issue's issuelinks field — this is what Jira shows as "Linked work items"
+    const data = await jiraFetch(`/issue/${parentKey}?fields=issuelinks`);
+    const links: any[] = data?.fields?.issuelinks ?? [];
+
+    console.log(`[getLinkedDefects] ${parentKey}: ${links.length} links raw`, links);
+
+    // Each link has either inwardIssue or outwardIssue — collect all
+    const allLinked: JiraIssue[] = [];
+    for (const link of links) {
+        const issue = link.outwardIssue ?? link.inwardIssue;
+        if (issue) {
+            console.log(`  → linked: ${issue.key} type="${issue.fields?.issuetype?.name}" project="${issue.key.split('-')[0]}"`);
+            allLinked.push(issue);
+        }
+    }
+
+    console.log(`[getLinkedDefects] defectType="${defectType}" defectProjects=${JSON.stringify(projects)}`);
+
+    // Temporarily return ALL linked issues to diagnose — filtering skipped
+    // TODO: re-enable filtering once we confirm data arrives correctly
+    return allLinked;
+}
+
+export function isReleased(issue: JiraIssue): boolean {
+    const cfg = loadConfig();
+    const statuses = (cfg.releasedStatuses ?? ['Released', 'Discarded']).map(s => s.toLowerCase().trim());
+    return statuses.includes(issue.fields.status.name.toLowerCase());
 }
 
 export async function getTasksByStory(storyKey: string): Promise<JiraIssue[]> {
