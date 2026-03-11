@@ -3,27 +3,27 @@ import {
     Braces, AlignLeft, CheckCircle2, Code2, GitBranch,
     Search, ArrowLeftRight, GitCompareArrows, SquarePen, Table2,
 } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { JsonPrettierTab }      from './JsonPrettierTab';
-import { JsonValidatorTab }     from './JsonValidatorTab';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { JsonPrettierTab } from './JsonPrettierTab';
+import { JsonValidatorTab } from './JsonValidatorTab';
 import { JsonTypeConverterTab } from './JsonTypeConverterTab';
-import { JsonTreeViewTab }      from './JsonTreeViewTab';
-import { JsonPathTab }          from './JsonPathTab';
-import { JsonFormatTab }        from './JsonFormatTab';
-import { JsonDiffTab }          from './JsonDiffTab';
-import { JsonNodeEditorTab }    from './JsonNodeEditorTab';
-import { JsonFlatTab }          from './JsonFlatTab';
+import { JsonTreeViewTab } from './JsonTreeViewTab';
+import { JsonPathTab } from './JsonPathTab';
+import { JsonFormatTab } from './JsonFormatTab';
+import { JsonDiffTab } from './JsonDiffTab';
+import { JsonNodeEditorTab } from './JsonNodeEditorTab';
+import { JsonFlatTab } from './JsonFlatTab';
 
 const TABS = [
-    { id: 'prettier',  label: 'Prettier',      Icon: AlignLeft },
-    { id: 'validator', label: 'Validador',      Icon: CheckCircle2 },
-    { id: 'converter', label: 'Tipos',          Icon: Code2 },
-    { id: 'tree',      label: 'Tree View',      Icon: GitBranch },
-    { id: 'jsonpath',  label: 'JSONPath',       Icon: Search },
-    { id: 'format',    label: 'Formatos',       Icon: ArrowLeftRight },
-    { id: 'diff',      label: 'Diff',           Icon: GitCompareArrows },
-    { id: 'nodes',     label: 'Editor Visual',  Icon: SquarePen },
-    { id: 'flat',      label: 'Aplanar',        Icon: Table2 },
+    { id: 'prettier', label: 'Prettier', Icon: AlignLeft },
+    { id: 'validator', label: 'Validador', Icon: CheckCircle2 },
+    { id: 'converter', label: 'Tipos', Icon: Code2 },
+    { id: 'tree', label: 'Tree View', Icon: GitBranch },
+    { id: 'jsonpath', label: 'JSONPath', Icon: Search },
+    { id: 'format', label: 'Formatos', Icon: ArrowLeftRight },
+    { id: 'diff', label: 'Diff', Icon: GitCompareArrows },
+    { id: 'nodes', label: 'Editor Visual', Icon: SquarePen },
+    { id: 'flat', label: 'Aplanar', Icon: Table2 },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -63,15 +63,15 @@ export const JsonProcessorPanel: React.FC = () => {
 
             {/* Content */}
             <div className="flex-1 min-h-0 overflow-hidden">
-                {active === 'prettier'  && <JsonPrettierTab />}
+                {active === 'prettier' && <JsonPrettierTab />}
                 {active === 'validator' && <JsonValidatorTab />}
                 {active === 'converter' && <JsonTypeConverterTab />}
-                {active === 'tree'      && <JsonTreeViewTab />}
-                {active === 'jsonpath'  && <JsonPathTab />}
-                {active === 'format'    && <JsonFormatTab />}
-                {active === 'diff'      && <JsonDiffTab />}
-                {active === 'nodes'     && <JsonNodeEditorTab />}
-                {active === 'flat'      && <JsonFlatTab />}
+                {active === 'tree' && <JsonTreeViewTab />}
+                {active === 'jsonpath' && <JsonPathTab />}
+                {active === 'format' && <JsonFormatTab />}
+                {active === 'diff' && <JsonDiffTab />}
+                {active === 'nodes' && <JsonNodeEditorTab />}
+                {active === 'flat' && <JsonFlatTab />}
             </div>
         </div>
     );

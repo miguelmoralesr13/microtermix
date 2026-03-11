@@ -144,6 +144,30 @@ body {
   overflow-y: visible;
 }
 
+/* ── Scrollbar delgado global (Chromium / Tauri WebView) ─── */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+/* ── Sin scrollbar (para contenedores con indicadores propios) ─── */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* ── Swagger UI: reset inside white preview pane ─── */
 .swagger-ui .wrapper { max-width: 100%; padding: 0 16px; }
 .swagger-ui .info { margin: 16px 0 8px; }
