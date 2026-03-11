@@ -20,6 +20,7 @@ import { JenkinsPanel } from './JenkinsPanel';
 import { LibCipherPanel } from './LibCipherPanel';
 import { MockPanel } from './mocks/MockPanel';
 import { JsonProcessorPanel } from './json-processor/JsonProcessorPanel';
+import { NotesPanel } from './notes/NotesPanel';
 import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
 import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -558,6 +559,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'json-processor' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <JsonProcessorPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'notes' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <NotesPanel />
                         </div>
                     )}
 

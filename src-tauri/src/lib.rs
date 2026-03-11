@@ -14,6 +14,7 @@ mod crypto;
 mod mock_server;
 mod apigateway;
 mod json_processor;
+mod notes;
 
 use std::fs;
 use std::path::Path;
@@ -327,6 +328,12 @@ pub fn run() {
             json_processor::yaml_to_json_cmd,
             json_processor::json_query_path,
             json_processor::json_diff,
+            notes::notes_scan_dir,
+            notes::notes_write_file,
+            notes::notes_create_file,
+            notes::notes_create_folder,
+            notes::notes_delete_entry,
+            notes::notes_rename_entry,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
