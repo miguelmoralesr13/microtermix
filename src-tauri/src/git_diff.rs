@@ -237,44 +237,6 @@ fn git2_commit(project_path: &str, args: &[String]) -> Result<GitResult, String>
     })
 }
 
-fn git2_checkout(project_path: &str, args: &[String]) -> Result<GitResult, String> {
-    use git2::{Repository, build::CheckoutBuilder};
-
-    let repo = Repository::discover(project_path).map_err(|e| e.to_string())?;
-    // args: ["checkout", "<branch>"] or ["checkout", "-b", "<branch>"]
-    let mut new_branch = false;
-    let mut branch_name = String::new();
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "checkout" => {}
-            "-b" => { new_branch = true; }
-            b => { branch_name = b.to_string(); }
-        }
-        i += 1;
-    }
-    if branch_name.is_empty() {
-        return Err("checkout: no branch name provided".into());
-    }
-
-    if new_branch {
-        let head = repo.head().map_err(|e| e.to_string())?.peel_to_commit().map_err(|e| e.to_string())?;
-        let _branch = repo.branch(&branch_name, &head, false).map_err(|e| e.to_string())?;
-    }
-
-    let (object, reference) = repo.revparse_ext(&branch_name).map_err(|e| e.to_string())?;
-    repo.checkout_tree(&object, Some(CheckoutBuilder::new().safe())).map_err(|e| e.to_string())?;
-    match reference {
-        Some(r) => repo.set_head(r.name().unwrap_or("HEAD")).map_err(|e| e.to_string())?,
-        None => repo.set_head_detached(object.id()).map_err(|e| e.to_string())?,
-    }
-
-    Ok(GitResult {
-        stdout: format!("Switched to branch '{}'", branch_name),
-        stderr: String::new(),
-        success: true,
-    })
-}
 
 fn git2_branch_delete(project_path: &str, args: &[String]) -> Result<GitResult, String> {
     use git2::{Repository, BranchType};
@@ -505,13 +467,7 @@ pub async fn git_execute_impl(
                 move || git2_commit(&p, &a)
             }).await.map_err(|e| e.to_string())?
         }
-        "checkout" => {
-            tokio::task::spawn_blocking({
-                let p = project_path.clone();
-                let a = args.clone();
-                move || git2_checkout(&p, &a)
-            }).await.map_err(|e| e.to_string())?
-        }
+        "checkout" => git_cli_fallback(&app_handle, &project_path, &args).await,
         "branch" if args.iter().any(|a| a == "-d" || a == "-D") => {
             tokio::task::spawn_blocking({
                 let p = project_path.clone();
@@ -520,13 +476,7 @@ pub async fn git_execute_impl(
             }).await.map_err(|e| e.to_string())?
         }
         "fetch" => git2_fetch_native(&project_path).await,
-        "pull" => {
-            if args.len() > 1 {
-                git_cli_fallback(&app_handle, &project_path, &args).await
-            } else {
-                git2_pull_native(&project_path).await
-            }
-        },
+        "pull" => git_cli_fallback(&app_handle, &project_path, &args).await,
         "push" => git2_push_native(&project_path, &args).await,
 
         // ── Fallback for everything else (add, reset, stash, rebase, merge…) ──

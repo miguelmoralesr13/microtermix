@@ -4,6 +4,8 @@ import { GitMerge, AlertTriangle, Check, RefreshCw, X } from 'lucide-react';
 import { GitConflictResolver } from './GitConflictResolver';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
+import { Label } from './ui/label';
 
 interface GitConflictModalProps {
     projectPath: string;
@@ -24,7 +26,23 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
     const [resolvedFiles, setResolvedFiles] = useState<Set<string>>(new Set());
     const [aborting, setAborting] = useState(false);
     const [committing, setCommitting] = useState(false);
+    const [commitMessage, setCommitMessage] = useState('');
     const [error, setError] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (!isRebase && projectPath) {
+            const loadMergeMsg = async () => {
+                try {
+                    // Try to read .git/MERGE_MSG for a default merge message
+                    const msg = await invoke('read_file_at_path', { path: `${projectPath}/.git/MERGE_MSG` });
+                    if (msg) setCommitMessage(msg as string);
+                } catch {
+                    // Fail silently, message remains empty or default
+                }
+            };
+            loadMergeMsg();
+        }
+    }, [isRebase, projectPath]);
 
     React.useEffect(() => {
         const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -32,10 +50,18 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
         return () => window.removeEventListener('keydown', handler);
     }, [onClose]);
 
-    const allResolved = conflictedFiles.length > 0 && conflictedFiles.every(f => resolvedFiles.has(f));
+    const allResolved = conflictedFiles.every(f => resolvedFiles.has(f));
     const progress = conflictedFiles.length > 0
         ? (resolvedFiles.size / conflictedFiles.length) * 100
-        : 0;
+        : 100;
+
+    // Fix: If the active file disappears from conflictedFiles (due to store sync), 
+    // select the next available one.
+    React.useEffect(() => {
+        if (conflictedFiles.length > 0 && !conflictedFiles.includes(selectedFile)) {
+            setSelectedFile(conflictedFiles[0]);
+        }
+    }, [conflictedFiles, selectedFile]);
 
     const handleFileSaved = (file: string) => {
         setResolvedFiles(prev => {
@@ -46,6 +72,8 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
             if (nextFile) setSelectedFile(nextFile);
             return next;
         });
+        // Force global store refresh so the file moves from 'UU' to 'M'
+        onRefreshAll();
     };
 
     const handleAbortClick = async () => {
@@ -71,14 +99,40 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
             if (isRebase) {
                 // Ensure everything is added
                 await invoke('git_execute', { projectPath, args: ['add', '.'] });
-                // We use -c core.editor=true here because git rebase --continue will open an editor window if there's a commit msg
-                // and freeze the app unless we bypass it or use an inline editor. 
-                // Since `core.editor=true` essentially makes "true" the editor, it exits with 0 immediately using the default message.
-                const res: any = await invoke('git_execute', { projectPath, args: ['-c', 'core.editor=true', 'rebase', '--continue'] });
-                if (!res.success) throw new Error(res.stderr || 'Error al continuar el rebase');
+                
+                if (commitMessage.trim()) {
+                    // To change the message during rebase continue, we use the same editor trick as reword
+                    // but we apply it to rebase --continue.
+                    const msgPath = `${projectPath}/.nexus_rebase_msg.txt`;
+                    await invoke('write_file_content', { base: projectPath, file: '.nexus_rebase_msg.txt', content: commitMessage });
+                    
+                    const isWindows = navigator.userAgent.includes('Windows');
+                    const editorScript = isWindows 
+                        ? `@echo off\r\npowershell -Command "Set-Content -Path '%1' -Value (Get-Content -Raw '${msgPath.replace(/\\/g, '/')}')"\r\n`
+                        : `#!/bin/sh\ncp '${msgPath}' "$1"\n`;
+                    
+                    const editorName = isWindows ? '.nexus_rebase_editor.cmd' : '.nexus_rebase_editor.sh';
+                    await invoke('write_file_content', { base: projectPath, file: editorName, content: editorScript });
+                    
+                    const res: any = await invoke('git_execute', { 
+                        projectPath, 
+                        args: ['-c', `core.editor=${projectPath}/${editorName}`, 'rebase', '--continue'] 
+                    });
+                    
+                    // Cleanup (best effort)
+                    await invoke('git_execute', { projectPath, args: ['clean', '-f', '.nexus_rebase_msg.txt', editorName] }).catch(() => {});
+                    
+                    if (!res.success) throw new Error(res.stderr || 'Error al continuar el rebase con nuevo mensaje');
+                } else {
+                    const res: any = await invoke('git_execute', { projectPath, args: ['-c', 'core.editor=true', 'rebase', '--continue'] });
+                    if (!res.success) throw new Error(res.stderr || 'Error al continuar el rebase');
+                }
             } else {
-                // --no-edit uses the auto-generated MERGE_MSG (includes merged branch info)
-                const res: any = await invoke('git_execute', { projectPath, args: ['commit', '--no-edit'] });
+                await invoke('git_execute', { projectPath, args: ['add', '.'] });
+                const args = commitMessage.trim() 
+                    ? ['commit', '-m', commitMessage]
+                    : ['commit', '--no-edit'];
+                const res: any = await invoke('git_execute', { projectPath, args });
                 if (!res.success) throw new Error(res.stderr || 'Error al hacer commit del merge');
             }
             onRefreshAll();
@@ -186,8 +240,20 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                             })}
                         </div>
 
-                        {/* Commit Merge button */}
-                        <div className="p-3 border-t border-slate-800">
+                        {/* Commit Message & Action */}
+                        <div className="p-3 border-t border-slate-800 space-y-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">
+                                    Mensaje del commit {isRebase ? '(opcional)' : ''}
+                                </Label>
+                                <Textarea 
+                                    value={commitMessage}
+                                    onChange={(e) => setCommitMessage(e.target.value)}
+                                    placeholder={isRebase ? "Mismo mensaje (deja vacío)" : "Describe la resolución..."}
+                                    className="min-h-[80px] bg-slate-900 border-slate-700 text-xs text-slate-300 focus-visible:ring-emerald-500/30"
+                                />
+                            </div>
+
                             <Button
                                 onClick={handleCommitMerge}
                                 disabled={!allResolved || committing}
@@ -197,10 +263,10 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                                     ? <RefreshCw size={13} className="animate-spin" />
                                     : <Check size={13} />
                                 }
-                                {isRebase ? 'Continue Rebase' : 'Commit Merge'}
+                                {isRebase ? 'Continue Rebase' : 'Finish Merge & Commit'}
                             </Button>
                             {!allResolved && (
-                                <p className="text-[10px] text-slate-600 text-center mt-1">
+                                <p className="text-[10px] text-slate-600 text-center">
                                     Resuelve todos los archivos primero
                                 </p>
                             )}

@@ -75,6 +75,8 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
     const [conflicts, setConflicts] = useState<ConflictBlock[]>([]);
     const [activeConflictIdx, setActiveConflictIdx] = useState(0);
     const [isEditorReady, setIsEditorReady] = useState(false);
+    const originalContentRef = useRef<string>('');
+    const notifiedResolvedRef = useRef<boolean>(false); // Bandera para evitar bucles
     const monaco = useMonaco();
     const editorRef = useRef<any>(null);
     const decorationIdsRef = useRef<string[]>([]);
@@ -86,8 +88,10 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
     const loadContent = useCallback(async () => {
         setLoading(true);
         setError(null);
+        notifiedResolvedRef.current = false; // Reset al cambiar de archivo
         try {
             const content: string = await invoke('read_file_content', { base: projectPath, file }) ?? '';
+            originalContentRef.current = content;
             setFileContent(content);
             setConflicts(parseConflictBlocks(content));
         } catch (e: any) {
@@ -100,6 +104,14 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
     useEffect(() => {
         loadContent();
     }, [loadContent]);
+
+    // Auto-resolve if no blocks found (means user resolved it on disk previously)
+    useEffect(() => {
+        if (!loading && isEditorReady && conflicts.length === 0 && !error && !notifiedResolvedRef.current) {
+            notifiedResolvedRef.current = true; // Marcamos que ya avisamos
+            onSaved?.();
+        }
+    }, [loading, isEditorReady, conflicts.length, error, onSaved]);
 
     useEffect(() => {
         setActiveConflictIdx(0);
@@ -122,11 +134,11 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
             return [
                 {
                     range: new monaco.Range(c.currentHeaderLine, 1, c.dividerLine! - 1, 1),
-                    options: { isWholeLine: true, className: 'bg-emerald-900/40', marginClassName: 'bg-emerald-500/50' }
+                    options: { isWholeLine: true, className: 'bg-emerald-500/10', marginClassName: 'bg-emerald-500/30' }
                 },
                 {
                     range: new monaco.Range(c.dividerLine! + 1, 1, c.endLine, 1),
-                    options: { isWholeLine: true, className: 'bg-blue-900/40', marginClassName: 'bg-blue-500/50' }
+                    options: { isWholeLine: true, className: 'bg-blue-500/10', marginClassName: 'bg-blue-500/30' }
                 },
                 {
                     range: new monaco.Range(c.currentHeaderLine, 1, c.currentHeaderLine, 1),
@@ -147,7 +159,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
         // Hide lines outside the active conflict
         const active = conflicts[activeConflictIdx];
         if (active && totalLines > 0) {
-            const CONTEXT_LINES = 8;
+            const CONTEXT_LINES = 20; // Aumentamos el contexto
             const showStart = Math.max(1, active.startLine - CONTEXT_LINES);
             const showEnd = Math.min(totalLines, active.endLine + CONTEXT_LINES);
 
@@ -206,8 +218,8 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
         }]);
         editor.pushUndoStop();
 
+        // Update conflict state after edit
         const newConflicts = parseConflictBlocks(newText);
-        setFileContent(newText);
         setConflicts(newConflicts);
         setActiveConflictIdx(prev => Math.max(0, Math.min(prev, newConflicts.length - 1)));
     };
@@ -228,6 +240,12 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
         setError(null);
         try {
             const finalContent = editorRef.current.getValue();
+            
+            // CRITICAL SAFETY CHECK: Don't allow saving empty content if original had content
+            if (!finalContent && originalContentRef.current.trim().length > 0) {
+                throw new Error('El contenido del editor parece estar vacío. No se guardará para evitar pérdida de datos. Prueba a Reiniciar archivo si te has quedado sin código.');
+            }
+
             await invoke('write_file_content', { base: projectPath, file, content: finalContent });
             const addResult: any = await invoke('git_execute', { projectPath, args: ['add', file] });
             if (!addResult.success) throw new Error(addResult.stderr || 'Failed to stage resolved file');
@@ -360,17 +378,21 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
             {/* Editor */}
             <div className="flex-1 min-h-0 relative">
                 {loading ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 z-10">
-                        <RefreshCw className="animate-spin text-slate-500" size={24} />
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-900/30 backdrop-blur-sm z-10 transition-all">
+                        <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 shadow-2xl flex items-center gap-3">
+                            <RefreshCw className="animate-spin text-nexus-accent" size={20} />
+                            <span className="text-sm font-medium text-slate-200">Analizando código...</span>
+                        </div>
                     </div>
                 ) : null}
                 <Editor
                     height="100%"
                     language={getMonacoLanguage(file)}
                     theme={monacoTheme}
-                    value={fileContent}
+                    defaultValue={fileContent} // Usamos defaultValue para que sea uncontrolled
+                    key={`${file}-${loading}`}  // Re-montar cuando el archivo cambia o termina de cargar
                     onChange={(val) => {
-                        setFileContent(val || '');
+                        // NO actualizamos fileContent aquí para evitar loops que rompen el Undo
                         parseConflicts(val || '');
                     }}
                     onMount={handleEditorMount}

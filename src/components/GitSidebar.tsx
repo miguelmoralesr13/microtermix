@@ -199,9 +199,15 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                 const parts = branch.split('/');
                 if (parts.length > 1) checkoutBranch = parts.slice(1).join('/');
             }
-            await invoke('git_execute', { projectPath, args: ['checkout', checkoutBranch] });
-            onRefreshRequest?.();
-        } catch { /* no-op */ }
+            const res: any = await invoke('git_execute', { projectPath, args: ['checkout', checkoutBranch] });
+            if (res && res.success === false) {
+                alert(res.stderr || res.stdout || 'Error al cambiar de rama');
+            } else {
+                onRefreshRequest?.();
+            }
+        } catch (e: any) {
+            alert(e?.toString() || 'Error al ejecutar checkout');
+        }
     };
 
     const handleStashSave = async () => {
@@ -291,7 +297,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         setIsResolvingPull(true);
         try {
             if (action === 'rebase') {
-                const result: any = await invoke('git_execute', { projectPath, args: ['pull', '--rebase'] });
+                const result: any = await invoke('git_execute', { projectPath, args: ['pull', '--rebase', '--autostash'] });
                 // If there's a conflict preventing checkout, it's actually just a rebase conflict.
                 // It's not a terminal error; the rebase has started and now needs resolution. 
                 if (result && !result.success && (result.stderr?.includes('conflict') || result.stderr?.includes('Conflict'))) {
