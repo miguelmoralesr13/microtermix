@@ -291,7 +291,7 @@ pub fn run() {
             cw_get_log_events,
             cw_list_metrics,
             cw_get_metric_data,
-            make_http_request,
+            http_client::execute_http_request,
             ec2_list_instances,
             ec2_start_instance,
             ec2_stop_instance,

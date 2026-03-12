@@ -24,52 +24,130 @@ function parseCurlManual(cmd: string): Partial<HttpRequest> {
         body: { type: 'none' }
     };
 
-    const lines = cmd.replace(/\\\n/g, ' ').split(/\s+/);
-    let currentFlag = '';
+    // Robust tokenization: handles single/double quotes and escaped spaces
+    const tokens: string[] = [];
+    const re = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
+    let match;
+    const cleanCmd = cmd.replace(/\\\n/g, ' '); // Handle multiline
+    
+    while ((match = re.exec(cleanCmd)) !== null) {
+        tokens.push(match[1] !== undefined ? match[1] : (match[2] !== undefined ? match[2] : match[0]));
+    }
 
-    for (let i = 1; i < lines.length; i++) {
-        let token = lines[i];
+    let explicitMethod = false;
 
-        // Strip out single/double quotes around tokens
-        if ((token.startsWith("'") && token.endsWith("'")) || (token.startsWith('"') && token.endsWith('"'))) {
-            token = token.substring(1, token.length - 1);
+    for (let i = 1; i < tokens.length; i++) {
+        const token = tokens[i];
+
+        // --- FLAGS WITH VALUES ---
+        if (token === '-X' || token === '--request') {
+            const val = tokens[++i];
+            if (val) {
+                result.method = val.toUpperCase() as HttpMethod;
+                explicitMethod = true;
+            }
+            continue;
         }
 
-        if (token === '-X' || token === '--request') {
-            currentFlag = 'method';
-        } else if (token === '-H' || token === '--header') {
-            currentFlag = 'header';
-        } else if (token === '-d' || token === '--data' || token === '--data-raw') {
-            currentFlag = 'data';
-        } else if (token.startsWith('-')) {
-            // ignore other flags for now
-            currentFlag = '';
-        } else {
-            // It's a value
-            if (currentFlag === 'method') {
-                result.method = token.toUpperCase() as HttpMethod;
-                currentFlag = '';
-            } else if (currentFlag === 'header') {
-                const splitIdx = token.indexOf(':');
+        if (token === '-H' || token === '--header') {
+            const val = tokens[++i];
+            if (val) {
+                const splitIdx = val.indexOf(':');
                 if (splitIdx > 0) {
                     result.headers!.push({
                         id: uuidv4(),
-                        key: token.substring(0, splitIdx).trim(),
-                        value: token.substring(splitIdx + 1).trim(),
+                        key: val.substring(0, splitIdx).trim(),
+                        value: val.substring(splitIdx + 1).trim(),
                         isActive: true
                     });
                 }
-                currentFlag = '';
-            } else if (currentFlag === 'data') {
-                if (result.method === 'GET') result.method = 'POST'; // curl defaults to POST if -d is present
+            }
+            continue;
+        }
+
+        if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary' || token === '--data-ascii') {
+            const val = tokens[++i];
+            if (val) {
+                if (!explicitMethod && result.method === 'GET') result.method = 'POST';
                 result.body = {
                     type: 'raw',
-                    raw: token,
-                    rawLanguage: 'json' // Assume JSON for generic curl data imports, can refine later
+                    raw: val,
+                    rawLanguage: val.trim().startsWith('{') ? 'json' : 'text'
                 };
-                currentFlag = '';
-            } else if (!result.url && token.startsWith('http')) {
-                result.url = token;
+            }
+            continue;
+        }
+
+        if (token === '-u' || token === '--user') {
+            const val = tokens[++i];
+            if (val) {
+                const auth = btoa(val);
+                result.headers!.push({
+                    id: uuidv4(),
+                    key: 'Authorization',
+                    value: `Basic ${auth}`,
+                    isActive: true
+                });
+            }
+            continue;
+        }
+
+        if (token === '-A' || token === '--user-agent') {
+            const val = tokens[++i];
+            if (val) {
+                result.headers!.push({
+                    id: uuidv4(),
+                    key: 'User-Agent',
+                    value: val,
+                    isActive: true
+                });
+            }
+            continue;
+        }
+
+        if (token === '-e' || token === '--referer') {
+            const val = tokens[++i];
+            if (val) {
+                result.headers!.push({
+                    id: uuidv4(),
+                    key: 'Referer',
+                    value: val,
+                    isActive: true
+                });
+            }
+            continue;
+        }
+
+        // --- BOOLEAN FLAGS ---
+        if (token === '-I' || token === '--head') {
+            result.method = 'HEAD';
+            explicitMethod = true;
+            continue;
+        }
+
+        // --- URL OR IGNORED ---
+        if (!token.startsWith('-')) {
+            if (!result.url) {
+                // If it's a URL, extract potential query params
+                try {
+                    const urlStr = token.trim();
+                    const hasProto = urlStr.includes('://');
+                    const tempUrl = new URL(hasProto ? urlStr : `http://${urlStr}`);
+                    
+                    result.url = hasProto ? `${tempUrl.origin}${tempUrl.pathname}` : urlStr.split('?')[0];
+
+                    tempUrl.searchParams.forEach((value, key) => {
+                        result.queryParams!.push({
+                            id: uuidv4(),
+                            key,
+                            value,
+                            isActive: true
+                        });
+                    });
+                } catch (e) {
+                    // Fallback if URL parsing fails
+                    result.url = token;
+                }
             }
         }
     }

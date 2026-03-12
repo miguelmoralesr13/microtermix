@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { invoke } from '@tauri-apps/api/core';
 import { HttpRequest, HttpResponse, HttpCollectionFolder, HttpEnvironment } from './HttpClientState';
@@ -43,14 +43,17 @@ export function useHttpState() {
             { id: 'global-1', name: 'Global', variables: {}, isActive: true }
         ]
     );
+    const [activeEnvId, setActiveEnvId] = useState<string | null>(
+        _initialState?.activeEnvId ?? environments.find(e => e.isActive)?.id ?? environments[0]?.id ?? null
+    );
     const [showEnvModal, setShowEnvModal] = useState(false);
 
     // ---- Persist on every change ----
     useEffect(() => {
         try {
-            localStorage.setItem(LS_KEY, JSON.stringify({ request, collections, environments }));
+            localStorage.setItem(LS_KEY, JSON.stringify({ request, collections, environments, activeEnvId }));
         } catch (_) { }
-    }, [request, collections, environments]);
+    }, [request, collections, environments, activeEnvId]);
 
 
     // -----------------------------------------------------------------------
@@ -97,7 +100,7 @@ export function useHttpState() {
 
         try {
             // ---- Resolve Variables ----
-            const activeEnv = environments.find(e => e.isActive) || environments[0];
+            const activeEnv = environments.find(e => e.id === activeEnvId) || environments[0];
             let allVars = { ...activeEnv?.variables };
 
             // Find parent collection variables
@@ -247,6 +250,39 @@ export function useHttpState() {
         setShowSaveDialog(false);
     };
 
+    const availableVariables = useMemo(() => {
+        const activeEnv = environments.find(e => e.id === activeEnvId) || environments[0];
+        let varsSet = new Set<string>();
+        
+        // From environment
+        if (activeEnv?.variables) {
+            Object.keys(activeEnv.variables).forEach(k => varsSet.add(k));
+        }
+        
+        // From parent collection
+        const findRootCol = (cols: HttpCollectionFolder[], matchId: string): HttpCollectionFolder | null => {
+            if (!cols) return null;
+            for (const col of cols) {
+                const checkChild = (folder: HttpCollectionFolder): boolean => {
+                    if (folder.items.some(i => i.id === matchId)) return true;
+                    for (const child of folder.items) {
+                        if ('items' in child && checkChild(child as HttpCollectionFolder)) return true;
+                    }
+                    return false;
+                };
+                if (checkChild(col)) return col;
+            }
+            return null;
+        };
+
+        const rootCol = findRootCol(collections, request.id);
+        if (rootCol && rootCol.variables) {
+            Object.keys(rootCol.variables).forEach(k => varsSet.add(k));
+        }
+
+        return Array.from(varsSet);
+    }, [environments, activeEnvId, collections, request.id]);
+
     return {
         request, setRequest,
         response, setResponse,
@@ -257,6 +293,8 @@ export function useHttpState() {
         curlInput, setCurlInput,
         showSaveDialog, setShowSaveDialog,
         environments, setEnvironments,
+        activeEnvId, setActiveEnvId,
+        availableVariables,
         showEnvModal, setShowEnvModal,
         handleNewRequest,
         handleImportCurl,

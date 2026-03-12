@@ -30,6 +30,8 @@ export const HttpPanel: React.FC = () => {
         curlInput, setCurlInput,
         showSaveDialog, setShowSaveDialog,
         environments, setEnvironments,
+        activeEnvId, setActiveEnvId,
+        availableVariables,
         showEnvModal, setShowEnvModal,
         handleNewRequest,
         handleImportCurl,
@@ -80,7 +82,7 @@ export const HttpPanel: React.FC = () => {
                     <Server size={20} className="text-nexus-accent" />
                     <h2 className="text-lg font-semibold text-white tracking-wide">Nexus HTTP Client</h2>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                     <button
                         onClick={handleNewRequest}
                         className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
@@ -106,13 +108,30 @@ export const HttpPanel: React.FC = () => {
                     >
                         <Download size={14} /> Import Postman
                     </button>
+                    
                     <div className="w-px h-6 bg-slate-700 mx-1 self-center" />
-                    <button
-                        onClick={() => setShowEnvModal(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
-                    >
-                        <Settings size={14} /> Variables
-                    </button>
+
+                    {/* Environment Selector */}
+                    <div className="flex gap-2 items-center">
+                        <select
+                            value={activeEnvId || ''}
+                            onChange={(e) => setActiveEnvId(e.target.value)}
+                            className="bg-slate-800/50 border border-slate-700 text-xs font-medium text-slate-300 rounded px-2 py-1.5 outline-none focus:border-nexus-neon transition-colors cursor-pointer min-w-[120px]"
+                        >
+                            <option value="">No Environment</option>
+                            {environments.map(env => (
+                                <option key={env.id} value={env.id}>{env.name}</option>
+                            ))}
+                        </select>
+
+                        <button
+                            onClick={() => setShowEnvModal(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-slate-800/50 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 transition-colors"
+                            title="Manage Environments"
+                        >
+                            <Settings size={14} />
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -135,6 +154,7 @@ export const HttpPanel: React.FC = () => {
                             <RequestUrlBar
                                 request={request}
                                 loading={loading}
+                                availableVariables={availableVariables}
                                 onChange={setRequest}
                                 onSend={handleSend}
                             />
@@ -145,6 +165,7 @@ export const HttpPanel: React.FC = () => {
                             <ResizablePanel direction="vertical" initialSize={250} minSize={150}>
                                 <RequestConfigPanel
                                     request={request}
+                                    availableVariables={availableVariables}
                                     activeTab={activeTab}
                                     setActiveTab={setActiveTab}
                                     onChange={setRequest}
@@ -175,6 +196,7 @@ export const HttpPanel: React.FC = () => {
                 environments={environments}
                 setEnvironments={setEnvironments}
                 collections={collections}
+                availableVariables={availableVariables}
                 onUpdateCollectionVars={handleUpdateCollectionVars}
             />
 

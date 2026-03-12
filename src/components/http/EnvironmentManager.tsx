@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Settings, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { HttpEnvironment, KeyValuePair, HttpCollectionFolder } from './HttpClientState';
+import { VariableInput } from './VariableInput';
 
 // A simple KV table exactly like RequestConfigPanel but tailored for Variables.
 // Since we have a similar layout, let's keep it simple.
@@ -11,22 +12,32 @@ interface EnvManagerProps {
     environments: HttpEnvironment[];
     setEnvironments: (envs: HttpEnvironment[]) => void;
     collections: HttpCollectionFolder[];
+    availableVariables: string[];
     onUpdateCollectionVars: (colId: string, vars: Record<string, string>) => void;
 }
 
 export const EnvironmentManager: React.FC<EnvManagerProps> = ({
-    isOpen, onClose, environments, setEnvironments, collections, onUpdateCollectionVars
+    isOpen, onClose, environments, setEnvironments, collections, availableVariables, onUpdateCollectionVars
 }) => {
     const [viewMode, setViewMode] = useState<'global' | 'collections'>('global');
-    const [selectedEnvId, setSelectedEnvId] = useState<string | null>(environments[0]?.id || null);
-    const [selectedColId, setSelectedColId] = useState<string | null>(collections[0]?.id || null);
+    const [selectedEnvId, setSelectedEnvId] = useState<string | null>(null);
+    const [selectedColId, setSelectedColId] = useState<string | null>(null);
+
+    // Initialize selection once when available
+    React.useEffect(() => {
+        if (!selectedEnvId && environments?.length > 0) setSelectedEnvId(environments[0].id);
+        if (!selectedColId && collections?.length > 0) setSelectedColId(collections[0].id);
+    }, [environments, collections]);
+
+    // Local state for editing to avoid ID regeneration loops
+    const [localKV, setLocalKV] = useState<KeyValuePair[]>([]);
 
     if (!isOpen) return null;
 
-    // Convert Record<string, string> to KeyValuePair array for the generic KV table
+    // Convert Record<string, string> to KeyValuePair array
     const objToKV = (obj?: Record<string, string>): KeyValuePair[] => {
-        if (!obj) return [];
-        return Object.entries(obj).map(([k, v]) => ({ id: uuidv4(), key: k, value: v, isActive: true }));
+        const entries = obj ? Object.entries(obj).map(([k, v]) => ({ id: uuidv4(), key: k, value: v, isActive: true })) : [];
+        return [...entries, { id: uuidv4(), key: '', value: '', isActive: true }];
     };
 
     const kvToObj = (kvs: KeyValuePair[]): Record<string, string> => {
@@ -39,11 +50,16 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
         return obj;
     };
 
-    // Derived states
-    const activeEnv = environments.find(e => e.id === selectedEnvId);
-    const activeCol = collections.find(c => c.id === selectedColId);
-
-    const activeKV = viewMode === 'global' ? objToKV(activeEnv?.variables) : objToKV(activeCol?.variables);
+    // Sync local state when selection changes
+    React.useEffect(() => {
+        if (viewMode === 'global') {
+            const env = environments.find(e => e.id === selectedEnvId);
+            setLocalKV(objToKV(env?.variables));
+        } else {
+            const col = collections.find(c => c.id === selectedColId);
+            setLocalKV(objToKV(col?.variables));
+        }
+    }, [selectedEnvId, selectedColId, viewMode, isOpen]);
 
     // Handlers
     const handleAddEnv = () => {
@@ -57,32 +73,40 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
         setSelectedEnvId(newEnv.id);
     };
 
-    const handleUpdateVars = (kvs: KeyValuePair[]) => {
+    const handleUpdateStore = (kvs: KeyValuePair[]) => {
         const newVars = kvToObj(kvs);
-        if (viewMode === 'global' && activeEnv) {
-            const next = environments.map(e => e.id === activeEnv.id ? { ...e, variables: newVars } : e);
+        if (viewMode === 'global' && selectedEnvId) {
+            const next = environments.map(e => e.id === selectedEnvId ? { ...e, variables: newVars } : e);
             setEnvironments(next);
-        } else if (viewMode === 'collections' && activeCol) {
-            onUpdateCollectionVars(activeCol.id, newVars);
+        } else if (viewMode === 'collections' && selectedColId) {
+            onUpdateCollectionVars(selectedColId, newVars);
         }
     };
 
     const handleRowChange = (index: number, field: keyof KeyValuePair, value: any) => {
-        const copy = [...activeKV];
+        const copy = [...localKV];
         copy[index] = { ...copy[index], [field]: value };
-        if (index === copy.length - 1 && (copy[index].key || copy[index].value)) {
+        
+        // Add new row if we're typing in the last one
+        if (index === copy.length - 1 && (field === 'key' || field === 'value') && value) {
             copy.push({ id: uuidv4(), key: '', value: '', isActive: true });
         }
-        handleUpdateVars(copy);
+        
+        setLocalKV(copy);
+        handleUpdateStore(copy);
     };
 
     const handleRowRemove = (index: number) => {
-        const copy = activeKV.filter((_, i) => i !== index);
-        handleUpdateVars(copy.length ? copy : [{ id: uuidv4(), key: '', value: '', isActive: true }]);
+        if (localKV.length <= 1 && index === 0) {
+            const reset = [{ id: uuidv4(), key: '', value: '', isActive: true }];
+            setLocalKV(reset);
+            handleUpdateStore(reset);
+            return;
+        }
+        const copy = localKV.filter((_, i) => i !== index);
+        setLocalKV(copy);
+        handleUpdateStore(copy);
     };
-
-    // Ensure at least one empty row
-    const displayKV = activeKV.length === 0 ? [{ id: uuidv4(), key: '', value: '', isActive: true }] : activeKV;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -119,7 +143,7 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                                         <span>Environments</span>
                                         <button onClick={handleAddEnv} className="hover:text-nexus-neon"><Plus size={14} /></button>
                                     </div>
-                                    {environments.map(env => (
+                                    {(environments || []).map(env => (
                                         <div key={env.id} className="flex items-center gap-2 group">
                                             <button
                                                 onClick={() => setSelectedEnvId(env.id)}
@@ -138,7 +162,7 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                                         Root Collections
                                     </div>
                                     {collections.length === 0 && <span className="text-xs text-slate-600 p-2 text-center w-full">No collections</span>}
-                                    {collections.map(col => (
+                                    {(collections || []).map(col => (
                                         <button
                                             key={col.id}
                                             onClick={() => setSelectedColId(col.id)}
@@ -154,26 +178,26 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
 
                     {/* Right Editor */}
                     <div className="flex-1 p-4 bg-slate-900 flex flex-col gap-4 overflow-y-auto">
-                        {viewMode === 'global' && activeEnv && (
+                        {viewMode === 'global' && selectedEnvId && (
                             <div className="flex flex-col gap-2">
                                 <label className="text-xs text-slate-400 font-semibold tracking-wide">Environment Name</label>
                                 <input
                                     type="text"
-                                    value={activeEnv.name}
+                                    value={environments.find(e => e.id === selectedEnvId)?.name || ''}
                                     onChange={(e) => {
-                                        const nx = environments.map(en => en.id === activeEnv.id ? { ...en, name: e.target.value } : en);
+                                        const nx = environments.map(en => en.id === selectedEnvId ? { ...en, name: e.target.value } : en);
                                         setEnvironments(nx);
                                     }}
                                     className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-nexus-neon max-w-sm"
                                 />
                             </div>
                         )}
-                        {viewMode === 'collections' && activeCol && (
-                            <h4 className="text-sm font-semibold text-slate-300">Variables for Collection: {activeCol.name}</h4>
+                        {viewMode === 'collections' && selectedColId && (
+                            <h4 className="text-sm font-semibold text-slate-300">Variables for Collection: {collections.find(c => c.id === selectedColId)?.name}</h4>
                         )}
 
                         <div className="w-full border border-slate-700 rounded-md overflow-hidden mt-2">
-                            {displayKV.map((item, idx) => (
+                            {localKV.map((item, idx) => (
                                 <div key={item.id} className="flex border-b border-slate-700/50 last:border-0 bg-slate-900/50 hover:bg-slate-800 transition-colors">
                                     <div className="flex items-center justify-center p-2 border-r border-slate-700/50">
                                         <input
@@ -191,12 +215,13 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                                         value={item.key}
                                         onChange={(e) => handleRowChange(idx, 'key', e.target.value)}
                                     />
-                                    <input
-                                        type="text"
-                                        placeholder="Value"
-                                        className="flex-[2] bg-transparent p-2 text-sm text-slate-200 focus:outline-none focus:bg-slate-800 font-mono"
+                                    <VariableInput
                                         value={item.value}
-                                        onChange={(e) => handleRowChange(idx, 'value', e.target.value)}
+                                        onChange={(val) => handleRowChange(idx, 'value', val)}
+                                        placeholder="Value"
+                                        availableVariables={availableVariables}
+                                        className="bg-transparent border-none"
+                                        containerClassName="flex-[2]"
                                     />
                                     <button
                                         onClick={() => handleRowRemove(idx)}

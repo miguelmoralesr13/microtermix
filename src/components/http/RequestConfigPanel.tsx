@@ -2,6 +2,7 @@ import React from 'react';
 import { Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { KeyValuePair, HttpRequest } from './HttpClientState';
+import { VariableInput } from './VariableInput';
 
 // Helper for empty row
 function makeEmptyKV(): KeyValuePair {
@@ -10,12 +11,13 @@ function makeEmptyKV(): KeyValuePair {
 
 interface KVTableProps {
     items: KeyValuePair[];
+    availableVariables: string[];
     onChange: (items: KeyValuePair[]) => void;
     placeholderKey?: string;
     placeholderValue?: string;
 }
 
-const KVTable: React.FC<KVTableProps> = ({ items, onChange, placeholderKey = 'Key', placeholderValue = 'Value' }) => {
+const KVTable: React.FC<KVTableProps> = ({ items, availableVariables, onChange, placeholderKey = 'Key', placeholderValue = 'Value' }) => {
     const currentItems = items.length === 0 ? [makeEmptyKV()] : items;
 
     const updateItem = (index: number, field: keyof KeyValuePair, value: any) => {
@@ -52,12 +54,13 @@ const KVTable: React.FC<KVTableProps> = ({ items, onChange, placeholderKey = 'Ke
                         value={item.key}
                         onChange={(e) => updateItem(idx, 'key', e.target.value)}
                     />
-                    <input
-                        type="text"
-                        placeholder={placeholderValue}
-                        className="flex-[2] bg-transparent p-2 text-sm text-slate-200 focus:outline-none focus:bg-slate-800"
+                    <VariableInput
                         value={item.value}
-                        onChange={(e) => updateItem(idx, 'value', e.target.value)}
+                        onChange={(val) => updateItem(idx, 'value', val)}
+                        placeholder={placeholderValue}
+                        availableVariables={availableVariables}
+                        className="bg-transparent border-none"
+                        containerClassName="flex-[2] border-r-0"
                     />
                     <button
                         onClick={() => removeItem(idx)}
@@ -73,12 +76,13 @@ const KVTable: React.FC<KVTableProps> = ({ items, onChange, placeholderKey = 'Ke
 
 interface RequestConfigPanelProps {
     request: HttpRequest;
+    availableVariables: string[];
     activeTab: 'params' | 'headers' | 'body';
     setActiveTab: (tab: 'params' | 'headers' | 'body') => void;
     onChange: (req: HttpRequest) => void;
 }
 
-export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request, activeTab, setActiveTab, onChange }) => {
+export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request, availableVariables, activeTab, setActiveTab, onChange }) => {
     return (
         <div className="flex-1 flex flex-col min-h-0 bg-nexus-dark" style={{ minHeight: '150px' }}>
             <div className="flex border-b border-slate-800 bg-slate-950/50">
@@ -100,6 +104,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                 {activeTab === 'params' && (
                     <KVTable
                         items={request.queryParams}
+                        availableVariables={availableVariables}
                         onChange={(items) => onChange({ ...request, queryParams: items })}
                         placeholderKey="Query Param"
                     />
@@ -108,6 +113,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                 {activeTab === 'headers' && (
                     <KVTable
                         items={request.headers}
+                        availableVariables={availableVariables}
                         onChange={(items) => onChange({ ...request, headers: items })}
                         placeholderKey="Header Key"
                     />
@@ -167,6 +173,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                         {request.body.type === 'form-data' && (
                             <KVTable
                                 items={request.body.formData || []}
+                                availableVariables={availableVariables}
                                 onChange={(items) => onChange({ ...request, body: { ...request.body, formData: items } })}
                             />
                         )}
@@ -174,6 +181,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                         {request.body.type === 'x-www-form-urlencoded' && (
                             <KVTable
                                 items={request.body.urlencoded || []}
+                                availableVariables={availableVariables}
                                 onChange={(items) => onChange({ ...request, body: { ...request.body, urlencoded: items } })}
                             />
                         )}

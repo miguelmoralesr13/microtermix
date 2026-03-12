@@ -1,10 +1,12 @@
 import React from 'react';
 import { Play } from 'lucide-react';
 import { HttpRequest, HttpMethod } from './HttpClientState';
+import { VariableInput } from './VariableInput';
 
 interface RequestUrlBarProps {
     request: HttpRequest;
     loading: boolean;
+    availableVariables: string[];
     onChange: (req: HttpRequest) => void;
     onSend: () => void;
 }
@@ -12,6 +14,7 @@ interface RequestUrlBarProps {
 export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
     request,
     loading,
+    availableVariables,
     onChange,
     onSend,
 }) => {
@@ -37,16 +40,17 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
                         <option key={m} value={m}>{m}</option>
                     ))}
                 </select>
-                <input
-                    type="text"
-                    placeholder="https://api.example.com/v1/endpoint"
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded px-4 py-2 text-slate-100 font-mono text-sm focus:outline-none focus:border-nexus-neon"
+                
+                <VariableInput
                     value={request.url}
-                    onChange={(e) => onChange({ ...request, url: e.target.value })}
+                    onChange={(val) => onChange({ ...request, url: val })}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter') onSend();
                     }}
+                    placeholder="https://api.example.com/v1/endpoint"
+                    availableVariables={availableVariables}
                 />
+
                 <button
                     onClick={onSend}
                     disabled={loading || !request.url}

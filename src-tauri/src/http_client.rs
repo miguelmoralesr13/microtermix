@@ -1,7 +1,15 @@
 use reqwest::{Client, Method, header::{HeaderMap, HeaderName, HeaderValue}};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
+
+#[derive(Deserialize)]
+pub struct HttpRequestPayload {
+    pub url: String,
+    pub method: String,
+    pub headers: HashMap<String, String>,
+    pub body: Option<String>,
+}
 
 #[derive(Serialize)]
 pub struct HttpResponsePayload {
@@ -15,6 +23,12 @@ pub struct HttpResponsePayload {
 }
 
 #[tauri::command]
+pub async fn execute_http_request(
+    request: HttpRequestPayload,
+) -> Result<HttpResponsePayload, String> {
+    make_http_request(request.url, request.method, request.headers, request.body).await
+}
+
 pub async fn make_http_request(
     url: String,
     method: String,
