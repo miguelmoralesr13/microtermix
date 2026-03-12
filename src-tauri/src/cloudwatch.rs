@@ -64,6 +64,7 @@ pub struct LogEvent {
 pub struct LogEventsResult {
     pub events: Vec<LogEvent>,
     pub next_forward_token: Option<String>,
+    pub next_backward_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -192,6 +193,44 @@ pub async fn cw_get_log_events(
     Ok(LogEventsResult {
         events,
         next_forward_token: resp.next_forward_token().map(|t| t.to_string()),
+        next_backward_token: resp.next_backward_token().map(|t| t.to_string()),
+    })
+}
+
+#[tauri::command]
+pub async fn cw_filter_log_events(
+    credentials: CwCredentials,
+    log_group: String,
+    filter_pattern: Option<String>,
+    next_token: Option<String>,
+    start_ms: Option<i64>,
+) -> Result<LogEventsResult, String> {
+    let client = logs_client(&credentials).await;
+    let mut req = client.filter_log_events()
+        .log_group_name(&log_group)
+        .limit(100);
+    
+    if let Some(p) = filter_pattern.filter(|s| !s.is_empty()) {
+        req = req.filter_pattern(p);
+    }
+    if let Some(t) = next_token {
+        req = req.next_token(t);
+    } else if let Some(ms) = start_ms {
+        req = req.start_time(ms);
+    }
+
+    let resp = req.send().await.map_err(format_logs_err)?;
+    let events = resp.events().iter()
+        .filter_map(|e| e.message().map(|m| LogEvent {
+            timestamp: e.timestamp().unwrap_or(0),
+            message: m.trim_end_matches('\n').to_string(),
+        }))
+        .collect();
+    
+    Ok(LogEventsResult {
+        events,
+        next_forward_token: resp.next_token().map(|t| t.to_string()), // In FilterLogEvents it's just 'next_token' (bidirectional depending on start_time)
+        next_backward_token: None, // Simplified for now
     })
 }
 

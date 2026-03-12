@@ -91,8 +91,8 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`px-6 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${activeTab === tab
-                                ? 'border-nexus-neon text-nexus-neon bg-slate-900/50'
-                                : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
+                            ? 'border-nexus-neon text-nexus-neon bg-slate-900/50'
+                            : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
                             }`}
                     >
                         {tab}
@@ -148,8 +148,8 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                                                 })
                                             }
                                             className={`px-3 py-1 rounded text-xs font-mono transition-colors ${request.body.rawLanguage === lang
-                                                    ? 'bg-nexus-neon text-slate-900'
-                                                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                                                ? 'bg-nexus-neon text-slate-900'
+                                                : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                                                 }`}
                                         >
                                             {lang}

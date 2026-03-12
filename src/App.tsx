@@ -6,6 +6,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { registerMonacoThemes } from './lib/monacoThemes';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes default
+      refetchOnWindowFocus: true,
+    },
+  },
+});
 
 // Register custom Monaco themes once at app startup
 registerMonacoThemes();
@@ -168,10 +179,13 @@ function useLinuxClipboardFix() {
 function App() {
   useLinuxClipboardFix();
   return (
-    <WorkspaceProvider>
-      <AppContent />
-      <Toaster position="bottom-right" theme="dark" richColors />
-    </WorkspaceProvider>
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceProvider>
+        <AppContent />
+        <Toaster position="bottom-right" theme="dark" richColors />
+      </WorkspaceProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }
 

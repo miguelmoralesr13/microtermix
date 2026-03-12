@@ -40,7 +40,7 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
                         <option key={m} value={m}>{m}</option>
                     ))}
                 </select>
-                
+
                 <VariableInput
                     value={request.url}
                     onChange={(val) => onChange({ ...request, url: val })}
@@ -55,8 +55,8 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
                     onClick={onSend}
                     disabled={loading || !request.url}
                     className={`flex items-center gap-2 px-6 py-2 rounded font-bold transition-all ${loading || !request.url
-                            ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                            : 'bg-nexus-neon text-slate-900 hover:bg-sky-400 hover:shadow-[0_0_10px_rgba(56,189,248,0.4)]'
+                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                        : 'bg-nexus-neon text-slate-900 hover:bg-sky-400 hover:shadow-[0_0_10px_rgba(56,189,248,0.4)]'
                         }`}
                 >
                     {loading ? (

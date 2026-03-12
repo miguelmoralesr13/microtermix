@@ -310,69 +310,69 @@ async fn git2_fetch_native(project_path: &str) -> Result<GitResult, String> {
     }).await.map_err(|e| e.to_string())?
 }
 
-async fn git2_pull_native(project_path: &str) -> Result<GitResult, String> {
-    // Phase 1: network fetch (blocking — runs in spawn_blocking inside git2_fetch_native)
-    let fetch_result = git2_fetch_native(project_path).await?;
-    if !fetch_result.success {
-        return Ok(fetch_result);
-    }
+// async fn git2_pull_native(project_path: &str) -> Result<GitResult, String> {
+//     // Phase 1: network fetch (blocking — runs in spawn_blocking inside git2_fetch_native)
+//     let fetch_result = git2_fetch_native(project_path).await?;
+//     if !fetch_result.success {
+//         return Ok(fetch_result);
+//     }
 
-    // Phase 2: merge analysis + fast-forward (pure git2, blocking but fast — no network)
-    let path = project_path.to_string();
-    tokio::task::spawn_blocking(move || {
-        use git2::{Repository, BranchType, MergeAnalysis};
-        let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
+//     // Phase 2: merge analysis + fast-forward (pure git2, blocking but fast — no network)
+//     let path = project_path.to_string();
+//     tokio::task::spawn_blocking(move || {
+//         use git2::{Repository, BranchType, MergeAnalysis};
+//         let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
 
-        let head = repo.head().map_err(|e| e.to_string())?;
-        if !head.is_branch() {
-            return Ok(GitResult { stdout: String::new(), stderr: "HEAD is not on a branch".into(), success: false });
-        }
-        let branch_name = head.shorthand().ok_or("no branch name")?.to_string();
-        let branch = repo.find_branch(&branch_name, BranchType::Local).map_err(|e| e.to_string())?;
+//         let head = repo.head().map_err(|e| e.to_string())?;
+//         if !head.is_branch() {
+//             return Ok(GitResult { stdout: String::new(), stderr: "HEAD is not on a branch".into(), success: false });
+//         }
+//         let branch_name = head.shorthand().ok_or("no branch name")?.to_string();
+//         let branch = repo.find_branch(&branch_name, BranchType::Local).map_err(|e| e.to_string())?;
 
-        let upstream = match branch.upstream() {
-            Ok(u) => u,
-            Err(_) => return Ok(GitResult {
-                stdout: String::new(),
-                stderr: format!("Branch '{}' has no upstream configured", branch_name),
-                success: false,
-            }),
-        };
+//         let upstream = match branch.upstream() {
+//             Ok(u) => u,
+//             Err(_) => return Ok(GitResult {
+//                 stdout: String::new(),
+//                 stderr: format!("Branch '{}' has no upstream configured", branch_name),
+//                 success: false,
+//             }),
+//         };
 
-        let upstream_commit = upstream.get().peel_to_commit().map_err(|e| e.to_string())?;
-        let fetch_head = repo.find_annotated_commit(upstream_commit.id()).map_err(|e| e.to_string())?;
-        let (analysis, _) = repo.merge_analysis(&[&fetch_head]).map_err(|e| e.to_string())?;
+//         let upstream_commit = upstream.get().peel_to_commit().map_err(|e| e.to_string())?;
+//         let fetch_head = repo.find_annotated_commit(upstream_commit.id()).map_err(|e| e.to_string())?;
+//         let (analysis, _) = repo.merge_analysis(&[&fetch_head]).map_err(|e| e.to_string())?;
 
-        if analysis.contains(MergeAnalysis::ANALYSIS_UP_TO_DATE) {
-            return Ok(GitResult { stdout: "Already up to date.".into(), stderr: String::new(), success: true });
-        }
+//         if analysis.contains(MergeAnalysis::ANALYSIS_UP_TO_DATE) {
+//             return Ok(GitResult { stdout: "Already up to date.".into(), stderr: String::new(), success: true });
+//         }
 
-        if analysis.contains(MergeAnalysis::ANALYSIS_FASTFORWARD) {
-            let upstream_oid = upstream_commit.id();
-            let new_obj = repo.find_object(upstream_oid, None).map_err(|e| e.to_string())?;
-            let mut co = git2::build::CheckoutBuilder::new();
-            co.safe();
-            repo.checkout_tree(&new_obj, Some(&mut co)).map_err(|e| e.to_string())?;
-            // Update HEAD reference to new tip
-            let head_ref = repo.find_reference("HEAD").map_err(|e| e.to_string())?;
-            // resolve to the actual branch ref (e.g. refs/heads/main)
-            let mut target_ref = head_ref.resolve().map_err(|e| e.to_string())?;
-            target_ref.set_target(upstream_oid, "pull: fast-forward").map_err(|e| e.to_string())?;
-            return Ok(GitResult {
-                stdout: format!("Fast-forward to {}", &upstream_oid.to_string()[..7]),
-                stderr: String::new(),
-                success: true,
-            });
-        }
+//         if analysis.contains(MergeAnalysis::ANALYSIS_FASTFORWARD) {
+//             let upstream_oid = upstream_commit.id();
+//             let new_obj = repo.find_object(upstream_oid, None).map_err(|e| e.to_string())?;
+//             let mut co = git2::build::CheckoutBuilder::new();
+//             co.safe();
+//             repo.checkout_tree(&new_obj, Some(&mut co)).map_err(|e| e.to_string())?;
+//             // Update HEAD reference to new tip
+//             let head_ref = repo.find_reference("HEAD").map_err(|e| e.to_string())?;
+//             // resolve to the actual branch ref (e.g. refs/heads/main)
+//             let mut target_ref = head_ref.resolve().map_err(|e| e.to_string())?;
+//             target_ref.set_target(upstream_oid, "pull: fast-forward").map_err(|e| e.to_string())?;
+//             return Ok(GitResult {
+//                 stdout: format!("Fast-forward to {}", &upstream_oid.to_string()[..7]),
+//                 stderr: String::new(),
+//                 success: true,
+//             });
+//         }
 
-        // Non-fast-forward: tell the UI to show the stash/rebase dialog
-        Ok(GitResult {
-            stdout: String::new(),
-            stderr: "Pull would create a merge commit. Please stash your changes or use rebase.".into(),
-            success: false,
-        })
-    }).await.map_err(|e| e.to_string())?
-}
+//         // Non-fast-forward: tell the UI to show the stash/rebase dialog
+//         Ok(GitResult {
+//             stdout: String::new(),
+//             stderr: "Pull would create a merge commit. Please stash your changes or use rebase.".into(),
+//             success: false,
+//         })
+//     }).await.map_err(|e| e.to_string())?
+// }
 
 async fn git2_push_native(project_path: &str, args: &[String]) -> Result<GitResult, String> {
     let path = project_path.to_string();

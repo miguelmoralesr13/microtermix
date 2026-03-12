@@ -86,12 +86,12 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
     const handleRowChange = (index: number, field: keyof KeyValuePair, value: any) => {
         const copy = [...localKV];
         copy[index] = { ...copy[index], [field]: value };
-        
+
         // Add new row if we're typing in the last one
         if (index === copy.length - 1 && (field === 'key' || field === 'value') && value) {
             copy.push({ id: uuidv4(), key: '', value: '', isActive: true });
         }
-        
+
         setLocalKV(copy);
         handleUpdateStore(copy);
     };

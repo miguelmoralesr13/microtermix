@@ -28,6 +28,7 @@ export interface CwLogEvent {
 export interface CwLogEventsResult {
     events: CwLogEvent[];
     next_forward_token: string | null;
+    next_backward_token: string | null;
 }
 
 export interface CwDimension {
@@ -98,6 +99,22 @@ export function cwGetLogEvents(
         credentials: toRust(cfg),
         logGroup,
         stream,
+        nextToken: nextToken ?? null,
+        startMs: startMs ?? null,
+    });
+}
+
+export function cwFilterLogEvents(
+    cfg: CwCredentials,
+    logGroup: string,
+    filterPattern?: string | null,
+    nextToken?: string | null,
+    startMs?: number | null,
+): Promise<CwLogEventsResult> {
+    return invoke('cw_filter_log_events', {
+        credentials: toRust(cfg),
+        logGroup,
+        filterPattern: filterPattern ?? null,
         nextToken: nextToken ?? null,
         startMs: startMs ?? null,
     });
