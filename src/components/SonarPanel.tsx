@@ -177,6 +177,15 @@ const MetricCard: React.FC<{
     </div>
 );
 
+const SEVERITY_ORDER: SonarIssue['severity'][] = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'];
+const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+    BLOCKER: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
+    CRITICAL: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' },
+    MAJOR: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+    MINOR: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-600/30' },
+    INFO: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
+};
+
 const DirectKeyForm: React.FC<{ onLink: (key: string) => void }> = ({ onLink }) => {
     const [val, setVal] = useState('');
     return (
@@ -225,7 +234,7 @@ export const SonarPanel: React.FC = () => {
     const [globalConfig, setGlobalConfig] = useState<GlobalSonarConfig>(loadGlobalConfig);
     const [configModalOpen, setConfigModalOpen] = useState(false);
 
-    // Per-project: project key + token (editable directly in the panel)
+    // Per-project: project key + token
     const [link, setLink] = useState<ProjectLink>(() => selectedPath ? loadLink(selectedPath) : {});
     const [projectTokenDraft, setProjectTokenDraft] = useState<string>(() =>
         selectedPath ? (loadLink(selectedPath).token ?? '') : ''
@@ -565,15 +574,6 @@ export const SonarPanel: React.FC = () => {
         issues.forEach(i => { map[i.severity]?.push(i); });
         return map;
     }, [issues]);
-
-    const SEVERITY_ORDER: SonarIssue['severity'][] = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'];
-    const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = {
-        BLOCKER: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
-        CRITICAL: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' },
-        MAJOR: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-        MINOR: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-600/30' },
-        INFO: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
-    };
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
