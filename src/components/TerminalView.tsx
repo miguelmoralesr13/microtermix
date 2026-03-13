@@ -142,17 +142,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         });
 xtermRef.current = term;
 
+// Load initial logs from backend only if store is empty
 if (logs.length === 0) {
     invoke<string[]>('get_service_logs', { serviceId, limit: 1000 })
         .then(initialLogs => {
             if (initialLogs && initialLogs.length > 0) {
-                initialLogs.forEach(l => term.writeln(l));
-                lastWrittenLogCountRef.current = initialLogs.length;
-                useProcessStore.getState().appendLogs(serviceId, initialLogs);
+                // Solo guardamos en el store; el useEffect de sincronización se encargará de escribir en xterm
+                useProcessStore.getState().setLogs(serviceId, initialLogs);
             }
         })
         .catch(console.error);
 } else {
+    // Si ya hay logs, los escribimos inicialmente
     logs.forEach(line => term.writeln(line));
     lastWrittenLogCountRef.current = logs.length;
 }

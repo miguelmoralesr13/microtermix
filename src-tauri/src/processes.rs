@@ -486,6 +486,10 @@ pub async fn execute_service_script(
 
     let envs: HashMap<String, String> = serde_json::from_str(&env_vars_json).unwrap_or_default();
 
+    // Limpiar el archivo de logs antes de empezar una nueva ejecución
+    let log_path = get_service_log_path(&service_id);
+    let _ = fs::remove_file(&log_path);
+
     // Log the final command (after vite wrapper substitution, if any)
     {
         append_to_service_log_async(service_id.clone(), format!("[CMD] {}", script_to_run)).await;

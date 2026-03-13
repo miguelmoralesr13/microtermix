@@ -19,6 +19,7 @@ interface ProcessStore {
     setActiveTerminalTab: (tabId: string | null) => void;
     updateProcessStatus: (serviceId: string, status: ProcessStatus, script?: string, envJson?: string, incrementRestart?: boolean) => void;
     appendLogs: (serviceId: string, newLines: string[]) => void;
+    setLogs: (serviceId: string, logs: string[]) => void;
     removeProcess: (serviceId: string) => void;
     clearAllProcesses: () => void;
 }
@@ -73,7 +74,6 @@ export const useProcessStore = create<ProcessStore>()(
                 set((state) => {
                     const existing = state.activeProcesses[serviceId];
                     if (!existing) {
-                        // Crear placeholder si el proceso aún no está en el store
                         return {
                             activeProcesses: {
                                 ...state.activeProcesses,
@@ -86,16 +86,33 @@ export const useProcessStore = create<ProcessStore>()(
                         };
                     }
 
+                    // De-dupe: filter lines that already exist in the very end of the buffer
+                    const lastFew = existing.logs.slice(-20);
+                    const filtered = newLines.filter(line => !lastFew.includes(line));
+                    
+                    if (filtered.length === 0) return state;
+
                     return {
                         activeProcesses: {
                             ...state.activeProcesses,
                             [serviceId]: {
                                 ...existing,
-                                logs: [...existing.logs, ...newLines].slice(-1000)
+                                logs: [...existing.logs, ...filtered].slice(-1000)
                             }
                         }
                     };
                 }),
+
+            setLogs: (serviceId, logs) =>
+                set((state) => ({
+                    activeProcesses: {
+                        ...state.activeProcesses,
+                        [serviceId]: {
+                            ...(state.activeProcesses[serviceId] || { status: 'idle', restarts: 0 }),
+                            logs: logs.slice(-1000)
+                        }
+                    }
+                })),
 
             removeProcess: (serviceId) => 
                 set((state) => {

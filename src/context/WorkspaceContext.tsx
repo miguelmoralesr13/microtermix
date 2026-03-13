@@ -188,10 +188,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         let unlisten: (() => void) | undefined;
         let cancelled = false;
         listen<{ service_id: string; line: string; is_error: boolean }>('service-logs', (event) => {
-            const { service_id, line, is_error } = event.payload;
-            const color = is_error ? '\x1b[31m' : '\x1b[37m';
-            const formattedLine = `${color}${line}\x1b[0m`;
-            batchedAppendLogs(service_id, formattedLine);
+            const { service_id, line } = event.payload;
+            batchedAppendLogs(service_id, line);
         }).then(fn => {
             if (cancelled) fn();
             else unlisten = fn;
