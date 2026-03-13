@@ -291,7 +291,15 @@ export const useGitStore = create<GitStore>()(
                 },
 
                 fetchRepo: async (path) => {
-                    patchRepo(set, path, r => ({ loading: { ...r.loading, repo: true }, isGitRepo: null }));
+                    const existing = get().repos[path];
+                    // Si ya sabemos qué es y no está cargando, podemos saltarnos el reset
+                    if (existing?.isGitRepo && !existing.loading.repo) {
+                        // Opcionalmente refrescar en silencio
+                        patchRepo(set, path, r => ({ loading: { ...r.loading, repo: true } }));
+                    } else {
+                        patchRepo(set, path, r => ({ loading: { ...r.loading, repo: true }, isGitRepo: null }));
+                    }
+
                     try {
                         const res: { isGitRepo: boolean; hasCommits: boolean } =
                             await invoke('git_is_repo_native', { projectPath: path });
@@ -437,10 +445,15 @@ export const useGitStore = create<GitStore>()(
                         const path = event.payload as string;
                         console.log(`⚡ Global Git Watcher: ${path} changed`);
                         
-                        // Silent and forced refresh
+                        // Refresco local estrictamente silencioso y forzado
+                        // NO llamamos a fetchAheadBehind aquí porque causa bucle infinito (hace fetch)
                         invalidate(path);
-                        fetchAll(path, true, true);
-                        fetchAheadBehind(path, true, true);
+                        const { fetchStatus, fetchBranches, fetchTimeline } = get();
+                        Promise.all([
+                            fetchStatus(path, true, true),
+                            fetchBranches(path, true, true),
+                            fetchTimeline(path, true, true),
+                        ]).catch(console.error);
                     });
 
                     return async () => {

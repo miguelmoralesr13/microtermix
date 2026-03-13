@@ -1,17 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { CheckCircle2, AlertCircle, Loader2, Plus, Trash2, Server } from 'lucide-react';
 import { JenkinsConfig, jenkinsTestConnection } from '../../services/jenkinsApi';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
-import { cn } from '../../lib/utils';
 
-function AccountForm({ 
-    account, 
-    onSave, 
+function AccountForm({
+    account,
+    onSave,
     onCancel,
     onDelete
-}: { 
-    account?: JenkinsConfig; 
-    onSave: (acc: Omit<JenkinsConfig, 'id'>) => void; 
+}: {
+    account?: JenkinsConfig;
+    onSave: (acc: Omit<JenkinsConfig, 'id'>) => void;
     onCancel: () => void;
     onDelete?: () => void;
 }) {
@@ -44,7 +43,7 @@ function AccountForm({
     return (
         <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-4 relative">
             {onDelete && (
-                <button 
+                <button
                     onClick={onDelete}
                     className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
                     title="Delete Account"
@@ -52,7 +51,7 @@ function AccountForm({
                     <Trash2 size={14} />
                 </button>
             )}
-            
+
             <h3 className="text-sm font-semibold text-slate-200">
                 {account ? 'Edit Account' : 'New Jenkins Account'}
             </h3>
@@ -145,13 +144,13 @@ export function JenkinsSettings({ onSaved }: { onSaved?: () => void }) {
     const addAccount = useJenkinsStore(s => s.addAccount);
     const updateAccount = useJenkinsStore(s => s.updateAccount);
     const removeAccount = useJenkinsStore(s => s.removeAccount);
-    
+
     const [editingId, setEditingId] = useState<string | 'new' | null>(null);
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-[#020617]">
             <div className="max-w-3xl mx-auto space-y-6">
-                
+
                 <div className="flex items-center justify-between">
                     <div>
                         <h2 className="text-base font-semibold text-slate-100">Jenkins Accounts</h2>
@@ -168,7 +167,7 @@ export function JenkinsSettings({ onSaved }: { onSaved?: () => void }) {
                 </div>
 
                 {editingId === 'new' && (
-                    <AccountForm 
+                    <AccountForm
                         onSave={(draft) => {
                             addAccount(draft);
                             setEditingId(null);
@@ -194,7 +193,7 @@ export function JenkinsSettings({ onSaved }: { onSaved?: () => void }) {
                 <div className="grid gap-4">
                     {accounts.map(acc => (
                         editingId === acc.id ? (
-                            <AccountForm 
+                            <AccountForm
                                 key={acc.id}
                                 account={acc}
                                 onSave={(draft) => {

@@ -69,9 +69,12 @@ export const GitPanel: React.FC = () => {
     useEffect(() => {
         if (!activeTab) return;
         ensureRepo(activeTab);
+        
+        // Carga inicial al cambiar de tab o abrir por primera vez
         fetchRepo(activeTab).then(() => {
             const repo = useGitStore.getState().repos[activeTab!];
             if (repo?.isGitRepo === 'initialized') {
+                // Forzamos carga inicial de datos si es un repo válido
                 fetchAll(activeTab!, false);
                 fetchAheadBehind(activeTab!, false);
             }
@@ -93,13 +96,7 @@ export const GitPanel: React.FC = () => {
         setUi({ activeTab: path });
         setActiveDiffFile(null);
         setSelectedCommit(null);
-        ensureRepo(path);
-        fetchRepo(path).then(() => {
-            const repo = useGitStore.getState().repos[path];
-            if (repo?.isGitRepo === 'initialized') {
-                fetchAll(path, false);
-            }
-        });
+        // No llamamos a fetchRepo aquí, dejamos que el useEffect [activeTab] lo maneje centralizado
     };
 
     const handleStatusRefresh = () => {
@@ -235,7 +232,7 @@ export const GitPanel: React.FC = () => {
                     <div className="flex-1 flex items-center justify-center text-slate-500 p-8 text-center text-sm">
                         Select a repository tab to manage Git operations.
                     </div>
-                ) : (repoData.isGitRepo === null || repoData.loading.repo) ? (
+                ) : (repoData.isGitRepo === null) ? (
                     <div className="flex-1 flex items-center justify-center text-slate-500 text-sm gap-2">
                         <RefreshCw size={14} className="animate-spin" />
                         Detecting repository...

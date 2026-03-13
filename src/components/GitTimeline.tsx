@@ -173,9 +173,15 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     // Load git user
     useEffect(() => {
         if (!projectPath) return;
+        let active = true;
+        
         invoke<any>('git_execute', { projectPath, args: ['config', 'user.name'] }).then(r => {
-            setCurrentUser(r?.stdout?.trim() ?? '');
+            if (active) {
+                setCurrentUser(r?.stdout?.trim() ?? '');
+            }
         }).catch(() => { });
+
+        return () => { active = false; };
     }, [projectPath]);
 
     // Fetch GitHub CI Statuses — deferred so the timeline renders first before network calls start

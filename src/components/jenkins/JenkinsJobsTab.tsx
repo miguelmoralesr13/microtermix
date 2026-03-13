@@ -5,8 +5,10 @@ import { useJenkinsStore } from '../../stores/jenkinsStore';
 import { JenkinsJobRow } from './JenkinsJobRow';
 import { LogTarget } from './JenkinsLogViewer';
 import { jobMatchesSearch, isBuilding } from '../../services/jenkinsApi';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) => void }) {
+    const queryClient = useQueryClient();
     const activeAccountId = useJenkinsStore(s => s.activeAccountId);
     const config = useJenkinsStore(s => s.accounts.find(a => a.id === activeAccountId));
     const favorites = useJenkinsStore(s => s.favorites);
@@ -23,7 +25,14 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
     const filteredJobs = jobs?.filter(j => jobMatchesSearch(j, search)) || [];
     const favoriteList = Object.values(favorites).filter(f => !search || f.name.toLowerCase().includes(search.toLowerCase()));
 
-    const runningCount = jobs?.filter(isBuilding).length || 0;
+    // Calcule running count from both visible jobs AND favorites
+    const runningInList = jobs?.filter(isBuilding).length || 0;
+    const runningInFavs = favoriteList.filter(f => !jobs?.some(j => j.url === f.url) && isBuilding(f as any)).length;
+    const runningCount = runningInList + runningInFavs;
+
+    const handleFullRefresh = () => {
+        queryClient.invalidateQueries({ queryKey: ['jenkins'] });
+    };
 
     if (!config || !config.baseUrl) {
         return (
@@ -67,7 +76,9 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
                     />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         {inputValue && <button onClick={handleClear} className="text-slate-500 hover:text-slate-300"><X size={11} /></button>}
-                        <button onClick={handleSearch} className="text-slate-500 hover:text-nexus-neon transition-colors"><RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} /></button>
+                        <button onClick={handleFullRefresh} className="text-slate-500 hover:text-nexus-neon transition-colors">
+                            <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
+                        </button>
                     </div>
                 </div>
 

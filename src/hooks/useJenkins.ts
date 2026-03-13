@@ -9,7 +9,12 @@ export function useJenkinsJobs() {
     queryKey: ['jenkins', 'jobs', config.baseUrl],
     queryFn: () => api.jenkinsGetJobs(config),
     enabled: !!config.baseUrl,
-    refetchInterval: 120_000, // 2 minutes background refresh
+    refetchInterval: (query) => {
+        const data = query.state.data;
+        const anyBuilding = Array.isArray(data) && data.some(api.isBuilding);
+        // If something is building, refresh every 10s. Otherwise every 30s.
+        return anyBuilding ? 10_000 : 30_000;
+    },
   });
 }
 
@@ -23,7 +28,8 @@ export function useJenkinsChildren(jobPath: string, enabled = false) {
     refetchInterval: (query) => {
         const data = query.state.data;
         const building = Array.isArray(data) && data.some(api.isBuilding);
-        return building ? 15_000 : 45_000;
+        // If child is building, 10s. Otherwise 30s.
+        return building ? 10_000 : 30_000;
     }
   });
 }
@@ -37,7 +43,7 @@ export function useJenkinsJobStatus(jobPath: string, enabled = false) {
     enabled: enabled && !!config.baseUrl,
     refetchInterval: (query) => {
         const data = query.state.data;
-        return (data && api.isBuilding(data)) ? 15_000 : 45_000;
+        return (data && api.isBuilding(data)) ? 10_000 : 30_000;
     },
   });
 }
@@ -51,7 +57,8 @@ export function useJenkinsBuilds(jobPath: string, enabled = false) {
     enabled: enabled && !!config.baseUrl,
     refetchInterval: (query) => {
         const data = query.state.data;
-        return Array.isArray(data) && data.some(b => b.building) ? 15_000 : 45_000;
+        const building = Array.isArray(data) && data.some(b => b.building);
+        return building ? 10_000 : 30_000;
     },
   });
 }

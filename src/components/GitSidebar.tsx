@@ -265,11 +265,16 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         setIsPulling(true);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['pull'] });
-            // Always force-refresh ahead/behind and all status after a pull attempt
+            
+            // Esperar un breve instante para que el filesystem se asiente antes de refrescar
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Refresco profundo
             invalidate(projectPath);
-            fetchAll(projectPath, true);
-            fetchAheadBehind(projectPath, true);
+            await fetchAll(projectPath, true);
+            await fetchAheadBehind(projectPath, true);
             onRefreshRequest?.();
+
             if (!result.success) {
                 setPullError({
                     message: "Pull Failed: You may have conflicting changes or need to stash/rebase.",

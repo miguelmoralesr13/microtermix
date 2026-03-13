@@ -102,6 +102,8 @@ export function JenkinsLogViewer({
             );
             
             if (chunk.text && xtermRef.current) {
+                // Jenkins logs can have HTML or ANSI codes. Progressive log usually has plain text/ANSI.
+                // We write directly to xterm
                 xtermRef.current.write(chunk.text);
                 offsetRef.current = chunk.textSize;
             }
@@ -139,6 +141,14 @@ export function JenkinsLogViewer({
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
     };
+
+    if (!cfg) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full bg-slate-950 text-slate-500 text-xs">
+                No active Jenkins account found.
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-full bg-slate-950">
