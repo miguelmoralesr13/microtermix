@@ -6,9 +6,10 @@ import {
     BarChart3, Play, Square, Settings,
     TerminalSquare, ShieldCheck, AlertCircle, LayoutDashboard,
     ListFilter, RefreshCw, ChevronDown, ChevronRight,
-    Bug, ShieldAlert, FileSearch, Waves, Copy, Activity, Search, X,
+    Bug, ShieldAlert, FileSearch, Waves, Copy, Search, X,
     ExternalLink,
 } from 'lucide-react';
+
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useProcessStore } from '../stores/processStore';
 import { TerminalView } from './TerminalView';

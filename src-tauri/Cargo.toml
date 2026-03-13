@@ -42,6 +42,7 @@ uuid = { version = "1", features = ["v4"] }
 portable-pty = "0.8"
 tower = "0.4"
 regex = "1"
+walkdir = "2"
 tauri-plugin-http = "2"
 aes = "0.8"
 cbc = { version = "0.1", features = ["alloc"] }

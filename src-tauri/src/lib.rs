@@ -23,7 +23,9 @@ use tauri::{AppHandle, Manager};
 // Re-export tipos de diff/git para usarlos en comandos Tauri.
 pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
 pub use crate::state::AppState;
-pub use crate::projects::{get_project_script_bodies, read_project_envs, scan_projects, Project};
+pub use crate::projects::{
+    get_project_script_bodies, list_test_files, read_project_envs, scan_projects, Project,
+};
 pub use crate::processes::{
     execute_pipeline, execute_service_script, get_listening_processes, get_pipeline_state,
     get_service_logs, kill_all_services, kill_process_by_pid, kill_service, kill_tree_unix_pub,
@@ -251,6 +253,7 @@ pub fn run() {
             open_new_workspace,
             get_initial_workspace_for_window,
             scan_projects,
+            list_test_files,
             save_workspace_settings,
             load_workspace_settings,
             read_workspace_config_in_folder,

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/core';
 import {
     FlaskConical, Play, Square, RefreshCw, ExternalLink,
-    Settings, Monitor, TerminalSquare, X,
+    Settings, Monitor, TerminalSquare, X, Search,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useProcessStore } from '../stores/processStore';
@@ -16,24 +16,76 @@ import { cn } from '@/lib/utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type TestLanguage = 'node' | 'python' | 'java' | 'go' | 'custom';
+
 interface TestConfig {
+    language: TestLanguage;
     command: string;
+    testFilter: string;
+    junitXmlPath: string;
     coverageXmlPath: string;
     coverageHtmlPath: string;
 }
 
 const DEFAULT_CONFIG: TestConfig = {
+    language: 'node',
     command: 'npm run test',
+    testFilter: '',
+    junitXmlPath: 'junit.xml',
     coverageXmlPath: 'coverage/clover.xml',
     coverageHtmlPath: 'coverage/lcov-report/index.html',
 };
 
-const PRESETS: { label: string; config: TestConfig }[] = [
-    { label: 'Vitest', config: { command: 'npm run test', coverageXmlPath: 'coverage/clover.xml', coverageHtmlPath: 'coverage/lcov-report/index.html' } },
-    { label: 'Jest',   config: { command: 'npx jest --coverage', coverageXmlPath: 'coverage/clover.xml', coverageHtmlPath: 'coverage/lcov-report/index.html' } },
-    { label: 'Maven / JaCoCo', config: { command: 'mvn test', coverageXmlPath: 'target/site/jacoco/jacoco.xml', coverageHtmlPath: 'target/site/jacoco/index.html' } },
-    { label: 'Gradle / JaCoCo', config: { command: './gradlew test jacocoTestReport', coverageXmlPath: 'build/reports/jacoco/test/jacocoTestReport.xml', coverageHtmlPath: 'build/reports/jacoco/test/html/index.html' } },
-];
+const PRESETS: Record<TestLanguage, { label: string; config: TestConfig }> = {
+    node: { 
+        label: 'Node (Vitest/Jest)', 
+        config: { 
+            language: 'node',
+            command: 'npm run test', 
+            testFilter: '',
+            junitXmlPath: 'junit.xml',
+            coverageXmlPath: 'coverage/clover.xml', 
+            coverageHtmlPath: 'coverage/lcov-report/index.html' 
+        } 
+    },
+    python: { 
+        label: 'Python (Pytest)', 
+        config: { 
+            language: 'python',
+            command: 'pytest --junitxml=report.xml --cov=. --cov-report=xml --cov-report=html', 
+            testFilter: '',
+            junitXmlPath: 'report.xml',
+            coverageXmlPath: 'coverage.xml', 
+            coverageHtmlPath: 'htmlcov/index.html' 
+        } 
+    },
+    java: { 
+        label: 'Java (Maven)', 
+        config: { 
+            language: 'java',
+            command: 'mvn test', 
+            testFilter: '',
+            junitXmlPath: 'target/surefire-reports/TEST-*.xml',
+            coverageXmlPath: 'target/site/jacoco/jacoco.xml', 
+            coverageHtmlPath: 'target/site/jacoco/index.html' 
+        } 
+    },
+    go: { 
+        label: 'Go', 
+        config: { 
+            language: 'go',
+            command: 'go test ./... -v -coverprofile=coverage.out', 
+            testFilter: '',
+            junitXmlPath: 'report.xml', // Requiere gotestsum
+            coverageXmlPath: 'coverage.out', 
+            coverageHtmlPath: 'coverage.html' 
+        } 
+    },
+    custom: { 
+        label: 'Custom', 
+        config: { ...DEFAULT_CONFIG, language: 'custom' } 
+    }
+};
 
 interface CoverageStat { covered: number; total: number; }
 interface CoverageSummary {
@@ -46,6 +98,33 @@ interface CoverageSummary {
 
 const STORAGE_TESTS_PATH = 'nexus-tests-selected-path';
 const STORAGE_TESTS_TAB  = 'nexus-tests-active-tab';
+
+function detectLanguage(project: any): TestLanguage {
+    const type = (project.project_type || '').toLowerCase();
+    if (type === 'node') return 'node';
+    if (type === 'python') return 'python';
+    if (type === 'java' || type === 'maven') return 'java';
+    if (type === 'go') return 'go';
+    return 'custom';
+}
+
+function buildFinalCommand(config: TestConfig): string {
+    const { command, testFilter, language } = config;
+    if (!testFilter.trim()) return command;
+
+    switch (language) {
+        case 'node':
+            return `${command} -- -t "${testFilter}"`;
+        case 'python':
+            return `${command} -k "${testFilter}"`;
+        case 'java':
+            return `${command} -Dtest=${testFilter}`;
+        case 'go':
+            return `${command} -run ${testFilter}`;
+        default:
+            return `${command} ${testFilter}`;
+    }
+}
 
 function configStorageKey(projectPath: string): string {
     return `nexus-test-config-${projectPath.replace(/[/\\:]/g, '_')}`;
@@ -70,6 +149,8 @@ function parseCoverageXml(content: string): CoverageSummary | null {
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(content, 'text/xml');
+        
+        // 1. Clover (Node)
         const cloverMetrics = doc.querySelector('project > metrics');
         if (cloverMetrics) {
             return {
@@ -78,20 +159,23 @@ function parseCoverageXml(content: string): CoverageSummary | null {
                 functions: { covered: parseInt(cloverMetrics.getAttribute('coveredmethods') || '0'), total: parseInt(cloverMetrics.getAttribute('methods') || '0') },
             };
         }
+
+        // 2. JaCoCo (Java)
         const reportEl = doc.querySelector('report');
         if (reportEl) {
             const getCounter = (type: string): CoverageStat => {
-                for (const el of Array.from(doc.querySelectorAll('report > counter'))) {
-                    if (el.getAttribute('type') === type) {
-                        const covered = parseInt(el.getAttribute('covered') || '0');
-                        const missed  = parseInt(el.getAttribute('missed') || '0');
-                        return { covered, total: covered + missed };
-                    }
+                const el = Array.from(doc.querySelectorAll('report > counter')).find(c => c.getAttribute('type') === type);
+                if (el) {
+                    const covered = parseInt(el.getAttribute('covered') || '0');
+                    const missed  = parseInt(el.getAttribute('missed') || '0');
+                    return { covered, total: covered + missed };
                 }
                 return { covered: 0, total: 0 };
             };
             return { lines: getCounter('LINE'), branches: getCounter('BRANCH'), functions: getCounter('METHOD') };
         }
+
+        // 3. Cobertura/Coverage.py (Python)
         const coverageEl = doc.querySelector('coverage');
         if (coverageEl) {
             const linesValid   = parseInt(coverageEl.getAttribute('lines-valid') || '0');
@@ -169,10 +253,35 @@ export const TestsPanel: React.FC = () => {
     const [coverageServerPort, setCoverageServerPort] = useState<number | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
 
-    const serviceId    = useMemo(() => `${selectedPath}::${config.command} `, [selectedPath, config.command]);
+    // ── File Autocomplete state
+    const [testFiles, setTestFiles] = useState<string[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const suggestions = useMemo(() => {
+        const filter = (config.testFilter || '').toLowerCase();
+        if (!filter || !showSuggestions) return [];
+        return testFiles.filter(f => f.toLowerCase().includes(filter)).slice(0, 10);
+    }, [testFiles, config.testFilter, showSuggestions]);
+
+    const finalCmd = useMemo(() => buildFinalCommand(config), [config]);
+    const serviceId = useMemo(() => `${selectedPath}::${finalCmd} `, [selectedPath, finalCmd]);
+    
     const processState = activeProcesses[serviceId];
     const isRunning    = processState?.status === 'running';
     const processStatus = processState?.status;
+
+    // Fetch test files when project or language changes
+    useEffect(() => {
+        if (!selectedPath) {
+            setTestFiles([]);
+            return;
+        }
+        invoke<string[]>('list_test_files', { projectPath: selectedPath, language: config.language })
+            .then(setTestFiles)
+            .catch(err => {
+                console.error('Failed to list test files', err);
+                setTestFiles([]);
+            });
+    }, [selectedPath, config.language]);
 
     useEffect(() => {
         return () => { invoke('stop_coverage_server').catch(() => { }); };
@@ -187,7 +296,18 @@ export const TestsPanel: React.FC = () => {
     const handleSelectProject = (path: string) => {
         stopCoverageServer();
         setSelectedPath(path);
-        setConfig(loadConfig(path));
+        
+        // Auto-detección si no hay config guardada o es la primera vez
+        const saved = localStorage.getItem(configStorageKey(path));
+        if (!saved) {
+            const project = projects.find(p => p.path === path);
+            const lang = detectLanguage(project);
+            const autoPreset = PRESETS[lang].config;
+            setConfig(autoPreset);
+            saveConfig(path, autoPreset);
+        } else {
+            setConfig(loadConfig(path));
+        }
         setCoverageError(null);
     };
 
@@ -197,14 +317,9 @@ export const TestsPanel: React.FC = () => {
         if (selectedPath) saveConfig(selectedPath, next);
     };
 
-    const applyPreset = (preset: TestConfig) => {
-        setConfig(preset);
-        if (selectedPath) saveConfig(selectedPath, preset);
-    };
-
     const handleRun = async () => {
         if (!selectedPath || !config.command) return;
-        await executeProjectScript(selectedPath, config.command, { globalEnvName: 'none' });
+        await executeProjectScript(selectedPath, finalCmd, { globalEnvName: 'none' });
     };
 
     const handleStop = async () => {
@@ -361,6 +476,66 @@ export const TestsPanel: React.FC = () => {
                                     <Play size={12} fill="currentColor" /> Run tests
                                 </Button>
                             )}
+
+                            <div className="relative flex-1 max-w-xs group">
+                                <Search size={12} className={cn(
+                                    "absolute left-2.5 top-1/2 -translate-y-1/2 transition-colors",
+                                    config.testFilter ? "text-nexus-neon" : "text-slate-500"
+                                )} />
+                                <input
+                                    type="text"
+                                    value={config.testFilter || ''}
+                                    onChange={e => {
+                                        handleConfigChange({ testFilter: e.target.value });
+                                        setShowSuggestions(true);
+                                    }}
+                                    onFocus={() => setShowSuggestions(true)}
+                                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                    placeholder={
+                                        config.language === 'node' ? "Filtrar (archivo/regex)..." :
+                                        config.language === 'python' ? "Filtrar (archivo/keyword)..." :
+                                        config.language === 'java' ? "Filtrar (ClassName)..." :
+                                        "Filtrar tests..."
+                                    }
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-1.5 text-[11px] text-slate-300 outline-none focus:border-nexus-neon/50 focus:ring-1 focus:ring-nexus-neon/20 transition-all"
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter' && !isRunning) {
+                                            handleRun();
+                                            setShowSuggestions(false);
+                                        }
+                                    }}
+                                />
+                                {config.testFilter && (
+                                    <button 
+                                        onClick={() => handleConfigChange({ testFilter: '' })}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-nexus-danger transition-colors p-0.5"
+                                        title="Limpiar filtro"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+
+                                {/* Autocomplete Dropdown */}
+                                {showSuggestions && suggestions.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-2xl z-50 max-h-60 overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                                        <div className="px-2 py-1 text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-950/50 mb-1 border-b border-slate-800">
+                                            Archivos de test detectados
+                                        </div>
+                                        {suggestions.map((file, i) => (
+                                            <button
+                                                key={i}
+                                                className="w-full text-left px-3 py-1.5 text-[10px] text-slate-300 hover:bg-nexus-neon/10 hover:text-nexus-neon transition-colors truncate font-mono"
+                                                onClick={() => {
+                                                    handleConfigChange({ testFilter: file });
+                                                    setShowSuggestions(false);
+                                                }}
+                                            >
+                                                {file}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
 
                             <Separator orientation="vertical" className="h-4 bg-slate-700" />
 
@@ -537,21 +712,27 @@ export const TestsPanel: React.FC = () => {
                     <div className="px-4 py-4 space-y-4">
                         {/* Presets */}
                         <div>
-                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Preset</label>
-                            <div className="flex flex-wrap gap-1.5">
-                                {PRESETS.map(preset => {
-                                    const isActive = config.command === preset.config.command && config.coverageXmlPath === preset.config.coverageXmlPath;
+                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Preset de Lenguaje</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {Object.entries(PRESETS).map(([id, preset]) => {
+                                    const isActive = config.language === id;
                                     return (
                                         <Button
-                                            key={preset.label}
+                                            key={id}
                                             size="xs"
                                             variant={isActive ? 'default' : 'outline'}
-                                            onClick={() => applyPreset(preset.config)}
-                                            className={isActive
-                                                ? 'bg-nexus-neon/20 text-nexus-neon border border-nexus-neon/40 hover:bg-nexus-neon/30'
-                                                : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-slate-200'
-                                            }
+                                            onClick={() => {
+                                                setConfig(preset.config);
+                                                if (selectedPath) saveConfig(selectedPath, preset.config);
+                                            }}
+                                            className={cn(
+                                                "justify-start gap-2 h-9 px-3",
+                                                isActive
+                                                    ? 'bg-nexus-neon/20 text-nexus-neon border-nexus-neon/40'
+                                                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'
+                                            )}
                                         >
+                                            <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-nexus-neon shadow-[0_0_8px_rgba(56,189,248,0.6)]" : "bg-slate-700")} />
                                             {preset.label}
                                         </Button>
                                     );
@@ -561,32 +742,41 @@ export const TestsPanel: React.FC = () => {
 
                         <Separator className="bg-slate-800" />
 
-                        {/* Command */}
-                        <div>
-                            <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Comando</label>
-                            <Input
-                                value={config.command}
-                                onChange={e => handleConfigChange({ command: e.target.value })}
-                                className="bg-slate-950 border-slate-700 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
-                            />
-                        </div>
-
-                        {/* Paths */}
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-3">
                             <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">XML Coverage</label>
+                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 text-nexus-neon/70">Comando Base</label>
                                 <Input
-                                    value={config.coverageXmlPath}
-                                    onChange={e => handleConfigChange({ coverageXmlPath: e.target.value })}
-                                    className="bg-slate-950 border-slate-700 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
+                                    value={config.command}
+                                    onChange={e => handleConfigChange({ command: e.target.value })}
+                                    className="bg-slate-950 border-slate-800 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
                                 />
+                                <p className="text-[9px] text-slate-600 mt-1">El filtro se añadirá automáticamente al final según el lenguaje.</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">JUnit XML (Resultados)</label>
+                                    <Input
+                                        value={config.junitXmlPath}
+                                        onChange={e => handleConfigChange({ junitXmlPath: e.target.value })}
+                                        className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Clover/JaCoCo XML</label>
+                                    <Input
+                                        value={config.coverageXmlPath}
+                                        onChange={e => handleConfigChange({ coverageXmlPath: e.target.value })}
+                                        className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8"
+                                    />
+                                </div>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">HTML Report</label>
+                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">HTML Report Path</label>
                                 <Input
                                     value={config.coverageHtmlPath}
                                     onChange={e => handleConfigChange({ coverageHtmlPath: e.target.value })}
-                                    className="bg-slate-950 border-slate-700 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
+                                    className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8"
                                 />
                             </div>
                         </div>

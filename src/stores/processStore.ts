@@ -27,8 +27,6 @@ interface ProcessStore {
 const logBuffer: Record<string, string[]> = {};
 let logTimer: ReturnType<typeof setTimeout> | null = null;
 
-const EMPTY_LOGS: string[] = [];
-
 export const useProcessStore = create<ProcessStore>()(
     devtools(
         (set) => ({

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 use serde::Serialize;
 
@@ -139,5 +140,62 @@ pub fn get_project_script_bodies(project_path: String) -> Result<Vec<String>, St
         .filter_map(|v| v.as_str().map(String::from))
         .collect();
     Ok(bodies)
+}
+
+#[tauri::command]
+pub fn list_test_files(project_path: String, language: String) -> Result<Vec<String>, String> {
+    let root = Path::new(&project_path);
+    if !root.exists() || !root.is_dir() {
+        return Err("Project path not found".to_string());
+    }
+
+    let mut files = Vec::new();
+    let walker = WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !name.starts_with('.') && name != "node_modules" && name != "target" && name != "dist" && name != "venv" && name != "__pycache__"
+        });
+
+    for entry in walker.flatten() {
+        if entry.file_type().is_file() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy();
+            let rel_path = path.strip_prefix(root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string();
+
+            let is_test = match language.as_str() {
+                "node" => {
+                    name.ends_with(".test.ts") || name.ends_with(".test.js") ||
+                    name.ends_with(".spec.ts") || name.ends_with(".spec.js") ||
+                    name.ends_with(".test.tsx") || name.ends_with(".spec.tsx")
+                },
+                "python" => {
+                    (name.starts_with("test_") && name.ends_with(".py")) ||
+                    name.ends_with("_test.py")
+                },
+                "java" => {
+                    name.ends_with("Test.java") || name.ends_with("Tests.java") ||
+                    name.ends_with("IT.java")
+                },
+                "go" => {
+                    name.ends_with("_test.go")
+                },
+                _ => {
+                    let n = name.to_lowercase();
+                    n.contains("test") || n.contains("spec")
+                }
+            };
+
+            if is_test {
+                files.push(rel_path);
+            }
+        }
+    }
+
+    files.sort();
+    Ok(files)
 }
 
