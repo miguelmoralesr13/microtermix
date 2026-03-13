@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2, ChevronUp, ChevronDown } from 'lucide-react';
+import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, TerminalSquare, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2, ChevronUp, ChevronDown, Play } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();
@@ -51,6 +51,7 @@ export const Sidebar: React.FC = () => {
                 className="w-full h-full overflow-y-auto flex flex-col items-center py-4 gap-1 scrollbar-none"
             >
                 {renderNavIcon('services', Server, "Services & Terminals")}
+                {renderNavIcon('pipelines', Play, "Pipelines de Ejecución")}
                 {renderNavIcon('commands', TerminalSquare, "Commands")}
                 {renderNavIcon('tests', FlaskConical, "Tests & Coverage")}
                 {renderNavIcon('sonar', BarChart3, "Sonar Analysis")}

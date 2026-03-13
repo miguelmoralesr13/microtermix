@@ -25,9 +25,10 @@ pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
 pub use crate::state::AppState;
 pub use crate::projects::{get_project_script_bodies, read_project_envs, scan_projects, Project};
 pub use crate::processes::{
-    execute_service_script, get_listening_processes, kill_all_services, kill_process_by_pid,
-    kill_service, kill_tree_unix_pub, read_file_at_path, read_file_content, write_file_content,
-    ListeningProcess, LogEvent,
+    execute_pipeline, execute_service_script, get_listening_processes, get_pipeline_state,
+    get_service_logs, kill_all_services, kill_process_by_pid, kill_service, kill_tree_unix_pub,
+    open_in_editor, read_file_at_path, read_file_content, write_file_content, ListeningProcess,
+    LogEvent,
 };
 pub use crate::proxy::{
     get_proxy_candidates, has_vite_config, parse_vite_federation, start_proxy, stop_proxy,
@@ -254,9 +255,13 @@ pub fn run() {
             load_workspace_settings,
             read_workspace_config_in_folder,
             write_workspace_config_in_folder,
+            execute_pipeline,
             execute_service_script,
+            get_pipeline_state,
+            get_service_logs,
             kill_service,
             kill_all_services,
+            open_in_editor,
             read_file_content,
             read_file_at_path,
             write_file_content,

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useProcessStore } from '../stores/processStore';
 import { RefreshCw, Power, PowerOff, ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface ProxyCandidate {
@@ -29,6 +30,8 @@ const TARGET_HOST_OPTIONS = [
 
 export const ProxyPanel: React.FC = () => {
     const { state } = useWorkspace();
+    const activeProcesses = useProcessStore(s => s.activeProcesses);
+    
     const [proxyOn, setProxyOn] = useState(false);
     const [proxyPort, setProxyPort] = useState(DEFAULT_PROXY_PORT);
     const [hostPort, setHostPort] = useState<number | ''>('');
@@ -100,8 +103,8 @@ export const ProxyPanel: React.FC = () => {
     }, [proxyOn]);
 
     const isProjectRunning = (projectPath: string) =>
-        Object.keys(state.activeProcesses).some(
-            id => id.startsWith(`${projectPath}::`) && state.activeProcesses[id].status === 'running'
+        Object.keys(activeProcesses).some(
+            id => id.startsWith(`${projectPath}::`) && activeProcesses[id].status === 'running'
         );
 
     const handleStartProxy = async () => {
@@ -117,7 +120,6 @@ export const ProxyPanel: React.FC = () => {
                     target_url: `http://${host}:${port}`,
                 };
             });
-        // Host (raíz): redirige / y todos los recursos (JS, etc.) al puerto del host para evitar 404 y MIME type errors
         if (hostPort !== '' && typeof hostPort === 'number' && hostPort > 0) {
             routes.push({ path_prefix: '/', target_url: `http://${host}:${hostPort}` });
         }
@@ -230,16 +232,7 @@ export const ProxyPanel: React.FC = () => {
                             <p className="mb-1">
                                 Para abrir todo en <span className="font-mono text-slate-200">localhost:4000</span> sin cambiar de URL: pon <strong>Puerto del proxy</strong> = 4000 y <strong>Host (/)</strong> = 4001. Luego en tu app host (Vite) cambia <span className="font-mono">server.port</span> a 4001. El proxy escuchará en 4000 y redirigirá / al host (4001) y las rutas de MFEs a sus puertos.
                             </p>
-                            <p className="text-slate-500">
-                                Alternativa: deja el host en 4000 y en el <span className="font-mono">vite.config</span> del host añade <span className="font-mono">proxy: &#123; &#39;/mfe-*&#39;: &#39;http://localhost:&#39; + puertoDelProxy &#125;</span> para que el host reenvíe los MFEs al proxy.
-                            </p>
-                            <p className="text-slate-500 mt-1">
-                                <strong>VITE_VAR_PF_POS_URL_DOMAIN:</strong> usa &quot;Solo interceptar bajo&quot; (ej. <span className="font-mono">/mfe</span>) para que solo esas rutas se enruten a los MFEs; el resto pasa transparente al Host (/). Configura Host (/) para que el tráfico que no coincida con el prefijo vaya al host.
-                            </p>
                         </div>
-                        <p className="text-xs text-slate-500 mb-3">
-                            Configura rutas y puertos abajo. Solo puedes activar redirecciones para proyectos con proceso en ejecución en Terminals. Luego encende el proxy.
-                        </p>
                         <button
                             onClick={handleStartProxy}
                             disabled={!state.currentPath}
@@ -323,12 +316,6 @@ export const ProxyPanel: React.FC = () => {
                                 </tbody>
                             </table>
                         </div>
-                )}
-
-                {proxyOn && (
-                    <p className="text-[10px] text-slate-500 mb-2">
-                        Para aplicar cambios de rutas, apaga y vuelve a encender el proxy.
-                    </p>
                 )}
 
                 {candidates.length === 0 && !loading && state.currentPath && (

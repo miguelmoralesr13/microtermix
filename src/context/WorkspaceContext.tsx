@@ -4,11 +4,12 @@ import type { CommandStep } from '../types/commands';
 
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import type { NexusWorkspaceConfig } from '../types/workspaceConfig';
+import type { NexusWorkspaceConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
 import { applyWorkspaceConfigToStorage, resolveFolderNameToPath } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
+import { useProcessStore, batchedAppendLogs } from '../stores/processStore';
 
 export interface Project {
     name: String;
@@ -17,27 +18,17 @@ export interface Project {
     scripts?: string[];
 }
 
-export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests' | 'sonar' | 'cloudwatch' | 'http' | 'jenkins' | 'lib-cipher' | 'mocks' | 'json-processor' | 'notes' | 'swagger';
-export type ProcessStatus = 'idle' | 'running' | 'error' | 'stopped';
-
-export interface ProcessState {
-    status: ProcessStatus;
-    script?: string;
-    envJson?: string;
-    logs?: string[];
-    restarts?: number;
-}
+export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests' | 'sonar' | 'cloudwatch' | 'http' | 'jenkins' | 'lib-cipher' | 'mocks' | 'json-processor' | 'notes' | 'swagger' | 'pipelines';
 
 export interface WorkspaceState {
     currentPath: string;
     projects: Project[];
-    activeProcesses: Record<string, ProcessState>;
     activeView: AppView;
     targetTerminalTab: string | null;
-    /** Se incrementa al aplicar una config cargada; ServiceManager relee localStorage cuando cambia */
     configAppliedTrigger: number;
     savedCommands: Record<string, string>;
     savedCommandSteps: Record<string, CommandStep[]>;
+    pipelines: PipelineConfig[];
 }
 
 interface WorkspaceContextType {
@@ -45,26 +36,19 @@ interface WorkspaceContextType {
     setWorkspacePath: (path: string) => void;
     scanWorkspace: (path: string) => Promise<Project[]>;
     applyWorkspaceConfig: (config: NexusWorkspaceConfig, workspacePath: string, projectPaths: string[]) => void;
-    /** Abre el diálogo de carpeta y, si el usuario elige una, la abre en esta ventana. */
     openFolderInThisWindow: () => Promise<void>;
-    /** Abre el diálogo de carpeta y, si el usuario elige una, abre una nueva ventana con ese workspace. */
     openFolderInNewWindow: () => Promise<void>;
-    updateProcessStatus: (serviceId: string, status: ProcessStatus, script?: string, envJson?: string, incrementRestart?: boolean) => void;
-    appendProcessLog: (serviceId: string, logLine: string) => void;
     setActiveView: (view: AppView) => void;
     setTargetTerminalTab: (tabId: string | null) => void;
     addSavedCommand: (name: string, command: string, steps?: CommandStep[]) => void;
     removeSavedCommand: (name: string) => void;
-    /**
-     * Centralized execution logic for a project script.
-     * Takes care of checking multi-execution "buildFirst", fetching envs from localStorage,
-     * applying vite wrapper logic, and invoking Tauri.
-     */
+    executePipeline: (pipeline: PipelineConfig) => Promise<void>;
     executeProjectScript: (
         projectPath: string,
         rawScript: string,
         options?: {
             globalEnvName?: string;
+            buildFirst?: boolean;
             incrementRestart?: boolean;
         }
     ) => Promise<void>;
@@ -73,10 +57,11 @@ interface WorkspaceContextType {
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const updateProcessStatusStore = useProcessStore(s => s.updateProcessStatus);
+
     const [state, setState] = useState<WorkspaceState>(() => {
         const savedSettings = localStorage.getItem('nexus-workspace-settings');
         let currentPath = '';
-
         let savedCommands: Record<string, string> = {};
         let savedCommandSteps: Record<string, CommandStep[]> = {};
 
@@ -92,16 +77,15 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         return {
             currentPath,
             projects: [],
-            activeProcesses: {},
             activeView: 'services',
             targetTerminalTab: null,
             savedCommands,
             savedCommandSteps,
+            pipelines: [],
             configAppliedTrigger: 0
         };
     });
 
-    // Persist savedCommands and savedCommandSteps whenever they change
     React.useEffect(() => {
         try {
             const current = localStorage.getItem('nexus-workspace-settings');
@@ -117,13 +101,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         localStorage.setItem('nexus-workspace-settings', JSON.stringify(settings));
     }, [state.currentPath]);
 
-    const activeProcessesRef = React.useRef(state.activeProcesses);
-    React.useEffect(() => {
-        activeProcessesRef.current = state.activeProcesses;
-    }, [state.activeProcesses]);
-
-
-
     const setWorkspacePath = (path: string) => {
         setState(prev => ({ ...prev, currentPath: path }));
     };
@@ -135,9 +112,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             configAppliedTrigger: prev.configAppliedTrigger + 1,
             ...(config.savedCommands != null && { savedCommands: config.savedCommands }),
             ...(config.savedCommandSteps != null && { savedCommandSteps: config.savedCommandSteps }),
+            ...(config.pipelines != null && { pipelines: config.pipelines }),
         }));
 
-        // Cargar cuentas en gitStore
         const gitStore = useGitStore.getState();
         if (config.gitAccounts && config.gitAccounts.length > 0) {
             config.gitAccounts.forEach(a => {
@@ -192,66 +169,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     }, []);
 
-    const updateProcessStatus = useCallback((serviceId: string, status: ProcessStatus, script?: string, envJson?: string, incrementRestart?: boolean) => {
-        setState(prev => {
-            const existing = prev.activeProcesses[serviceId] || {};
-
-            // solo al cerrar (idle) quitamos la pestaña; 'stopped' la mantiene
-            if (status === 'idle') {
-                const newProcs = { ...prev.activeProcesses };
-                delete newProcs[serviceId];
-                return { ...prev, activeProcesses: newProcs };
-            }
-
-            let newLogs = existing.logs;
-            let restarts = existing.restarts || 0;
-
-            if (status === 'running' && (!existing.logs || incrementRestart)) {
-                newLogs = [];
-                if (incrementRestart) restarts += 1;
-            }
-
-            return {
-                ...prev,
-                activeProcesses: {
-                    ...prev.activeProcesses,
-                    [serviceId]: {
-                        status,
-                        script: script ?? existing.script,
-                        envJson: envJson ?? existing.envJson,
-                        logs: newLogs,
-                        restarts
-                    }
-                }
-            };
-        });
-    }, []);
-
-    const appendProcessLog = useCallback((serviceId: string, logLine: string) => {
-        setState(prev => {
-            const existing = prev.activeProcesses[serviceId];
-            const base = existing ?? { status: 'running' as ProcessStatus, script: undefined, envJson: undefined, logs: [] as string[] };
-            const currentLogs = base.logs || [];
-            if (currentLogs.length > 0 && currentLogs[currentLogs.length - 1] === logLine) return prev;
-            return {
-                ...prev,
-                activeProcesses: {
-                    ...prev.activeProcesses,
-                    [serviceId]: {
-                        ...base,
-                        logs: [...currentLogs, logLine].slice(-1000)
-                    }
-                }
-            };
-        });
-    }, []);
-
-    // Listener: proceso terminó de forma natural (el proceso hijo salió solo)
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         let cancelled = false;
         listen<string>('service-stopped', (event) => {
-            updateProcessStatus(event.payload, 'stopped');
+            updateProcessStatusStore(event.payload, 'stopped');
         }).then(fn => {
             if (cancelled) fn();
             else unlisten = fn;
@@ -260,9 +182,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             cancelled = true;
             unlisten?.();
         };
-    }, [updateProcessStatus]);
+    }, [updateProcessStatusStore]);
 
-    // Listener global: una sola inscripción; si el cleanup corre antes de .then(), desregistramos al resolver
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         let cancelled = false;
@@ -270,7 +191,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             const { service_id, line, is_error } = event.payload;
             const color = is_error ? '\x1b[31m' : '\x1b[37m';
             const formattedLine = `${color}${line}\x1b[0m`;
-            appendProcessLog(service_id, formattedLine);
+            batchedAppendLogs(service_id, formattedLine);
         }).then(fn => {
             if (cancelled) fn();
             else unlisten = fn;
@@ -279,7 +200,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             cancelled = true;
             unlisten?.();
         };
-    }, [appendProcessLog]);
+    }, []);
 
     const setActiveView = (view: AppView) => {
         setState(prev => ({ ...prev, activeView: view }));
@@ -321,13 +242,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         const { globalEnvName = 'none', buildFirst = false, incrementRestart = false } = options || {};
         const compositeServiceId = `${projectPath}::${rawScript} `;
 
-        // Check if rawScript is actually a saved named command
         let actualScript = rawScript.trim();
         if (state.savedCommands && state.savedCommands[actualScript]) {
             actualScript = state.savedCommands[actualScript];
         }
 
-        // Load envs FIRST so we can build a display string showing them at {{ENVS}} position
         let configuredEnv: Record<string, string> = {};
         try {
             const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
@@ -339,24 +258,17 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 }
                 if (targetEnv !== 'none' && parsed.envs && parsed.envs[targetEnv]) {
                     configuredEnv = parsed.envs[targetEnv];
-                } else if (targetEnv !== 'none' && parsed.activeEnv && parsed.envs && parsed.envs[parsed.activeEnv]) {
-                    // El env solicitado no existe en este proyecto → fallback al env activo del proyecto
-                    configuredEnv = parsed.envs[parsed.activeEnv];
                 }
             }
         } catch (err) { }
 
-        // Reemplazar {{ENVS}} con los valores reales para cross-env inline.
-        // Si no hay envs, eliminar "cross-env {{ENVS}}" del comando.
         const envString = Object.entries(configuredEnv).map(([k, v]) => `${k}=${v}`).join(' ');
         const builtScript = envString
             ? actualScript.replace(/\{\{ENVS\}\}/g, envString).trim()
             : actualScript.replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/\{\{ENVS\}\}\s*/g, '').trim();
 
-        // parseInlineEnvs extrae vars KEY=VAL que estén al inicio del comando (compat. con comandos sin cross-env)
         const { command: scriptToRun, env: inlineEnvs } = parseInlineEnvs(builtScript);
         const baseScript = scriptToRun || builtScript;
-
         const effectiveScript = buildFirst ? `npm run build && ${baseScript}` : baseScript;
 
         try {
@@ -364,11 +276,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             const viteConfig = getViteWrapperConfig(projectPath);
             const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
             const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
-            const viteWrapperBase = viteConfig?.base || undefined;
-            const viteWrapperSourcemap = viteConfig?.sourcemap || undefined;
-            const viteWrapperHost = viteConfig?.host || undefined;
 
-            updateProcessStatus(compositeServiceId, 'running', rawScript, envVarsJson, incrementRestart);
+            updateProcessStatusStore(compositeServiceId, 'running', rawScript, envVarsJson, incrementRestart);
             await invoke('execute_service_script', {
                 serviceId: compositeServiceId,
                 projectPath,
@@ -376,41 +285,43 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 envVarsJson,
                 useViteWrapper: useViteWrapper || undefined,
                 viteWrapperRemotes,
-                viteWrapperBase,
-                viteWrapperSourcemap,
-                viteWrapperHost,
+                viteWrapperBase: viteConfig?.base,
+                viteWrapperSourcemap: viteConfig?.sourcemap,
+                viteWrapperHost: viteConfig?.host,
             });
         } catch (e) {
             console.error(`Execution failed for ${compositeServiceId}`, e);
-            updateProcessStatus(compositeServiceId, 'error');
+            updateProcessStatusStore(compositeServiceId, 'error');
         }
-    }, [updateProcessStatus, state.savedCommands]);
+    }, [updateProcessStatusStore, state.savedCommands]);
 
-    // Migración one-time desde gitConfig legacy (nexus-git-settings en localStorage)
-    React.useEffect(() => {
-        const store = useGitStore.getState();
-        if (store.accounts.length > 0) return; // ya migrado
+    const executePipeline = useCallback(async (pipeline: PipelineConfig) => {
         try {
-            const raw = localStorage.getItem('nexus-git-settings');
-            if (!raw) return;
-            const cfg = JSON.parse(raw);
-            if (cfg?.provider && cfg.provider !== 'none' && cfg.token) {
-                store.addAccount({
-                    alias: `Default ${cfg.provider === 'github' ? 'GitHub' : 'GitLab'}`,
-                    provider: cfg.provider as 'github' | 'gitlab',
-                    url: cfg.url || (cfg.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
-                    token: cfg.token,
-                });
-                localStorage.removeItem('nexus-git-settings');
-            }
-        } catch (_) {}
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+            const resolvedSteps = pipeline.steps.map((step: PipelineStepConfig) => {
+                const [folderName, script] = step.serviceId.split('::');
+                const fullPath = resolveFolderNameToPath(folderName, state.projects.map(p => p.path as string));
+                return {
+                    service_id: `${fullPath}::${script} `,
+                    condition: step.condition ? {
+                        [step.condition.type]: step.condition.value
+                    } : null
+                };
+            });
+
+            await invoke('execute_pipeline', {
+                pipelineId: pipeline.id,
+                steps: resolvedSteps
+            });
+        } catch (e) {
+            console.error('Failed to execute pipeline', e);
+        }
+    }, [state.projects]);
 
     return (
         <WorkspaceContext.Provider value={{
             state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow,
-            updateProcessStatus, appendProcessLog, setActiveView, setTargetTerminalTab,
-            executeProjectScript, addSavedCommand, removeSavedCommand
+            setActiveView, setTargetTerminalTab,
+            executeProjectScript, addSavedCommand, removeSavedCommand, executePipeline
         }}>
             {children}
         </WorkspaceContext.Provider>

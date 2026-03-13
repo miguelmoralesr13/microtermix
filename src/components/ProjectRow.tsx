@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useWorkspace, Project } from '../context/WorkspaceContext';
+import { useProcessStore } from '../stores/processStore';
 import { useProjectEnvs } from './useProjectEnvs';
 import { EnvManager } from './EnvManager';
 import { Package, Plus, Play } from 'lucide-react';
@@ -19,7 +20,10 @@ interface ProjectRowProps {
 }
 
 export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onToggleSelect, onPlayScript }) => {
-    const { state, updateProcessStatus, setTargetTerminalTab, executeProjectScript } = useWorkspace();
+    const { setTargetTerminalTab, executeProjectScript } = useWorkspace();
+    const activeProcesses = useProcessStore(s => s.activeProcesses);
+    const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
+    
     const projectPath = project.path as string;
     const isNode = project.project_type === 'node';
 
@@ -35,7 +39,6 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
         try {
             setTargetTerminalTab(serviceId);
             await executeProjectScript(projectPath, script, {
-                // npm installs don't typically use global env, but if they did, none is fine
                 globalEnvName: 'none'
             });
         } catch (e) {
@@ -57,10 +60,11 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
         setAddDepsOpen(false);
     };
 
-    // Default to the first script (or empty) to find the status from multi-execution if running
-    // Note: Multiple executions might have started with a specific script, we'll try to find any active process for this path
-    const activeProcessIds = Object.keys(state.activeProcesses).filter(id => id.startsWith(`${projectPath}::`));
-    const processState = activeProcessIds.length > 0 ? state.activeProcesses[activeProcessIds[0]] : null;
+    const activeProcessIds = useMemo(() => 
+        Object.keys(activeProcesses).filter(id => id.startsWith(`${projectPath}::`)),
+    [activeProcesses, projectPath]);
+    
+    const processState = activeProcessIds.length > 0 ? activeProcesses[activeProcessIds[0]] : null;
     const status = processState?.status || 'idle';
 
     const TYPE_BADGE: Record<string, string> = {
@@ -128,9 +132,11 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         {/* Scripts popover */}
                         {project.scripts && project.scripts.length > 0 && (
                             <Popover open={scriptMenuOpen} onOpenChange={setScriptMenuOpen}>
-                                <PopoverTrigger className="p-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-800 rounded transition-colors">
-                                    <Play size={13} className="fill-current" />
-                                </PopoverTrigger>
+                                <PopoverTrigger render={
+                                    <Button variant="ghost" size="icon-xs" className="text-slate-500 hover:text-nexus-neon">
+                                        <Play size={13} className="fill-current" />
+                                    </Button>
+                                } />
                                 <PopoverContent
                                     side="bottom"
                                     align="start"

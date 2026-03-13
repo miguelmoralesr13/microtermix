@@ -2,8 +2,13 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
-import { useWorkspace } from '../context/WorkspaceContext';
-import { Search, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { useProcessStore } from '../stores/processStore';
+import { Search, X, ChevronUp, ChevronDown, Lightbulb, Zap } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { useLogActions, LogAction } from '../hooks/useLogActions';
+import { Button } from './ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import 'xterm/css/xterm.css';
 
 /** Copies text to clipboard using execCommand (reliable on Linux WebKitGTK) with async API fallback. */
@@ -27,14 +32,32 @@ interface TerminalViewProps {
     serviceId: string;
 }
 
+// Constante para evitar re-renders infinitos por nuevas referencias de array
+const EMPTY_LOGS: string[] = [];
+
 export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
-    const { state } = useWorkspace();
+    const logs = useProcessStore(s => s.activeProcesses[serviceId]?.logs || EMPTY_LOGS);
+    const { parseLogLine } = useLogActions();
+    
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const searchAddonRef = useRef<SearchAddon | null>(null);
     const lastWrittenLogCountRef = useRef(0);
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [actions, setActions] = useState<LogAction[]>([]);
+
+    useEffect(() => {
+        const lastLines = logs.slice(-10);
+        const allActions: LogAction[] = [];
+        lastLines.forEach(line => {
+            allActions.push(...parseLogLine(line));
+        });
+        const uniqueActions = allActions.filter((a, i) => 
+            allActions.findIndex(x => x.label === a.label) === i
+        );
+        setActions(uniqueActions);
+    }, [logs, parseLogLine]);
 
     useEffect(() => {
         if (!terminalRef.current) return;
@@ -48,12 +71,48 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             fontFamily: 'Consolas, "Courier New", monospace',
             fontSize: 14,
             scrollback: 5000,
+            allowProposedApi: true,
         });
 
         const fitAddon = new FitAddon();
         const searchAddon = new SearchAddon();
+        const webLinksAddon = new WebLinksAddon();
+        
         term.loadAddon(fitAddon);
         term.loadAddon(searchAddon);
+        term.loadAddon(webLinksAddon);
+
+        const pathRegex = /((\/|[A-Z]:\\)[\w\d\s\.\-\/]+\.(ts|js|rs|py|go|json|html|css|md|txt))(:(\d+))?(:(\d+))?/gi;
+        
+        term.registerLinkProvider({
+            provideLinks(bufferLineNumber, callback) {
+                const line = term.buffer.active.getLine(bufferLineNumber - 1);
+                if (!line) return callback(undefined);
+                const text = line.translateToString(true);
+                const links: any[] = [];
+                let match;
+                pathRegex.lastIndex = 0;
+                while ((match = pathRegex.exec(text)) !== null) {
+                    const path = match[1];
+                    const lineNum = match[5] ? parseInt(match[5], 10) : undefined;
+                    const colNum = match[7] ? parseInt(match[7], 10) : undefined;
+                    const startIndex = match.index;
+                    const length = match[0].length;
+                    links.push({
+                        range: {
+                            start: { x: startIndex + 1, y: bufferLineNumber },
+                            end: { x: startIndex + length, y: bufferLineNumber }
+                        },
+                        text: match[0],
+                        activate: () => {
+                            invoke('open_in_editor', { path, line: lineNum, column: colNum }).catch(console.error);
+                        }
+                    });
+                }
+                callback(links);
+            }
+        });
+
         searchAddon.activate(term as Parameters<SearchAddon['activate']>[0]);
         searchAddonRef.current = searchAddon;
         term.open(terminalRef.current);
@@ -81,16 +140,29 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             }
             return true;
         });
+xtermRef.current = term;
 
-        xtermRef.current = term;
+if (logs.length === 0) {
+    invoke<string[]>('get_service_logs', { serviceId, limit: 1000 })
+        .then(initialLogs => {
+            if (initialLogs && initialLogs.length > 0) {
+                initialLogs.forEach(l => term.writeln(l));
+                lastWrittenLogCountRef.current = initialLogs.length;
+                useProcessStore.getState().appendLogs(serviceId, initialLogs);
+            }
+        })
+        .catch(console.error);
+} else {
+    logs.forEach(line => term.writeln(line));
+    lastWrittenLogCountRef.current = logs.length;
+}
 
-        // Repoblar logs al montar/remontar (p. ej. al volver de Git): así no se pierde el contenido
-        const initialLogs = state.activeProcesses[serviceId]?.logs ?? [];
-        initialLogs.forEach(line => term.writeln(line));
-        lastWrittenLogCountRef.current = initialLogs.length;
-
-        const resizeObserver = new ResizeObserver(() => fitAddon.fit());
-        resizeObserver.observe(terminalRef.current);
+const resizeObserver = new ResizeObserver(() => {
+    if (terminalRef.current && terminalRef.current.offsetWidth > 0) {
+        try { fitAddon.fit(); } catch (_) { }
+    }
+});
+resizeObserver.observe(terminalRef.current);
 
         return () => {
             resizeObserver.disconnect();
@@ -114,77 +186,82 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         addon.findPrevious(searchQuery, searchOptions);
     }, [searchQuery]);
 
-    // Sincronizar logs desde el estado (única fuente): así [ENV]/[CMD] se muestran
-    // aunque lleguen antes de montar (Run Selected, Restart, etc.)
-    const logs = state.activeProcesses[serviceId]?.logs ?? [];
     useEffect(() => {
         const term = xtermRef.current;
         if (!term) return;
         if (logs.length === 0) {
+            term.clear();
             lastWrittenLogCountRef.current = 0;
             return;
         }
-        if (logs.length <= lastWrittenLogCountRef.current) return;
-        for (let i = lastWrittenLogCountRef.current; i < logs.length; i++) {
-            term.writeln(logs[i]);
+        if (logs.length > lastWrittenLogCountRef.current) {
+            for (let i = lastWrittenLogCountRef.current; i < logs.length; i++) {
+                term.writeln(logs[i]);
+            }
+            lastWrittenLogCountRef.current = logs.length;
         }
-        lastWrittenLogCountRef.current = logs.length;
-    }, [serviceId, logs]);
+    }, [logs]);
 
     return (
-        <div className="w-full h-full min-h-[300px] rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col">
+        <div className="w-full h-full min-h-[300px] rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col relative">
+            {actions.length > 0 && (
+                <div className="absolute bottom-6 right-6 z-20">
+                    <Popover>
+                        <PopoverTrigger render={
+                            <Button size="sm" variant="outline" className="bg-nexus-dark/90 border-nexus-neon text-nexus-neon hover:bg-nexus-neon hover:text-black shadow-lg shadow-nexus-neon/20 gap-2">
+                                <Lightbulb size={14} className="animate-pulse" />
+                                <span>Soluciones Sugeridas ({actions.length})</span>
+                            </Button>
+                        } />
+                        <PopoverContent side="top" align="end" className="w-64 p-3 bg-slate-900 border-slate-700 shadow-xl">
+                            <div className="flex flex-col gap-2">
+                                <h4 className="text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+                                    <Zap size={12} className="text-nexus-neon" />
+                                    Acciones Detectadas
+                                </h4>
+                                {actions.map((action, i) => (
+                                    <Button
+                                        key={i}
+                                        size="xs"
+                                        variant="secondary"
+                                        className="justify-start text-left h-auto py-1.5 text-xs bg-slate-800 hover:bg-slate-700 border-none"
+                                        onClick={() => {
+                                            action.action();
+                                            setActions(prev => prev.filter(a => a.label !== action.label));
+                                        }}
+                                    >
+                                        {action.label}
+                                    </Button>
+                                ))}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+            )}
             {searchOpen && (
                 <div className="flex items-center gap-2 shrink-0 py-1.5 px-2 bg-slate-900/95 border-b border-slate-700 rounded-t">
                     <Search size={14} className="text-slate-400 shrink-0" />
                     <input
                         type="text"
                         value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        onKeyDown={e => {
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Buscar en logs..."
+                        className="bg-transparent border-none outline-none text-xs text-slate-200 w-full"
+                        autoFocus
+                        onKeyDown={(e) => {
                             if (e.key === 'Enter') handleFindNext();
                             if (e.key === 'Escape') setSearchOpen(false);
                         }}
-                        placeholder="Buscar en terminal..."
-                        className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-200 placeholder:text-slate-500 focus:border-nexus-neon focus:outline-none"
-                        autoFocus
                     />
-                    <button
-                        type="button"
-                        onClick={handleFindPrev}
-                        className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
-                        title="Anterior (Enter)"
-                    >
-                        <ChevronUp size={14} />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleFindNext}
-                        className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
-                        title="Siguiente (Enter)"
-                    >
-                        <ChevronDown size={14} />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setSearchOpen(false)}
-                        className="p-1.5 text-slate-500 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors"
-                        title="Cerrar (Esc)"
-                    >
-                        <X size={14} />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={handleFindPrev} className="p-1 hover:bg-slate-800 rounded text-slate-400"><ChevronUp size={14}/></button>
+                        <button onClick={handleFindNext} className="p-1 hover:bg-slate-800 rounded text-slate-400"><ChevronDown size={14}/></button>
+                        <div className="w-px h-3 bg-slate-700 mx-1" />
+                        <button onClick={() => setSearchOpen(false)} className="p-1 hover:bg-slate-800 rounded text-slate-400"><X size={14}/></button>
+                    </div>
                 </div>
             )}
-            <div className="flex-1 min-h-0 flex flex-col relative">
-                {!searchOpen && (
-                    <button
-                        type="button"
-                        onClick={() => setSearchOpen(true)}
-                        className="absolute top-1 right-1 z-10 p-1.5 text-slate-500 hover:text-nexus-neon hover:bg-slate-800/80 rounded transition-colors"
-                        title="Buscar (Ctrl+F)"
-                    >
-                        <Search size={14} />
-                    </button>
-                )}
+            <div className="flex-1 w-full min-h-0 relative">
                 <div ref={terminalRef} className="w-full h-full flex-1 min-h-0" />
             </div>
         </div>

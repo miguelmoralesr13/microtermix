@@ -1,16 +1,232 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::sync::Arc;
+use std::hash::{Hash, Hasher};
+use std::collections::hash_map::DefaultHasher;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
+use tokio::fs::OpenOptions as TokioOpenOptions;
 use tokio::process::Command as AsyncCommand;
 
 use crate::proxy::{find_vite_config, generate_vite_wrapper};
-use crate::AppState;
+use crate::state::{AppState, PipelineState, PipelineStatus, PipelineStep, PipelineStepCondition};
+
+/// Helper to wait for a port to be open.
+async fn wait_for_port(port: u16, timeout_secs: u64) -> bool {
+    let start = std::time::Instant::now();
+    let addr = format!("127.0.0.1:{}", port);
+    while start.elapsed().as_secs() < timeout_secs {
+        if tokio::net::TcpStream::connect(&addr).await.is_ok() {
+            return true;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(250)).await;
+    }
+    false
+}
+
+/// Helper to wait for a log pattern in a service.
+async fn wait_for_log(service_id: String, pattern: String, timeout_secs: u64) -> bool {
+    let start = std::time::Instant::now();
+    let log_path = get_service_log_path(&service_id);
+    let regex = match regex::Regex::new(&pattern) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+
+    while start.elapsed().as_secs() < timeout_secs {
+        if log_path.exists() {
+            if let Ok(content) = fs::read_to_string(&log_path) {
+                if regex.is_match(&content) {
+                    return true;
+                }
+            }
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+    false
+}
+
+#[tauri::command]
+pub async fn execute_pipeline(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    pipeline_id: String,
+    steps: Vec<PipelineStep>,
+) -> Result<(), String> {
+    let total_steps = steps.len();
+    {
+        let mut p = state.pipelines.lock().await;
+        p.insert(
+            pipeline_id.clone(),
+            PipelineState {
+                status: PipelineStatus::Running,
+                current_step: 0,
+                total_steps,
+            },
+        );
+    }
+
+    let app_clone = app.clone();
+    let pipeline_id_clone = pipeline_id.clone();
+
+    tokio::spawn(async move {
+        let state_in_task = app_clone.state::<AppState>();
+        for (i, step) in steps.into_iter().enumerate() {
+            // Update current step
+            {
+                let mut p = state_in_task.pipelines.lock().await;
+                if let Some(ps) = p.get_mut(&pipeline_id_clone) {
+                    ps.current_step = i + 1;
+                }
+            }
+
+            // We assume the service is already running or being started by some other means,
+            // or we might need to "start" it here if it's not.
+            // For now, let's assume the pipeline just waits for conditions on services.
+            
+            if let Some(condition) = step.condition {
+                let success = match condition {
+                    PipelineStepCondition::WaitPort(port) => wait_for_port(port, 60).await,
+                    PipelineStepCondition::WaitLog(pattern) => {
+                        wait_for_log(step.service_id, pattern, 60).await
+                    }
+                };
+
+                if !success {
+                    let mut p = state_in_task.pipelines.lock().await;
+                    p.insert(
+                        pipeline_id_clone.clone(),
+                        PipelineState {
+                            status: PipelineStatus::Failed("Timeout waiting for condition".to_string()),
+                            current_step: i + 1,
+                            total_steps,
+                        },
+                    );
+                    let _ = app_clone.emit("pipeline-status", (pipeline_id_clone, "failed"));
+                    return;
+                }
+            }
+        }
+
+        let mut p = state_in_task.pipelines.lock().await;
+        p.insert(
+            pipeline_id_clone.clone(),
+            PipelineState {
+                status: PipelineStatus::Completed,
+                current_step: total_steps,
+                total_steps,
+            },
+        );
+        let _ = app_clone.emit("pipeline-status", (pipeline_id_clone, "completed"));
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_pipeline_state(
+    state: State<'_, AppState>,
+    pipeline_id: String,
+) -> Result<Option<PipelineState>, String> {
+    let p = state.pipelines.lock().await;
+    Ok(p.get(&pipeline_id).cloned())
+}
+
+/// Gets the temporary directory for service logs.
+fn get_logs_dir() -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push("microtermix");
+    path.push("logs");
+    let _ = fs::create_dir_all(&path);
+    path
+}
+
+/// Sanitizes service_id to be used as a filename.
+fn sanitize_filename(name: &str) -> String {
+    if name.len() > 100 {
+        let mut hasher = DefaultHasher::new();
+        name.hash(&mut hasher);
+        return format!("h_{:x}", hasher.finish());
+    }
+    name.chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
+/// Returns the full path to the log file for a given service.
+fn get_service_log_path(service_id: &str) -> PathBuf {
+    let mut path = get_logs_dir();
+    path.push(format!("{}.log", sanitize_filename(service_id)));
+    path
+}
+
+/// Appends a line to the service log file asynchronously.
+async fn append_to_service_log_async(service_id: String, line: String) {
+    let path = get_service_log_path(&service_id);
+    if let Ok(mut file) = TokioOpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .await
+    {
+        let _ = file.write_all(format!("{}\n", line).as_bytes()).await;
+    }
+}
+
+#[tauri::command]
+pub fn get_service_logs(service_id: String, limit: Option<usize>) -> Result<Vec<String>, String> {
+    let path = get_service_log_path(&service_id);
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    if let Some(l) = limit {
+        if lines.len() > l {
+            return Ok(lines[lines.len() - l..].to_vec());
+        }
+    }
+    Ok(lines)
+}
+
+#[tauri::command]
+pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> Result<(), String> {
+    // Try to open with VS Code if available (supports line/column)
+    let mut cmd = if cfg!(target_os = "windows") {
+        StdCommand::new("cmd")
+    } else {
+        StdCommand::new("sh")
+    };
+
+    let goto_arg = match (line, column) {
+        (Some(l), Some(c)) => format!("{}:{}:{}", path, l, c),
+        (Some(l), None) => format!("{}:{}", path, l),
+        _ => path.clone(),
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        cmd.args(["/C", "code", "--goto", &goto_arg]).creation_flags(0x08000000);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        cmd.args(["-c", &format!("code --goto {}", goto_arg)]);
+    }
+
+    if let Ok(status) = cmd.status() {
+        if status.success() {
+            return Ok(());
+        }
+    }
+
+    // Fallback to system default opener (no line/column support usually)
+    tauri_plugin_opener::open_path(path, None::<String>).map_err(|e| e.to_string())
+}
 
 /// Public wrapper called from state.rs on app exit.
 #[cfg(not(target_os = "windows"))]
@@ -272,6 +488,7 @@ pub async fn execute_service_script(
 
     // Log the final command (after vite wrapper substitution, if any)
     {
+        append_to_service_log_async(service_id.clone(), format!("[CMD] {}", script_to_run)).await;
         let _ = app.emit(
             "service-logs",
             LogEvent {
@@ -334,6 +551,7 @@ pub async fn execute_service_script(
                 line = reader.next_line() => {
                     match line {
                         Ok(Some(l)) => {
+                            append_to_service_log_async(service_id_clone.clone(), l.clone()).await;
                             let _ = app_clone.emit("service-logs", LogEvent {
                                 service_id: service_id_clone.clone(),
                                 line: l,
@@ -359,6 +577,7 @@ pub async fn execute_service_script(
                 line = reader.next_line() => {
                     match line {
                         Ok(Some(l)) => {
+                            append_to_service_log_async(service_id_clone_err.clone(), l.clone()).await;
                             let _ = app_clone_err.emit("service-logs", LogEvent {
                                 service_id: service_id_clone_err.clone(),
                                 line: l,

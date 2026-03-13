@@ -5,6 +5,7 @@ import {
     Settings, Monitor, TerminalSquare, X,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useProcessStore } from '../stores/processStore';
 import { TerminalView } from './TerminalView';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -138,7 +139,9 @@ const CoverageStatBar: React.FC<{ label: string; stat: CoverageStat }> = ({ labe
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const TestsPanel: React.FC = () => {
-    const { state, executeProjectScript, updateProcessStatus } = useWorkspace();
+    const { state, executeProjectScript } = useWorkspace();
+    const activeProcesses = useProcessStore(s => s.activeProcesses);
+    const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
     const projects = state.projects;
 
     const [selectedPath, setSelectedPath] = useState<string>(() => {
@@ -167,15 +170,9 @@ export const TestsPanel: React.FC = () => {
     const [reportLoading, setReportLoading] = useState(false);
 
     const serviceId    = useMemo(() => `${selectedPath}::${config.command} `, [selectedPath, config.command]);
-    const processState = state.activeProcesses[serviceId];
+    const processState = activeProcesses[serviceId];
     const isRunning    = processState?.status === 'running';
     const processStatus = processState?.status;
-
-    const prevStatusRef = useRef<typeof processStatus>(undefined);
-    useEffect(() => {
-        if (prevStatusRef.current === 'running' && processStatus === 'stopped') loadCoverage();
-        prevStatusRef.current = processStatus;
-    }, [processStatus]);
 
     useEffect(() => {
         return () => { invoke('stop_coverage_server').catch(() => { }); };
@@ -237,9 +234,15 @@ export const TestsPanel: React.FC = () => {
         }
     }, [selectedPath, config.coverageXmlPath]);
 
+    const prevStatusRef = useRef<typeof processStatus>(undefined);
+    useEffect(() => {
+        if (prevStatusRef.current === 'running' && processStatus === 'stopped') loadCoverage();
+        prevStatusRef.current = processStatus;
+    }, [processStatus, loadCoverage]);
+
     useEffect(() => {
         if (selectedPath) loadCoverage();
-    }, [selectedPath]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [selectedPath, loadCoverage]);
 
     const handleOpenInAppReport = async () => {
         if (!selectedPath || !config.coverageHtmlPath) return;
@@ -296,7 +299,7 @@ export const TestsPanel: React.FC = () => {
                             const cov   = coverageMap[path];
                             const linesP = cov ? pct(cov.lines) : null;
                             const sid   = `${path}::${config.command} `;
-                            const running = state.activeProcesses[sid]?.status === 'running';
+                            const running = activeProcesses[sid]?.status === 'running';
                             const isSelected = selectedPath === path;
                             return (
                                 <div

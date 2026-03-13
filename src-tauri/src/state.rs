@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex as AsyncMutex;
 
 /// Handle para un servidor Axum con apagado ordenado.
@@ -9,9 +10,36 @@ pub struct ServerHandle {
     pub join: tokio::task::JoinHandle<()>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PipelineStepCondition {
+    WaitPort(u16),
+    WaitLog(String), // Regex pattern
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineStep {
+    pub service_id: String,
+    pub condition: Option<PipelineStepCondition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PipelineStatus {
+    Running,
+    Completed,
+    Failed(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineState {
+    pub status: PipelineStatus,
+    pub current_step: usize,
+    pub total_steps: usize,
+}
+
 /// Estado compartido de la aplicación backend.
 pub struct AppState {
     pub processes: Arc<AsyncMutex<HashMap<String, Arc<tokio::sync::Notify>>>>,
+    pub pipelines: Arc<AsyncMutex<HashMap<String, PipelineState>>>,
     /// PIDs of active child processes — uses a std Mutex so it can be read synchronously on exit.
     pub process_pids: Arc<std::sync::Mutex<HashMap<String, u32>>>,
     pub stdin_senders: Arc<AsyncMutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<String>>>>,
@@ -26,6 +54,7 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             processes: Arc::new(AsyncMutex::new(HashMap::new())),
+            pipelines: Arc::new(AsyncMutex::new(HashMap::new())),
             process_pids: Arc::new(std::sync::Mutex::new(HashMap::new())),
             stdin_senders: Arc::new(AsyncMutex::new(HashMap::new())),
             pty_resizers: Arc::new(AsyncMutex::new(HashMap::new())),

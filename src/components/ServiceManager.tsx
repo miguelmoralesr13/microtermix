@@ -1,11 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Sidebar } from './layout/Sidebar';
 import { Header } from './layout/Header';
-import { ProjectListPane } from './services/ProjectListPane';
-import { MultiExecutionBar } from './services/MultiExecutionBar';
-import { TerminalTabsBar } from './services/TerminalTabsBar';
-import { TerminalArea } from './services/TerminalArea';
+import { ServicesView } from './services/ServicesView';
 import { GitPanel } from './GitPanel';
 import { JiraPanel } from './JiraPanel';
 import { ProcessesPanel } from './ProcessesPanel';
@@ -22,12 +19,12 @@ import { MockPanel } from './mocks/MockPanel';
 import { JsonProcessorPanel } from './json-processor/JsonProcessorPanel';
 import { NotesPanel } from './notes/NotesPanel';
 import { SwaggerPanel } from './swagger/SwaggerPanel';
-import { ViteWrapperModal, getViteWrapperConfig, type ProxyCandidateItem } from './ViteWrapperModal';
-import { ChevronDown, ChevronRight, FileCode } from 'lucide-react';
+import { PipelinesPanel } from './PipelinesPanel';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 import { useGitStore } from '../stores/gitStore';
+import { useProcessStore } from '../stores/processStore';
 
 const ACTIVE_TERMINAL_STORAGE_KEY = 'nexus-active-terminal-tab';
 
@@ -42,66 +39,33 @@ function selectedProjectsKey(workspacePath: string): string {
 }
 
 export const ServiceManager: React.FC = () => {
-    const { state, setTargetTerminalTab, updateProcessStatus, applyWorkspaceConfig, setWorkspacePath, scanWorkspace, executeProjectScript } = useWorkspace();
+    const { state, setTargetTerminalTab, applyWorkspaceConfig, setWorkspacePath, scanWorkspace } = useWorkspace();
+    
+    // Zustand Store
+    const activeProcesses = useProcessStore(s => s.activeProcesses);
+    const activeTerminalTab = useProcessStore(s => s.activeTerminalTab);
+    const setActiveTerminalTabStore = useProcessStore(s => s.setActiveTerminalTab);
+
     const gitAccounts = useGitStore(s => s.accounts);
     const gitRepoAccounts = useGitStore(s => s.repoAccounts);
-    const [activeTerminalTab, setActiveTerminalTabState] = useState<string | null>(null);
-    const processIds = Object.keys(state.activeProcesses);
+    const processIds = useMemo(() => Object.keys(activeProcesses), [activeProcesses]);
 
-    const setActiveTerminalTab = React.useCallback((id: string | null) => {
-        setActiveTerminalTabState(id);
+    const setActiveTerminalTab = useCallback((id: string | null) => {
+        setActiveTerminalTabStore(id);
         if (id) {
             try {
                 localStorage.setItem(activeTerminalKey(state.currentPath || ''), id);
             } catch (_) { }
         }
-    }, [state.currentPath]);
-
-    // ─── Multi-Execution State ───────────────────────────────────────────────
-    const allScripts = useMemo(() => {
-        const scripts = new Set<string>();
-        state.projects.forEach(p => {
-            if (p.scripts) p.scripts.forEach(s => scripts.add(s));
-        });
-        return Array.from(scripts);
-    }, [state.projects]);
-
-    const allEnvs = useMemo(() => {
-        const envs = new Set<string>();
-        state.projects.forEach(p => {
-            try {
-                const rawStore = localStorage.getItem(`nexus-envs-${(p.path as string).replace(/[/\\:]/g, '_')}`);
-                if (rawStore) {
-                    const parsed = JSON.parse(rawStore);
-                    if (parsed.envs) {
-                        Object.keys(parsed.envs).forEach(e => envs.add(e));
-                    }
-                }
-            } catch (err) { }
-        });
-        const arr = Array.from(envs);
-        const list = arr.length > 0 ? arr : ['dev'];
-        if (!list.includes('none')) list.unshift('none');
-        return list;
-    }, [state.projects]);
+    }, [state.currentPath, setActiveTerminalTabStore]);
 
     const [multiScript, setMultiScript] = useState<string>(() => localStorage.getItem('nexus-multi-script') || '');
     const [globalEnvName, setGlobalEnvName] = useState<string>(() => localStorage.getItem('nexus-multi-env-name') || 'dev');
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const restoredSelectedRef = React.useRef(false);
-    const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
-    const [viteWrapperCandidates, setViteWrapperCandidates] = useState<ProxyCandidateItem[]>([]);
     const [vitePreviewOpen, setVitePreviewOpen] = useState(() => {
         try { return localStorage.getItem('nexus-vite-preview-open') === '1'; } catch { return false; }
     });
-
-    React.useEffect(() => {
-        if (!multiScript && allScripts.length > 0) setMultiScript(allScripts[0]);
-    }, [allScripts, multiScript]);
-
-    React.useEffect(() => {
-        if (!globalEnvName && allEnvs.length > 0) setGlobalEnvName(allEnvs[0]);
-    }, [allEnvs, globalEnvName]);
 
     React.useEffect(() => {
         if (multiScript) localStorage.setItem('nexus-multi-script', multiScript);
@@ -161,91 +125,27 @@ export const ServiceManager: React.FC = () => {
         } catch (_) { }
     }, [selectedProjects, state.currentPath]);
 
-    const toggleProjectSelect = (path: string) => {
-        setSelectedProjects(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
-    };
-
-    const handleBatchPlay = async () => {
-        if (selectedProjects.length === 0 || !multiScript) return;
-
-        await Promise.all(selectedProjects.map(async (projectPath) => {
-            await handlePlayScript(projectPath, multiScript);
-        }));
-    };
-
-    const handlePlayScript = async (projectPath: string, script: string) => {
-        if (!script) return;
-        const compositeServiceId = `${projectPath}::${script} `;
-        const existing = state.activeProcesses[compositeServiceId];
-        if (existing?.status === 'running') return;
-
-        await executeProjectScript(projectPath, script, {
-            globalEnvName
-        });
-    };
-
-    const handleBatchStop = async () => {
-        if (selectedProjects.length === 0) return;
-        await Promise.all(selectedProjects.map(async (projectPath) => {
-            const compositeServiceId = `${projectPath}::${multiScript} `;
-            try {
-                await invoke('kill_service', { serviceId: compositeServiceId });
-                updateProcessStatus(compositeServiceId, 'idle');
-            } catch (e) { }
-        }));
-    };
-
-    const handleBatchRestart = async () => {
-        if (selectedProjects.length === 0 || !multiScript) return;
-        const projectsToRestart = [...selectedProjects];
-        const scriptToRestart = multiScript;
-
-        await handleBatchStop();
-        await new Promise(r => setTimeout(r, 700));
-
-        await Promise.all(projectsToRestart.map(async (projectPath) => {
-            await executeProjectScript(projectPath, scriptToRestart, {
-                globalEnvName
-            });
-        }));
-    };
-
     // ─── Terminal Tab Management ─────────────────────────────────────────────
-    const handleTabRestart = async (e: React.MouseEvent, serviceId: string) => {
-        e.preventDefault(); e.stopPropagation();
-        const pState = state.activeProcesses[serviceId];
-        if (!pState?.script) return;
-        const projectPath = serviceId.split('::')[0];
-
-        await invoke('kill_service', { serviceId });
-        updateProcessStatus(serviceId, 'stopped');
-        await new Promise(r => setTimeout(r, 700));
-        await executeProjectScript(projectPath, pState.script as string, {
-            globalEnvName,
-            incrementRestart: true
-        });
-    };
-
     React.useEffect(() => {
         if (state.targetTerminalTab) {
-            setActiveTerminalTabState(state.targetTerminalTab);
+            setActiveTerminalTabStore(state.targetTerminalTab);
             setTargetTerminalTab(null);
         }
-    }, [state.targetTerminalTab, setTargetTerminalTab]);
+    }, [state.targetTerminalTab, setTargetTerminalTab, setActiveTerminalTabStore]);
 
     React.useEffect(() => {
         if (processIds.length === 0) return;
-        const valid = activeTerminalTab && processIds.includes(activeTerminalTab);
-        if (valid) return;
+        const isValid = activeTerminalTab && processIds.includes(activeTerminalTab);
+        if (isValid) return;
         try {
             const saved = localStorage.getItem(activeTerminalKey(state.currentPath || ''));
             if (saved && processIds.includes(saved)) {
-                setActiveTerminalTabState(saved);
+                setActiveTerminalTabStore(saved);
                 return;
             }
         } catch (_) { }
         setActiveTerminalTab(processIds[0]);
-    }, [processIds, state.currentPath, activeTerminalTab]);
+    }, [processIds, state.currentPath, activeTerminalTab, setActiveTerminalTab]);
 
     const handleSaveWorkspaceConfig = async () => {
         if (!state.currentPath) return;
@@ -260,6 +160,7 @@ export const ServiceManager: React.FC = () => {
                 state.projects.map(p => p.path as string),
                 state.savedCommands,
                 state.savedCommandSteps,
+                state.pipelines,
             );
             await invoke('write_workspace_config_in_folder', {
                 workspacePath: state.currentPath,
@@ -287,6 +188,7 @@ export const ServiceManager: React.FC = () => {
                     state.projects.map(p => p.path as string),
                     state.savedCommands,
                     state.savedCommandSteps,
+                    state.pipelines,
                 );
                 await invoke('write_workspace_config_in_folder', {
                     workspacePath: state.currentPath,
@@ -297,7 +199,7 @@ export const ServiceManager: React.FC = () => {
         return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
     }, [
         selectedProjects, multiScript, globalEnvName, vitePreviewOpen,
-        activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps,
+        activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps, state.pipelines,
         gitAccounts, gitRepoAccounts,
     ]);
 
@@ -370,113 +272,16 @@ export const ServiceManager: React.FC = () => {
 
                 <div className="flex-1 min-h-0 flex bg-slate-900 overflow-hidden w-full relative">
                     {state.activeView === 'services' && (
-                        <>
-                            <ProjectListPane
-                                projects={state.projects}
-                                selectedProjects={selectedProjects}
-                                onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path as string))}
-                                onDeselectAll={() => setSelectedProjects([])}
-                                onToggleSelect={toggleProjectSelect}
-                                onPlayScript={handlePlayScript}
-                            />
-
-                            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                                <MultiExecutionBar
-                                    allScripts={allScripts}
-                                    multiScript={multiScript}
-                                    onScriptChange={setMultiScript}
-                                    allEnvs={allEnvs}
-                                    globalEnvName={globalEnvName}
-                                    onEnvChange={setGlobalEnvName}
-                                    onPlay={handleBatchPlay}
-                                    onStop={handleBatchStop}
-                                    onRestart={handleBatchRestart}
-                                    onOpenViteWrapper={async () => {
-                                        if (!state.currentPath) return;
-                                        try {
-                                            const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
-                                            setViteWrapperCandidates(list.map(p => ({ project_path: p.project_path, display_name: p.display_name })));
-                                            setViteWrapperModalOpen(true);
-                                        } catch (_) {
-                                            setViteWrapperCandidates([]);
-                                            setViteWrapperModalOpen(true);
-                                        }
-                                    }}
-                                    selectedCount={selectedProjects.length}
-                                />
-
-                                <ViteWrapperModal
-                                    open={viteWrapperModalOpen}
-                                    onOpenChange={setViteWrapperModalOpen}
-                                    workspacePath={state.currentPath || ''}
-                                    candidates={viteWrapperCandidates}
-                                />
-
-                                {processIds.length === 0 ? (
-                                    <div className="flex-1 flex items-center justify-center text-slate-500 text-sm bg-slate-900/50">
-                                        <p>No active terminals. Start a service from the left panel.</p>
-                                    </div>
-                                ) : (
-                                    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950/50 relative">
-                                        <TerminalTabsBar
-                                            processIds={processIds}
-                                            activeProcesses={state.activeProcesses}
-                                            activeTerminalTab={activeTerminalTab}
-                                            onTabSelect={setActiveTerminalTab}
-                                            onTabStop={async (e, serviceId) => {
-                                                e.stopPropagation();
-                                                await invoke('kill_service', { serviceId });
-                                                updateProcessStatus(serviceId, 'stopped');
-                                            }}
-                                            onTabRestart={(e, serviceId) => { e.stopPropagation(); handleTabRestart(e, serviceId); }}
-                                            onTabClose={async (e, serviceId) => {
-                                                e.stopPropagation();
-                                                await invoke('kill_service', { serviceId });
-                                                updateProcessStatus(serviceId, 'idle');
-                                                if (activeTerminalTab === serviceId) {
-                                                    const remaining = processIds.filter(id => id !== serviceId);
-                                                    setActiveTerminalTab(remaining.length > 0 ? remaining[0] : null);
-                                                }
-                                            }}
-                                        />
-
-                                        {/* Vite wrapper preview (proyecto del tab activo) */}
-                                        {activeTerminalTab && (() => {
-                                            const projectPath = activeTerminalTab.split('::')[0];
-                                            const viteConfig = getViteWrapperConfig(projectPath);
-                                            const remotes = viteConfig?.remotes && Object.keys(viteConfig.remotes).length > 0 ? viteConfig.remotes : null;
-                                            if (!remotes) return null;
-                                            return (
-                                                <div className="shrink-0 border-b border-slate-800 bg-slate-900/80">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setVitePreviewOpen(o => !o)}
-                                                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors"
-                                                    >
-                                                        {vitePreviewOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                                        <FileCode size={12} />
-                                                        <span>Vite wrapper (remotes para este proyecto)</span>
-                                                    </button>
-                                                    {vitePreviewOpen && (
-                                                        <div className="px-3 pb-2 pt-0">
-                                                            <pre className="text-[11px] font-mono text-slate-400 bg-slate-950 border border-slate-700 rounded-lg p-2 overflow-x-auto overflow-y-auto max-h-32">
-                                                                {JSON.stringify(remotes, null, 2)}
-                                                            </pre>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
-
-                                        <TerminalArea
-                                            processIds={processIds}
-                                            activeProcesses={state.activeProcesses}
-                                            activeTerminalTab={activeTerminalTab}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        </>
+                        <ServicesView
+                            selectedProjects={selectedProjects}
+                            setSelectedProjects={setSelectedProjects}
+                            multiScript={multiScript}
+                            setMultiScript={setMultiScript}
+                            globalEnvName={globalEnvName}
+                            setGlobalEnvName={setGlobalEnvName}
+                            vitePreviewOpen={vitePreviewOpen}
+                            setVitePreviewOpen={setVitePreviewOpen}
+                        />
                     )}
 
                     {state.activeView === 'git' && (
@@ -572,6 +377,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'swagger' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <SwaggerPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'pipelines' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <PipelinesPanel />
                         </div>
                     )}
 

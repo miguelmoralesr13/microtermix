@@ -1,6 +1,6 @@
 import React from 'react';
 import { Square, RotateCcw, X } from 'lucide-react';
-import { ProcessState } from '../../context/WorkspaceContext';
+import { ProcessState } from '../../stores/processStore';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

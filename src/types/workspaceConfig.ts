@@ -2,6 +2,21 @@ import type { CommandStep } from './commands';
 import type { GitAccount } from '../stores/gitStore';
 import { useGitStore } from '../stores/gitStore';
 
+export interface PipelineStepConfig {
+    /** folderName::script (the space at end is handled by execution logic) */
+    serviceId: string;
+    condition?: {
+        type: 'WaitPort' | 'WaitLog';
+        value: string | number;
+    };
+}
+
+export interface PipelineConfig {
+    id: string;
+    name: string;
+    steps: PipelineStepConfig[];
+}
+
 /**
  * Configuración del workspace que se guarda en nexus-workspace.json en la carpeta del workspace.
  * Los proyectos se identifican solo por nombre de carpeta (no rutas) para evitar conflictos entre máquinas/rutas.
@@ -18,6 +33,7 @@ export interface NexusWorkspaceConfig {
     vitePreviewOpen?: boolean;
     savedCommands?: Record<string, string>;
     savedCommandSteps?: Record<string, CommandStep[]>;
+    pipelines?: PipelineConfig[];
     /** Nombre de carpeta del tab de terminal activo. */
     activeTerminalTabId?: string | null;
     /** Por proyecto: key = nombre de carpeta del proyecto */
@@ -127,6 +143,7 @@ export function buildWorkspaceConfigFromCurrentState(
     projectPaths: string[],
     savedCommands: Record<string, string> = {},
     savedCommandSteps: Record<string, CommandStep[]> = {},
+    pipelines: PipelineConfig[] = [],
 ): NexusWorkspaceConfig {
     const pathKey = (p: string) => p.replace(/[/\\:]/g, '_');
     const projectEnvs: Record<string, { activeEnv: string; envs: Record<string, Record<string, string>> }> = {};
@@ -164,6 +181,7 @@ export function buildWorkspaceConfigFromCurrentState(
         vitePreviewOpen,
         savedCommands,
         savedCommandSteps: Object.keys(savedCommandSteps).length ? savedCommandSteps : undefined,
+        pipelines: pipelines.length ? pipelines : undefined,
         activeTerminalTabId: activeTerminalTabId ? getFolderName(activeTerminalTabId) : undefined,
         projectEnvs: Object.keys(projectEnvs).length ? projectEnvs : undefined,
         projectViteWrapper: Object.keys(projectViteWrapper).length ? projectViteWrapper : undefined,
