@@ -53,6 +53,18 @@ export const CommandsPanel: React.FC = () => {
 
     const selectedProject = state.projects.find(p => (p.path as string) === selectedProjectPath);
     const isJavaSelected = selectedProject?.project_type === 'java';
+    const buildSystem = selectedProject?.build_system;
+
+    const filteredJavaPresets = useMemo(() => {
+        if (!isJavaSelected) return [];
+        if (buildSystem === 'maven') {
+            return JAVA_PRESETS.filter(p => p.name.startsWith('Mvn:') || p.name.startsWith('Jar: Run (target)'));
+        }
+        if (buildSystem === 'gradle') {
+            return JAVA_PRESETS.filter(p => p.name.startsWith('Gradle:') || p.name.startsWith('Jar: Run (build/libs)'));
+        }
+        return JAVA_PRESETS;
+    }, [isJavaSelected, buildSystem]);
 
     const filteredSavedCommandNames = useMemo(() => {
         const type = String(selectedProject?.project_type || '');
@@ -275,7 +287,7 @@ export const CommandsPanel: React.FC = () => {
                                 <Cpu size={12} className="text-orange-400" /> Quick Java Commands
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {JAVA_PRESETS.map(preset => (
+                                {filteredJavaPresets.map(preset => (
                                     <button
                                         key={preset.name}
                                         onClick={() => {

@@ -17,6 +17,7 @@ export interface Project {
     path: String;
     project_type: String;
     framework?: string;
+    build_system?: string;
     scripts?: string[];
 }
 

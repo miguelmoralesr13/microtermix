@@ -3,6 +3,8 @@ import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface JenkinsConfig {
+    id?: string;
+    name?: string;
     baseUrl: string;
     user: string;
     token: string;
@@ -412,6 +414,44 @@ export async function jenkinsGetPipelineStages(
         return await jGet<PipelineRun>(cfg, `${jobPath}${buildNumber}/wfapi/describe`);
     } catch {
         return null;
+    }
+}
+
+export interface StageNode {
+    id: string;
+    name: string;
+    status: StageStatus;
+    durationMillis: number;
+    logUrl?: string;
+}
+
+/** Fetches nodes (steps) for a specific stage. */
+export async function jenkinsGetStageNodes(
+    cfg: JenkinsConfig,
+    jobPath: string,
+    buildNumber: number,
+    stageId: string,
+): Promise<StageNode[]> {
+    try {
+        const res = await jGet<any>(cfg, `${jobPath}${buildNumber}/execution/node/${stageId}/wfapi/describe`);
+        return res.stageFlowNodes ?? [];
+    } catch {
+        return [];
+    }
+}
+
+/** Fetches the log text for a specific stage node. */
+export async function jenkinsGetStageLog(
+    cfg: JenkinsConfig,
+    jobPath: string,
+    buildNumber: number,
+    nodeId: string,
+): Promise<string> {
+    try {
+        const res = await jGet<{ text: string }>(cfg, `${jobPath}${buildNumber}/execution/node/${nodeId}/wfapi/log`);
+        return res.text;
+    } catch {
+        return 'No log available for this stage.';
     }
 }
 

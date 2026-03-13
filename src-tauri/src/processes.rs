@@ -210,6 +210,7 @@ pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> R
 
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         cmd.args(["/C", "code", "--goto", &goto_arg]).creation_flags(0x08000000);
     }
     #[cfg(not(target_os = "windows"))]
@@ -521,6 +522,7 @@ pub async fn execute_service_script(
     let mut cmd = AsyncCommand::new("cmd");
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
         cmd.args(["/C", &script_to_run]).creation_flags(0x08000000);
     }
 

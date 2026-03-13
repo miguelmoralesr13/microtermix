@@ -12,6 +12,7 @@ pub struct Project {
     pub path: String,
     pub project_type: String, // "node" | "bun" | "go" | "rust" | "python" | "java" | "unknown"
     pub framework: Option<String>, // "django" | "fastapi" | "flask" | "spring-boot" | etc.
+    pub build_system: Option<String>, // "maven" | "gradle" | "npm" | "pip" | etc.
     pub scripts: Vec<String>,
 }
 
@@ -64,6 +65,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                 let path_str = path.to_string_lossy().to_string();
                 let mut p_type = "unknown".to_string();
                 let mut framework = None;
+                let mut build_system = None;
                 let mut scripts = Vec::new();
 
                 // 1. NODE / BUN
@@ -75,6 +77,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                                 else { "npm" };
 
                     p_type = (if has_bun_lock { "bun" } else { "node" }).to_string();
+                    build_system = Some(runner.to_string());
                     
                     if let Ok(content) = fs::read_to_string(path.join("package.json")) {
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
@@ -91,6 +94,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                 // 2. GO
                 else if path.join("go.mod").exists() {
                     p_type = "go".to_string();
+                    build_system = Some("go".to_string());
                     scripts.push("go run .".to_string());
                     scripts.push("go build .".to_string());
                     scripts.push("go test ./...".to_string());
@@ -99,6 +103,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                 // 3. RUST
                 else if path.join("Cargo.toml").exists() {
                     p_type = "rust".to_string();
+                    build_system = Some("cargo".to_string());
                     scripts.push("cargo run".to_string());
                     scripts.push("cargo build".to_string());
                     scripts.push("cargo test".to_string());
@@ -117,6 +122,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                         path.join(".venv").is_dir() {
                     
                     p_type = "python".to_string();
+                    build_system = Some(if path.join("pyproject.toml").exists() { "poetry" } else if path.join("Pipfile").exists() { "pipenv" } else { "pip" }.to_string());
                     framework = detect_python_framework(&path);
                     let python_cmd = if cfg!(target_os = "windows") { "python" } else { "python3" };
                     
@@ -140,6 +146,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                 // 5. JAVA (Maven / Gradle)
                 else if path.join("pom.xml").exists() {
                     p_type = "java".to_string();
+                    build_system = Some("maven".to_string());
                     framework = detect_java_framework(&path);
                     scripts.push("mvn clean install".to_string());
                     if framework.as_deref() == Some("spring-boot") {
@@ -149,6 +156,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                 }
                 else if path.join("build.gradle").exists() {
                     p_type = "java".to_string();
+                    build_system = Some("gradle".to_string());
                     framework = detect_java_framework(&path);
                     let gradlew = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
                     let cmd = if path.join(gradlew).exists() { gradlew } else { "gradle" };
@@ -166,6 +174,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                         path: path_str,
                         project_type: p_type,
                         framework,
+                        build_system,
                         scripts,
                     });
                 }
