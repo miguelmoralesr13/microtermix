@@ -48,6 +48,7 @@ pub struct AppState {
     pub file_server_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
     pub coverage_server_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
     pub pending_workspace_by_label: Arc<AsyncMutex<HashMap<String, String>>>,
+    pub git_watchers: Arc<AsyncMutex<HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>,
 }
 
 impl AppState {
@@ -62,6 +63,7 @@ impl AppState {
             file_server_abort: Arc::new(AsyncMutex::new(None)),
             coverage_server_abort: Arc::new(AsyncMutex::new(None)),
             pending_workspace_by_label: Arc::new(AsyncMutex::new(HashMap::new())),
+            git_watchers: Arc::new(AsyncMutex::new(HashMap::new())),
         }
     }
 }

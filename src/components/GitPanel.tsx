@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Settings, RefreshCw, Github, Gitlab, Download } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
 import { GitDiffViewer } from './GitDiffViewer';
@@ -15,6 +16,7 @@ import { GitConflictModal } from './GitConflictModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { AccountManagerModal } from './AccountManagerModal';
 import { CloneRepoModal } from './CloneRepoModal';
+import { cn } from '../lib/utils';
 
 function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
     if (!remoteUrl) return null;
@@ -28,7 +30,12 @@ const MAX_PANEL = 800;
 
 export const GitPanel: React.FC = () => {
     const { state } = useWorkspace();
-    const ui = useGitStore(s => s.ui);
+    
+    // Selectores granulares para evitar re-renders masivos al redimensionar
+    const activeTab = useGitStore(s => s.ui.activeTab);
+    const sidebarWidth = useGitStore(s => s.ui.sidebarWidth);
+    const stagingWidth = useGitStore(s => s.ui.stagingWidth);
+    
     const setUi = useGitStore(s => s.setUi);
     const fetchRepo = useGitStore(s => s.fetchRepo);
     const fetchAll = useGitStore(s => s.fetchAll);
@@ -37,7 +44,7 @@ export const GitPanel: React.FC = () => {
 
     const invalidate = useGitStore(s => s.invalidate);
     const ensureRepo = useGitStore(s => s.ensureRepo);
-    const repoData = useGitStore(s => s.repos[ui.activeTab ?? ''] ?? EMPTY_REPO_DATA);
+    const repoData = useGitStore(s => s.repos[activeTab ?? ''] ?? EMPTY_REPO_DATA);
 
     const accounts = useGitStore(s => s.accounts);
     const repoAccounts = useGitStore(s => s.repoAccounts);
@@ -50,30 +57,37 @@ export const GitPanel: React.FC = () => {
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
     const [detectedAccounts, setDetectedAccounts] = useState<typeof accounts>([]);
-    const activeAccount = ui.activeTab ? getActiveAccount(ui.activeTab) : undefined;
+    const activeAccount = activeTab ? getActiveAccount(activeTab) : undefined;
+
+    const handleRefreshAll = useCallback((force = true, silent = false) => {
+        if (!activeTab) return;
+        invalidate(activeTab);
+        fetchAll(activeTab, force, silent);
+        fetchAheadBehind(activeTab, force, silent);
+    }, [activeTab, invalidate, fetchAll, fetchAheadBehind]);
 
     useEffect(() => {
-        if (!ui.activeTab) return;
-        ensureRepo(ui.activeTab);
-        fetchRepo(ui.activeTab).then(() => {
-            const repo = useGitStore.getState().repos[ui.activeTab!];
+        if (!activeTab) return;
+        ensureRepo(activeTab);
+        fetchRepo(activeTab).then(() => {
+            const repo = useGitStore.getState().repos[activeTab!];
             if (repo?.isGitRepo === 'initialized') {
-                fetchAll(ui.activeTab!, false);
-                fetchAheadBehind(ui.activeTab!, false);
+                fetchAll(activeTab!, false);
+                fetchAheadBehind(activeTab!, false);
             }
         });
-    }, [ui.activeTab]);
+    }, [activeTab]);
 
     // Poll ahead/behind every 2 minutes while the panel is open
     useEffect(() => {
-        if (!ui.activeTab) return;
-        const tab = ui.activeTab;
+        if (!activeTab) return;
+        const tab = activeTab;
         const id = setInterval(() => {
             const repo = useGitStore.getState().repos[tab];
             if (repo?.isGitRepo === 'initialized') fetchAheadBehind(tab, true);
         }, 120_000);
         return () => clearInterval(id);
-    }, [ui.activeTab]);
+    }, [activeTab]);
 
     const handleTabChange = (path: string) => {
         setUi({ activeTab: path });
@@ -89,22 +103,15 @@ export const GitPanel: React.FC = () => {
     };
 
     const handleStatusRefresh = () => {
-        if (ui.activeTab) { invalidate(ui.activeTab, 'status'); fetchStatus(ui.activeTab, true); }
+        if (activeTab) { invalidate(activeTab, 'status'); fetchStatus(activeTab, true); }
     };
     const handleBranchRefresh = () => {
-        if (ui.activeTab) {
-            invalidate(ui.activeTab);
-            fetchAll(ui.activeTab, true);
-            fetchAheadBehind(ui.activeTab, true);
+        if (activeTab) {
+            invalidate(activeTab);
+            fetchAll(activeTab, true);
+            fetchAheadBehind(activeTab, true);
         }
     };
-
-    const handleRefreshAll = useCallback(() => {
-        if (!ui.activeTab) return;
-        invalidate(ui.activeTab);
-        fetchAll(ui.activeTab, true);
-        fetchAheadBehind(ui.activeTab, true);
-    }, [ui.activeTab, invalidate, fetchAll, fetchAheadBehind]);
 
     useEffect(() => {
         if (!repoData.status.isMergeInProgress && !repoData.status.isRebaseInProgress) {
@@ -113,12 +120,12 @@ export const GitPanel: React.FC = () => {
     }, [repoData.status.isMergeInProgress, repoData.status.isRebaseInProgress]);
 
     useEffect(() => {
-        if (!ui.activeTab) { setDetectedAccounts([]); return; }
-        if (repoAccounts[ui.activeTab]) { setDetectedAccounts([]); return; }
+        if (!activeTab) { setDetectedAccounts([]); return; }
+        if (repoAccounts[activeTab]) { setDetectedAccounts([]); return; }
         if (accounts.length === 0) { setDetectedAccounts([]); return; }
 
         invoke<{ success: boolean; stdout: string }>('git_execute', {
-            projectPath: ui.activeTab,
+            projectPath: activeTab,
             args: ['remote', 'get-url', 'origin'],
         }).then(res => {
             if (!res.success) { setDetectedAccounts([]); return; }
@@ -126,21 +133,21 @@ export const GitPanel: React.FC = () => {
             if (!provider) { setDetectedAccounts([]); return; }
             const matches = accounts.filter(a => a.provider === provider);
             if (matches.length === 1) {
-                setRepoAccount(ui.activeTab!, matches[0].id);
+                setRepoAccount(activeTab!, matches[0].id);
                 setDetectedAccounts([]);
             } else {
                 setDetectedAccounts(matches);
             }
         }).catch(() => setDetectedAccounts([]));
-    }, [ui.activeTab, repoAccounts, accounts]);
+    }, [activeTab, repoAccounts, accounts]);
 
     const resizeSidebar = useCallback((delta: number) => {
-        setUi({ sidebarWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, ui.sidebarWidth + delta)) });
-    }, [ui.sidebarWidth, setUi]);
+        setUi({ sidebarWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, sidebarWidth + delta)) });
+    }, [sidebarWidth, setUi]);
 
     const resizeStaging = useCallback((delta: number) => {
-        setUi({ stagingWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, ui.stagingWidth - delta)) });
-    }, [ui.stagingWidth, setUi]);
+        setUi({ stagingWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, stagingWidth - delta)) });
+    }, [stagingWidth, setUi]);
 
     return (
         <div className="relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
@@ -154,7 +161,7 @@ export const GitPanel: React.FC = () => {
                             <button
                                 key={project.path as string}
                                 onClick={() => handleTabChange(project.path as string)}
-                                className={`px-4 py-2 text-xs font-bold transition-colors border-r border-slate-800 ${ui.activeTab === project.path ? 'bg-slate-900 text-nexus-accent border-t-2 border-t-nexus-accent' : 'bg-slate-950 text-slate-500 hover:bg-slate-900 hover:text-slate-300 border-t-2 border-transparent'}`}
+                                className={`px-4 py-2 text-xs font-bold transition-colors border-r border-slate-800 ${activeTab === project.path ? 'bg-slate-900 text-nexus-accent border-t-2 border-t-nexus-accent' : 'bg-slate-950 text-slate-500 hover:bg-slate-900 hover:text-slate-300 border-t-2 border-transparent'}`}
                             >
                                 {project.name}
                             </button>
@@ -177,7 +184,7 @@ export const GitPanel: React.FC = () => {
                         <span>Clonar</span>
                     </button>
                     {/* Badge de cuenta activa */}
-                    {ui.activeTab && (
+                    {activeTab && (
                         <button
                             onClick={() => setIsAccountModalOpen(true)}
                             className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 transition-colors mr-1 text-slate-300"
@@ -207,13 +214,13 @@ export const GitPanel: React.FC = () => {
             </div>
 
             {/* Banner auto-detección: múltiples cuentas coinciden */}
-            {detectedAccounts.length > 1 && ui.activeTab && (
+            {detectedAccounts.length > 1 && activeTab && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-nexus-accent/10 border-b border-nexus-accent/30 text-xs text-slate-300 shrink-0">
                     <span>Se detectaron {detectedAccounts.length} cuentas para este repo. Selecciona:</span>
                     {detectedAccounts.map(a => (
                         <button
                             key={a.id}
-                            onClick={() => { setRepoAccount(ui.activeTab!, a.id); setDetectedAccounts([]); }}
+                            onClick={() => { setRepoAccount(activeTab!, a.id); setDetectedAccounts([]); }}
                             className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium"
                         >
                             {a.alias}
@@ -224,7 +231,7 @@ export const GitPanel: React.FC = () => {
 
             {/* Main Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col relative">
-                {!ui.activeTab ? (
+                {!activeTab ? (
                     <div className="flex-1 flex items-center justify-center text-slate-500 p-8 text-center text-sm">
                         Select a repository tab to manage Git operations.
                     </div>
@@ -235,15 +242,15 @@ export const GitPanel: React.FC = () => {
                     </div>
                 ) : (repoData.isGitRepo === 'not_initialized' || repoData.isGitRepo === 'empty_repo') ? (
                     <GitInitPanel
-                        projectPath={ui.activeTab}
+                        projectPath={activeTab}
                         initialStep={repoData.isGitRepo === 'empty_repo' ? 2 : 1}
                         onInitialized={() => {
-                            if (ui.activeTab) {
-                                invalidate(ui.activeTab);
-                                fetchRepo(ui.activeTab).then(() => {
-                                    const repo = useGitStore.getState().repos[ui.activeTab!];
+                            if (activeTab) {
+                                invalidate(activeTab);
+                                fetchRepo(activeTab).then(() => {
+                                    const repo = useGitStore.getState().repos[activeTab!];
                                     if (repo?.isGitRepo === 'initialized') {
-                                        fetchAll(ui.activeTab!, true);
+                                        fetchAll(activeTab!, true);
                                     }
                                 });
                             }
@@ -253,9 +260,9 @@ export const GitPanel: React.FC = () => {
                 ) : (
                     <div className="flex-1 flex w-full min-h-0">
                         {/* Left: Branches and Stash (resizable) */}
-                        <div style={{ width: ui.sidebarWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
+                        <div style={{ width: sidebarWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
                             <GitSidebar
-                                projectPath={ui.activeTab}
+                                projectPath={activeTab}
                                 onRefreshRequest={handleBranchRefresh}
                             />
                         </div>
@@ -267,14 +274,14 @@ export const GitPanel: React.FC = () => {
                             {activeDiffFile ? (
                                 activeDiffFile.mode === 'conflicted' ? (
                                     <GitConflictResolver
-                                        projectPath={ui.activeTab}
+                                        projectPath={activeTab}
                                         file={activeDiffFile.file}
                                         onClose={() => setActiveDiffFile(null)}
                                         onRefreshRequest={handleStatusRefresh}
                                     />
                                 ) : (
                                     <GitDiffViewer
-                                        projectPath={ui.activeTab}
+                                        projectPath={activeTab}
                                         file={activeDiffFile.file}
                                         mode={activeDiffFile.mode}
                                         targetLine={activeDiffFile.line}
@@ -284,7 +291,7 @@ export const GitPanel: React.FC = () => {
                                 )
                             ) : (
                                 <GitTimeline
-                                    projectPath={ui.activeTab}
+                                    projectPath={activeTab}
                                     onCommitSelect={(hash, message, author, date) =>
                                         setSelectedCommit({ hash, message, author, date })
                                     }
@@ -295,9 +302,9 @@ export const GitPanel: React.FC = () => {
                         <ResizableDivider direction="horizontal" onResize={resizeStaging} className="bg-slate-900" />
 
                         {/* Right: Staging & Commit (resizable) */}
-                        <div style={{ width: ui.stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
+                        <div style={{ width: stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
                             <GitStagingPanel
-                                projectPath={ui.activeTab}
+                                projectPath={activeTab}
                                 onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode, line })}
                                 onOpenConflictModal={() => setIsConflictModalOpen(true)}
                             />
@@ -310,9 +317,9 @@ export const GitPanel: React.FC = () => {
             <GitConsole />
 
             {/* Commit Diff Modal */}
-            {selectedCommit && ui.activeTab && (
+            {selectedCommit && activeTab && (
                 <CommitDiffModal
-                    projectPath={ui.activeTab}
+                    projectPath={activeTab}
                     commitHash={selectedCommit.hash}
                     commitMessage={selectedCommit.message}
                     commitAuthor={selectedCommit.author}
@@ -323,7 +330,7 @@ export const GitPanel: React.FC = () => {
 
             {isAccountModalOpen && (
                 <AccountManagerModal
-                    repoPath={ui.activeTab}
+                    repoPath={activeTab}
                     onClose={() => setIsAccountModalOpen(false)}
                 />
             )}
@@ -334,9 +341,9 @@ export const GitPanel: React.FC = () => {
                 />
             )}
 
-            {isConflictModalOpen && (repoData.status.isMergeInProgress || repoData.status.isRebaseInProgress) && ui.activeTab && (
+            {isConflictModalOpen && (repoData.status.isMergeInProgress || repoData.status.isRebaseInProgress) && activeTab && (
                 <GitConflictModal
-                    projectPath={ui.activeTab}
+                    projectPath={activeTab}
                     conflictedFiles={repoData.status.files.filter(f => f.isConflicted).map(f => f.file)}
                     isRebase={!!repoData.status.isRebaseInProgress}
                     onClose={() => setIsConflictModalOpen(false)}

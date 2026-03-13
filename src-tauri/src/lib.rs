@@ -1,5 +1,6 @@
 mod git_diff;
 mod git_native;
+mod git_watcher;
 mod state;
 mod projects;
 mod processes;
@@ -63,6 +64,7 @@ pub use crate::apigateway::{
     apigw_export_api_swagger_rest, apigw_export_api_swagger_http,
 };
 pub use crate::mock_server::{start_mock_server, stop_mock_server, MockServerState};
+pub use crate::git_watcher::{watch_repo, stop_watching_repo};
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -281,6 +283,8 @@ pub fn run() {
             git_status_native,
             git_log_native,
             git_ahead_behind_native,
+            watch_repo,
+            stop_watching_repo,
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,

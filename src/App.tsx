@@ -2,6 +2,7 @@ import React from "react";
 import "./App.css";
 import { WorkspaceProvider, useWorkspace } from "./context/WorkspaceContext";
 import { ServiceManager } from "./components/ServiceManager";
+import { useGitStore } from "./stores/gitStore";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
 import { Toaster } from 'sonner';
@@ -25,6 +26,23 @@ registerMonacoThemes();
 function AppContent() {
   const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
   const configLoadedForPathRef = React.useRef<string | null>(null);
+  const initWatchers = useGitStore(s => s.initWatchers);
+
+  // Iniciar watchers globales para Git
+  React.useEffect(() => {
+    if (state.projects.length > 0) {
+      const paths = state.projects.map(p => p.path as string);
+      let cleanup: (() => Promise<void>) | undefined;
+      
+      initWatchers(paths).then(c => {
+        cleanup = c;
+      });
+
+      return () => {
+        if (cleanup) cleanup();
+      };
+    }
+  }, [state.projects.length, initWatchers]);
 
   React.useEffect(() => {
     const initWorkspace = async () => {

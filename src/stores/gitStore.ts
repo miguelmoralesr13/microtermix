@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -115,12 +116,13 @@ interface GitStore {
     ensureRepo: (path: string) => void;
 
     fetchRepo: (path: string) => Promise<void>;
-    fetchBranches: (path: string, force?: boolean) => Promise<void>;
-    fetchStatus: (path: string, force?: boolean) => Promise<void>;
-    fetchTimeline: (path: string, force?: boolean) => Promise<void>;
-    fetchAheadBehind: (path: string, force?: boolean) => Promise<void>;
-    fetchAll: (path: string, force?: boolean) => Promise<void>;
+    fetchBranches: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
+    fetchStatus: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
+    fetchTimeline: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
+    fetchAheadBehind: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
+    fetchAll: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
     invalidate: (path: string, slice?: 'branches' | 'status' | 'timeline' | 'aheadBehind') => void;
+    initWatchers: (projectPaths: string[]) => Promise<() => void>;
 }
 
 // ── Stale times (ms) ──────────────────────────────────────────────────────────
@@ -305,11 +307,11 @@ export const useGitStore = create<GitStore>()(
                     }
                 },
 
-                fetchBranches: async (path, force = false) => {
+                fetchBranches: async (path, force = false, silent = false) => {
                     const repo = get().repos[path] ?? defaultRepoData();
                     if (!force && !isStale(repo, 'branches')) return;
 
-                    patchRepo(set, path, r => ({ loading: { ...r.loading, branches: true } }));
+                    if (!silent) patchRepo(set, path, r => ({ loading: { ...r.loading, branches: true } }));
                     try {
                         const res: { local: { name: string; active: boolean }[]; remote: string[]; stashes: string[] } =
                             await invoke('git_branches_native', { projectPath: path });
@@ -328,11 +330,11 @@ export const useGitStore = create<GitStore>()(
                     }
                 },
 
-                fetchStatus: async (path, force = false) => {
+                fetchStatus: async (path, force = false, silent = false) => {
                     const repo = get().repos[path] ?? defaultRepoData();
                     if (!force && !isStale(repo, 'status')) return;
 
-                    patchRepo(set, path, r => ({ loading: { ...r.loading, status: true } }));
+                    if (!silent) patchRepo(set, path, r => ({ loading: { ...r.loading, status: true } }));
                     try {
                         const res: {
                             files: GitStatusEntry[];
@@ -360,11 +362,11 @@ export const useGitStore = create<GitStore>()(
                     }
                 },
 
-                fetchTimeline: async (path, force = false) => {
+                fetchTimeline: async (path, force = false, silent = false) => {
                     const repo = get().repos[path] ?? defaultRepoData();
                     if (!force && !isStale(repo, 'timeline')) return;
 
-                    patchRepo(set, path, r => ({ loading: { ...r.loading, timeline: true } }));
+                    if (!silent) patchRepo(set, path, r => ({ loading: { ...r.loading, timeline: true } }));
                     try {
                         const res: { commits: RawCommit[]; localHashes: string[] } =
                             await invoke('git_log_native', { projectPath: path });
@@ -383,11 +385,11 @@ export const useGitStore = create<GitStore>()(
                     }
                 },
 
-                fetchAheadBehind: async (path, force = false) => {
+                fetchAheadBehind: async (path, force = false, silent = false) => {
                     const repo = get().repos[path] ?? defaultRepoData();
                     if (!force && !isStale(repo, 'aheadBehind')) return;
 
-                    patchRepo(set, path, r => ({ loading: { ...r.loading, aheadBehind: true } }));
+                    if (!silent) patchRepo(set, path, r => ({ loading: { ...r.loading, aheadBehind: true } }));
                     try {
                         const res: AheadBehind = await invoke('git_ahead_behind_native', { projectPath: path });
                         patchRepo(set, path, r => ({
@@ -398,19 +400,17 @@ export const useGitStore = create<GitStore>()(
                     } catch {
                         // Silently ignore — offline or no remote
                         patchRepo(set, path, r => ({
-                            aheadBehind: null,
-                            lastFetched: { ...r.lastFetched, aheadBehind: Date.now() },
                             loading: { ...r.loading, aheadBehind: false },
                         }));
                     }
                 },
 
-                fetchAll: async (path, force = false) => {
-                    const { fetchBranches, fetchStatus, fetchTimeline } = get();
+                fetchAll: async (path, force = false, silent = false) => {
+                    const { fetchStatus, fetchBranches, fetchTimeline } = get();
                     await Promise.all([
-                        fetchBranches(path, force),
-                        fetchStatus(path, force),
-                        fetchTimeline(path, force),
+                        fetchStatus(path, force, silent),
+                        fetchBranches(path, force, silent),
+                        fetchTimeline(path, force, silent),
                     ]);
                 },
 
@@ -422,6 +422,34 @@ export const useGitStore = create<GitStore>()(
                     } else {
                         patchRepo(set, path, { lastFetched: {} });
                     }
+                },
+
+                initWatchers: async (projectPaths) => {
+                    const { fetchAll, fetchAheadBehind, invalidate } = get();
+                    
+                    // Start watchers in backend for all projects
+                    projectPaths.forEach(path => {
+                        invoke('watch_repo', { projectPath: path }).catch(() => {});
+                    });
+
+                    // Listen for global events
+                    const unlistenPromise = listen('git-changed', (event) => {
+                        const path = event.payload as string;
+                        console.log(`⚡ Global Git Watcher: ${path} changed`);
+                        
+                        // Silent and forced refresh
+                        invalidate(path);
+                        fetchAll(path, true, true);
+                        fetchAheadBehind(path, true, true);
+                    });
+
+                    return async () => {
+                        const unlisten = await unlistenPromise;
+                        unlisten();
+                        projectPaths.forEach(path => {
+                            invoke('stop_watching_repo', { projectPath: path }).catch(() => {});
+                        });
+                    };
                 },
             }),
             {
