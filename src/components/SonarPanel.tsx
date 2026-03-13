@@ -737,13 +737,89 @@ export const SonarPanel: React.FC = () => {
 
             {/* Config Modal */}
             {configModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
-                        <div className="flex items-center justify-between border-b border-slate-800 pb-4"><h3 className="text-sm font-black text-slate-200">Configuración Global Sonar</h3><button onClick={() => setConfigModalOpen(false)}><X size={18} className="text-slate-500" /></button></div>
-                        <input type="text" value={globalConfig.serverUrl} onChange={e => setGlobalConfig(g => ({ ...g, serverUrl: e.target.value }))} placeholder="Server URL" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none" />
-                        <input type="password" value={globalConfig.token} onChange={e => setGlobalConfig(g => ({ ...g, token: e.target.value }))} placeholder="Global Token" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none" />
-                        <div className="flex justify-end gap-3"><button onClick={handleTestConnection} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl border border-slate-700">Probar Token</button><button onClick={() => { saveGlobalConfig(globalConfig); setConfigModalOpen(false); }} className="px-6 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl">Guardar</button></div>
-                        {testResult && <p className={`text-xs p-2 rounded ${testResult.ok ? 'bg-green-900/20 text-green-400' : 'bg-red-900/20 text-red-400'}`}>{testResult.message}</p>}
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-5">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-200 uppercase tracking-tight">Configuración Global Sonar</h3>
+                                <p className="text-[10px] text-slate-500">Configura tu servidor y credenciales</p>
+                            </div>
+                            <button onClick={() => setConfigModalOpen(false)} className="p-1 hover:bg-slate-800 rounded-full transition-colors">
+                                <X size={18} className="text-slate-500" />
+                            </button>
+                        </div>
+
+                        {/* Selector de Tipo */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <button 
+                                onClick={() => setGlobalConfig(g => ({ ...g, serverUrl: 'https://sonarcloud.io', authType: 'bearer' }))}
+                                className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${globalConfig.serverUrl.includes('sonarcloud.io') ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
+                            >
+                                SonarCloud (Public)
+                            </button>
+                            <button 
+                                onClick={() => setGlobalConfig(g => ({ ...g, authType: 'basic' }))}
+                                className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${!globalConfig.serverUrl.includes('sonarcloud.io') ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
+                            >
+                                SonarQube (Private/Local)
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Server URL</label>
+                                <input type="text" value={globalConfig.serverUrl} onChange={e => setGlobalConfig(g => ({ ...g, serverUrl: e.target.value }))} placeholder="https://sonarcloud.io o http://localhost:9000" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                            </div>
+
+                            {globalConfig.serverUrl.includes('sonarcloud.io') && (
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Organización (Solo SonarCloud)</label>
+                                    <input type="text" value={globalConfig.organization || ''} onChange={e => setGlobalConfig(g => ({ ...g, organization: e.target.value }))} placeholder="mi-organizacion" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                                </div>
+                            )}
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Token de Acceso</label>
+                                <input type="password" value={globalConfig.token} onChange={e => setGlobalConfig(g => ({ ...g, token: e.target.value }))} placeholder="squ_..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                            </div>
+
+                            <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-slate-200 uppercase">Tipo de Autenticación</span>
+                                    <span className="text-[9px] text-slate-500 tracking-tight">Cloud usa Bearer, On-Premise suele usar Basic</span>
+                                </div>
+                                <select 
+                                    value={globalConfig.authType} 
+                                    onChange={e => setGlobalConfig(g => ({ ...g, authType: e.target.value as any }))}
+                                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none cursor-pointer"
+                                >
+                                    <option value="basic">HTTP Basic</option>
+                                    <option value="bearer">Bearer Token</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button 
+                                onClick={handleTestConnection} 
+                                className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 hover:bg-slate-700 transition-colors"
+                            >
+                                Probar Conexión
+                            </button>
+                            <button 
+                                onClick={() => { saveGlobalConfig(globalConfig); setConfigModalOpen(false); }} 
+                                className="px-6 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
+                            >
+                                Guardar Configuración
+                            </button>
+                        </div>
+                        
+                        {testResult && (
+                            <div className={`text-xs p-3 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 ${testResult.ok ? 'bg-green-900/20 text-green-400 border border-green-500/20' : 'bg-red-900/20 text-red-400 border border-red-500/20'}`}>
+                                {testResult.ok ? <ShieldCheck size={14} /> : <AlertCircle size={14} />}
+                                <span className="font-medium">{testResult.message}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
