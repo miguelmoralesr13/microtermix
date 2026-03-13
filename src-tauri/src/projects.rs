@@ -10,8 +10,40 @@ use serde::Serialize;
 pub struct Project {
     pub name: String,
     pub path: String,
-    pub project_type: String, // "node" | "go" | "rust" | "unknown"
+    pub project_type: String, // "node" | "bun" | "go" | "rust" | "python" | "java" | "unknown"
+    pub framework: Option<String>, // "django" | "fastapi" | "flask" | "spring-boot" | etc.
     pub scripts: Vec<String>,
+}
+
+fn detect_python_framework(path: &Path) -> Option<String> {
+    if path.join("manage.py").exists() {
+        return Some("django".to_string());
+    }
+    
+    // Check requirements.txt or pyproject.toml for fastapi/flask
+    let mut files_to_check = Vec::new();
+    if path.join("requirements.txt").exists() { files_to_check.push("requirements.txt"); }
+    if path.join("pyproject.toml").exists() { files_to_check.push("pyproject.toml"); }
+    if path.join("Pipfile").exists() { files_to_check.push("Pipfile"); }
+
+    for file in files_to_check {
+        if let Ok(content) = fs::read_to_string(path.join(file)) {
+            let content_lc = content.to_lowercase();
+            if content_lc.contains("fastapi") { return Some("fastapi".to_string()); }
+            if content_lc.contains("flask") { return Some("flask".to_string()); }
+        }
+    }
+    None
+}
+
+fn detect_java_framework(path: &Path) -> Option<String> {
+    if let Ok(content) = fs::read_to_string(path.join("pom.xml")) {
+        if content.contains("spring-boot") { return Some("spring-boot".to_string()); }
+    }
+    if let Ok(content) = fs::read_to_string(path.join("build.gradle")) {
+        if content.contains("org.springframework.boot") { return Some("spring-boot".to_string()); }
+    }
+    None
 }
 
 /// Escanea proyectos hijos directos del directorio raíz.
@@ -31,27 +63,91 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                 let name = entry.file_name().to_string_lossy().to_string();
                 let path_str = path.to_string_lossy().to_string();
                 let mut p_type = "unknown".to_string();
+                let mut framework = None;
                 let mut scripts = Vec::new();
 
+                // 1. NODE / BUN
                 if path.join("package.json").exists() {
-                    p_type = "node".to_string();
+                    let has_bun_lock = path.join("bun.lockb").exists() || path.join("bun.lock").exists();
+                    let runner = if has_bun_lock { "bun" } 
+                                else if path.join("pnpm-lock.yaml").exists() { "pnpm" }
+                                else if path.join("yarn.lock").exists() { "yarn" }
+                                else { "npm" };
+
+                    p_type = (if has_bun_lock { "bun" } else { "node" }).to_string();
+                    
                     if let Ok(content) = fs::read_to_string(path.join("package.json")) {
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(scripts_obj) =
-                                json.get("scripts").and_then(|s| s.as_object())
-                            {
+                            if let Some(scripts_obj) = json.get("scripts").and_then(|s| s.as_object()) {
                                 for key in scripts_obj.keys() {
-                                    scripts.push(format!("npm run {}", key));
+                                    let cmd = if runner == "npm" { format!("npm run {}", key) } else { format!("{} {}", runner, key) };
+                                    scripts.push(cmd);
                                 }
                             }
                         }
                     }
-                } else if path.join("go.mod").exists() {
+                    if scripts.is_empty() { scripts.push(format!("{} install", runner)); }
+                } 
+                // 2. GO
+                else if path.join("go.mod").exists() {
                     p_type = "go".to_string();
                     scripts.push("go run .".to_string());
-                } else if path.join("Cargo.toml").exists() {
+                    scripts.push("go build .".to_string());
+                    scripts.push("go test ./...".to_string());
+                    scripts.push("go mod tidy".to_string());
+                } 
+                // 3. RUST
+                else if path.join("Cargo.toml").exists() {
                     p_type = "rust".to_string();
                     scripts.push("cargo run".to_string());
+                    scripts.push("cargo build".to_string());
+                    scripts.push("cargo test".to_string());
+                    scripts.push("cargo check".to_string());
+                }
+                // 4. PYTHON
+                else if path.join("requirements.txt").exists() || path.join("pyproject.toml").exists() || path.join("Pipfile").exists() {
+                    p_type = "python".to_string();
+                    framework = detect_python_framework(&path);
+                    let python_cmd = if cfg!(target_os = "windows") { "python" } else { "python3" };
+                    
+                    match framework.as_deref() {
+                        Some("django") => {
+                            scripts.push(format!("{} manage.py runserver", python_cmd));
+                            scripts.push(format!("{} manage.py migrate", python_cmd));
+                        },
+                        Some("fastapi") => {
+                            scripts.push("uvicorn main:app --reload".to_string());
+                        },
+                        Some("flask") => {
+                            scripts.push(format!("{} -m flask run", python_cmd));
+                        },
+                        _ => {
+                            scripts.push(format!("{} main.py", python_cmd));
+                        }
+                    }
+                    scripts.push(format!("{} -m pytest", python_cmd));
+                }
+                // 5. JAVA (Maven / Gradle)
+                else if path.join("pom.xml").exists() {
+                    p_type = "java".to_string();
+                    framework = detect_java_framework(&path);
+                    scripts.push("mvn clean install".to_string());
+                    if framework.as_deref() == Some("spring-boot") {
+                        scripts.push("mvn spring-boot:run".to_string());
+                    }
+                    scripts.push("mvn test".to_string());
+                }
+                else if path.join("build.gradle").exists() {
+                    p_type = "java".to_string();
+                    framework = detect_java_framework(&path);
+                    let gradlew = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
+                    let cmd = if path.join(gradlew).exists() { gradlew } else { "gradle" };
+                    
+                    scripts.push(format!("{} build", cmd));
+                    if framework.as_deref() == Some("spring-boot") {
+                        scripts.push(format!("{} bootRun", cmd));
+                    }
+                    scripts.push(format!("{} test", cmd));
                 }
 
                 if p_type != "unknown" {
@@ -59,6 +155,7 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                         name,
                         path: path_str,
                         project_type: p_type,
+                        framework,
                         scripts,
                     });
                 }

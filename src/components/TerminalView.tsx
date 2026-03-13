@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useProcessStore } from '../stores/processStore';
-import { Search, X, ChevronUp, ChevronDown, Lightbulb, Zap } from 'lucide-react';
+import { Search, X, ChevronUp, ChevronDown, Lightbulb, Zap, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useLogActions, LogAction } from '../hooks/useLogActions';
 import { Button } from './ui/button';
@@ -67,6 +67,22 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
                 background: '#020617',
                 foreground: '#f8fafc',
                 cursor: '#38bdf8',
+                black: '#020617',
+                red: '#ff5555',
+                green: '#50fa7b',
+                yellow: '#f1fa8c',
+                blue: '#bd93f9',
+                magenta: '#ff79c6',
+                cyan: '#8be9fd',
+                white: '#f8fafc',
+                brightBlack: '#6272a4',
+                brightRed: '#ff6e6e',
+                brightGreen: '#69ff94',
+                brightYellow: '#ffffa5',
+                brightBlue: '#d6acff',
+                brightMagenta: '#ff92df',
+                brightCyan: '#a4ffff',
+                brightWhite: '#ffffff',
             },
             fontFamily: 'Consolas, "Courier New", monospace',
             fontSize: 14,
@@ -187,6 +203,10 @@ resizeObserver.observe(terminalRef.current);
         addon.findPrevious(searchQuery, searchOptions);
     }, [searchQuery]);
 
+    const handleClear = useCallback(() => {
+        useProcessStore.getState().setLogs(serviceId, []);
+    }, [serviceId]);
+
     useEffect(() => {
         const term = xtermRef.current;
         if (!term) return;
@@ -204,7 +224,20 @@ resizeObserver.observe(terminalRef.current);
     }, [logs]);
 
     return (
-        <div className="w-full h-full min-h-[300px] rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col relative">
+        <div className="w-full h-full min-h-[300px] rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col relative group">
+            {/* Floating Clear Button */}
+            <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button 
+                    size="icon-xs" 
+                    variant="ghost" 
+                    onClick={handleClear}
+                    className="bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-nexus-danger hover:bg-slate-800 shadow-xl"
+                    title="Limpiar terminal"
+                >
+                    <Trash2 size={14} />
+                </Button>
+            </div>
+
             {actions.length > 0 && (
                 <div className="absolute bottom-6 right-6 z-20">
                     <Popover>

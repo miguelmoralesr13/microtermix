@@ -492,12 +492,13 @@ pub async fn execute_service_script(
 
     // Log the final command (after vite wrapper substitution, if any)
     {
-        append_to_service_log_async(service_id.clone(), format!("[CMD] {}", script_to_run)).await;
+        let colored_cmd = format!("\x1b[1;36m[CMD]\x1b[0m \x1b[1;32m{}\x1b[0m", script_to_run);
+        append_to_service_log_async(service_id.clone(), colored_cmd.clone()).await;
         let _ = app.emit(
             "service-logs",
             LogEvent {
                 service_id: service_id.clone(),
-                line: format!("[CMD] {}", script_to_run),
+                line: colored_cmd,
                 is_error: false,
             },
         );
