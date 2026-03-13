@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use walkdir::WalkDir;
 
 use serde::Serialize;
@@ -105,7 +105,17 @@ pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
                     scripts.push("cargo check".to_string());
                 }
                 // 4. PYTHON
-                else if path.join("requirements.txt").exists() || path.join("pyproject.toml").exists() || path.join("Pipfile").exists() {
+                else if path.join("requirements.txt").exists() || 
+                        path.join("pyproject.toml").exists() || 
+                        path.join("Pipfile").exists() ||
+                        path.join("setup.py").exists() ||
+                        path.join("manage.py").exists() ||
+                        path.join("main.py").exists() ||
+                        path.join("environment.yml").exists() ||
+                        path.join(".python-version").exists() ||
+                        path.join("venv").is_dir() ||
+                        path.join(".venv").is_dir() {
+                    
                     p_type = "python".to_string();
                     framework = detect_python_framework(&path);
                     let python_cmd = if cfg!(target_os = "windows") { "python" } else { "python3" };

@@ -10,11 +10,13 @@ import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
 import { useProcessStore, batchedAppendLogs } from '../stores/processStore';
+import { useToolStore } from '../stores/toolStore';
 
 export interface Project {
     name: String;
     path: String;
     project_type: String;
+    framework?: string;
     scripts?: string[];
 }
 
@@ -28,6 +30,7 @@ export interface WorkspaceState {
     configAppliedTrigger: number;
     savedCommands: Record<string, string>;
     savedCommandSteps: Record<string, CommandStep[]>;
+    savedCommandTypes: Record<string, string>; // name -> project_type
     pipelines: PipelineConfig[];
 }
 
@@ -40,7 +43,7 @@ interface WorkspaceContextType {
     openFolderInNewWindow: () => Promise<void>;
     setActiveView: (view: AppView) => void;
     setTargetTerminalTab: (tabId: string | null) => void;
-    addSavedCommand: (name: string, command: string, steps?: CommandStep[]) => void;
+    addSavedCommand: (name: string, command: string, steps?: CommandStep[], projectType?: string) => void;
     removeSavedCommand: (name: string) => void;
     executePipeline: (pipeline: PipelineConfig) => Promise<void>;
     executeProjectScript: (
@@ -64,6 +67,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         let currentPath = '';
         let savedCommands: Record<string, string> = {};
         let savedCommandSteps: Record<string, CommandStep[]> = {};
+        let savedCommandTypes: Record<string, string> = {};
 
         if (savedSettings) {
             try {
@@ -71,6 +75,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 if (parsed.currentPath) currentPath = parsed.currentPath;
                 if (parsed.savedCommands) savedCommands = parsed.savedCommands;
                 if (parsed.savedCommandSteps) savedCommandSteps = parsed.savedCommandSteps;
+                if (parsed.savedCommandTypes) savedCommandTypes = parsed.savedCommandTypes;
             } catch (e) { }
         }
 
@@ -81,6 +86,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             targetTerminalTab: null,
             savedCommands,
             savedCommandSteps,
+            savedCommandTypes,
             pipelines: [],
             configAppliedTrigger: 0
         };
@@ -92,13 +98,18 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             const parsed = current ? JSON.parse(current) : {};
             parsed.savedCommands = state.savedCommands;
             parsed.savedCommandSteps = state.savedCommandSteps;
+            parsed.savedCommandTypes = state.savedCommandTypes;
             localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
         } catch (_) { }
-    }, [state.savedCommands, state.savedCommandSteps]);
+    }, [state.savedCommands, state.savedCommandSteps, state.savedCommandTypes]);
 
     React.useEffect(() => {
-        const settings = { currentPath: state.currentPath, savedCommands: state.savedCommands };
-        localStorage.setItem('nexus-workspace-settings', JSON.stringify(settings));
+        try {
+            const current = localStorage.getItem('nexus-workspace-settings');
+            const parsed = current ? JSON.parse(current) : {};
+            parsed.currentPath = state.currentPath;
+            localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
+        } catch (_) { }
     }, [state.currentPath]);
 
     const setWorkspacePath = (path: string) => {
@@ -112,6 +123,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             configAppliedTrigger: prev.configAppliedTrigger + 1,
             ...(config.savedCommands != null && { savedCommands: config.savedCommands }),
             ...(config.savedCommandSteps != null && { savedCommandSteps: config.savedCommandSteps }),
+            ...(config.savedCommandTypes != null && { savedCommandTypes: config.savedCommandTypes }),
             ...(config.pipelines != null && { pipelines: config.pipelines }),
         }));
 
@@ -208,13 +220,16 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setState(prev => ({ ...prev, targetTerminalTab: tabId }));
     };
 
-    const addSavedCommand = (name: string, command: string, steps?: CommandStep[]) => {
+    const addSavedCommand = (name: string, command: string, steps?: CommandStep[], projectType?: string) => {
         setState(prev => ({
             ...prev,
             savedCommands: { ...prev.savedCommands, [name]: command },
             savedCommandSteps: steps
                 ? { ...prev.savedCommandSteps, [name]: steps }
                 : prev.savedCommandSteps,
+            savedCommandTypes: projectType
+                ? { ...prev.savedCommandTypes, [name]: projectType }
+                : prev.savedCommandTypes,
         }));
     };
 
@@ -224,7 +239,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             delete nextCmds[name];
             const nextSteps = { ...prev.savedCommandSteps };
             delete nextSteps[name];
-            return { ...prev, savedCommands: nextCmds, savedCommandSteps: nextSteps };
+            const nextTypes = { ...prev.savedCommandTypes };
+            delete nextTypes[name];
+            return { ...prev, savedCommands: nextCmds, savedCommandSteps: nextSteps, savedCommandTypes: nextTypes };
         });
     };
 
@@ -260,10 +277,47 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             }
         } catch (err) { }
 
+        // Find the project to know its type
+        const project = state.projects.find(p => p.path === projectPath);
+        const isNodeLike = project?.project_type === 'node' || project?.project_type === 'bun';
+        const isJava = project?.project_type === 'java';
+        const isPython = project?.project_type === 'python';
+
+        // Preparar strings de reemplazo según lenguaje
         const envString = Object.entries(configuredEnv).map(([k, v]) => `${k}=${v}`).join(' ');
-        const builtScript = envString
-            ? actualScript.replace(/\{\{ENVS\}\}/g, envString).trim()
-            : actualScript.replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/\{\{ENVS\}\}\s*/g, '').trim();
+        const javaPropertyString = Object.entries(configuredEnv).map(([k, v]) => `-D${k}=${v}`).join(' ');
+        
+        let builtScript = actualScript;
+        
+        if (isNodeLike) {
+            // Para Node, preferimos cross-env si no está presente
+            if (builtScript.includes('{{ENVS}}') && !builtScript.includes('cross-env')) {
+                builtScript = builtScript.replace(/\{\{ENVS\}\}/g, 'npx cross-env {{ENVS}}');
+            }
+            builtScript = envString
+                ? builtScript.replace(/\{\{ENVS\}\}/g, envString).trim()
+                : builtScript.replace(/npx\s+cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/\{\{ENVS\}\}\s*/g, '').trim();
+        } else if (isJava) {
+            // Para Java (Maven/Gradle), intentamos inyectar -D properties de forma inteligente
+            if (builtScript.includes('{{ENVS}}')) {
+                const firstWord = builtScript.trim().split(' ')[0];
+                if (['mvn', 'gradle', './gradlew', 'gradlew.bat'].includes(firstWord)) {
+                    // Insertar justo después del comando base: "mvn -Dport=3000 clean install"
+                    builtScript = builtScript.replace(firstWord, `${firstWord} ${javaPropertyString}`);
+                    builtScript = builtScript.replace(/\{\{ENVS\}\}\s*/g, '');
+                } else {
+                    builtScript = builtScript.replace(/\{\{ENVS\}\}/g, javaPropertyString);
+                }
+            }
+        } else if (isPython) {
+            // Para Python/Unix, inyección simple KEY=VAL cmd
+            builtScript = builtScript.replace(/\{\{ENVS\}\}/g, envString).trim();
+        } else {
+            // Genérico: eliminar marcadores (el backend inyectará las variables vía OS env vars)
+            builtScript = builtScript.replace(/npx\s+cross-env\s+\{\{ENVS\}\}\s*/g, '')
+                                     .replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '')
+                                     .replace(/\{\{ENVS\}\}\s*/g, '').trim();
+        }
 
         const { command: scriptToRun, env: inlineEnvs } = parseInlineEnvs(builtScript);
         const baseScript = scriptToRun || builtScript;
@@ -273,7 +327,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             const envVarsJson = JSON.stringify({ ...configuredEnv, ...inlineEnvs });
             const viteConfig = getViteWrapperConfig(projectPath);
             const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
-            const viteWrapperRemotes = useViteWrapper ? viteConfig!.remotes : undefined;
+
+            const customJavaHome = useToolStore.getState().projectJdks[projectPath];
 
             updateProcessStatusStore(compositeServiceId, 'running', rawScript, envVarsJson, incrementRestart);
             await invoke('execute_service_script', {
@@ -282,10 +337,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 script: effectiveScript,
                 envVarsJson,
                 useViteWrapper: useViteWrapper || undefined,
-                viteWrapperRemotes,
+                viteWrapperRemotes: viteConfig?.remotes,
                 viteWrapperBase: viteConfig?.base,
                 viteWrapperSourcemap: viteConfig?.sourcemap,
                 viteWrapperHost: viteConfig?.host,
+                customJavaHome,
             });
         } catch (e) {
             console.error(`Execution failed for ${compositeServiceId}`, e);

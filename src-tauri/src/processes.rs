@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 use std::sync::Arc;
@@ -455,6 +454,7 @@ pub async fn execute_service_script(
     vite_wrapper_base: Option<String>,
     vite_wrapper_sourcemap: Option<bool>,
     vite_wrapper_host: Option<String>,
+    custom_java_home: Option<String>,
 ) -> Result<(), String> {
     let path = Path::new(&project_path);
     let mut script_to_run = script.clone();
@@ -484,7 +484,20 @@ pub async fn execute_service_script(
         }
     }
 
-    let envs: HashMap<String, String> = serde_json::from_str(&env_vars_json).unwrap_or_default();
+    let mut envs: HashMap<String, String> = serde_json::from_str(&env_vars_json).unwrap_or_default();
+
+    // Inyectar JAVA_HOME si se proporciona
+    if let Some(java_home) = custom_java_home {
+        envs.insert("JAVA_HOME".to_string(), java_home.clone());
+        
+        let java_bin = Path::new(&java_home).join("bin");
+        let java_bin_str = java_bin.to_string_lossy().to_string();
+
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let separator = if cfg!(target_os = "windows") { ";" } else { ":" };
+        let new_path = format!("{}{}{}", java_bin_str, separator, current_path);
+        envs.insert("PATH".to_string(), new_path);
+    }
 
     // Limpiar el archivo de logs antes de empezar una nueva ejecución
     let log_path = get_service_log_path(&service_id);

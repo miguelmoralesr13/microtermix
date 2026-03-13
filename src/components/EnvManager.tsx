@@ -3,6 +3,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { X, Plus, Trash2, RefreshCw, Copy, ChevronDown, FileCode, Upload } from 'lucide-react';
 import { useProjectEnvs } from './useProjectEnvs';
+import { useToolStore } from '../stores/toolStore';
+import { JdkManagerModal } from './JdkManagerModal';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { parseInlineEnvsFromScripts } from '../utils/parseInlineEnvs';
 
 /** Parsea contenido tipo .env (KEY=value, líneas vacías y # se ignoran). */
@@ -29,6 +32,10 @@ interface EnvManagerProps {
 }
 
 export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) => {
+    const { state } = useWorkspace();
+    const project = state.projects.find(p => (p.path as string) === projectPath);
+    const isJava = project?.project_type === 'java';
+
     const {
         activeEnv, envNames, store,
         setActiveEnv, addEnv, removeEnv,
@@ -36,6 +43,13 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
         copyEnvVars, overwriteEnvVars,
         reloadFromFiles,
     } = useProjectEnvs(projectPath);
+
+    const { jdks, projectJdks, setProjectJdk, fetchJdks } = useToolStore();
+    const [jdkModalOpen, setJdkModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (isJava) fetchJdks();
+    }, [isJava, fetchJdks]);
 
     const [scriptBodies, setScriptBodies] = useState<string[]>([]);
     const [newKey, setNewKey] = useState('');
@@ -147,14 +161,15 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
     const envColor = (name: string) => ENV_COLORS[name] ?? '#94a3b8';
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-            onClick={onClose}
-        >
+        <>
             <div
-                className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl"
-                onClick={e => e.stopPropagation()}
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                onClick={onClose}
             >
+                <div
+                    className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl"
+                    onClick={e => e.stopPropagation()}
+                >
                 {/* Header */}
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 shrink-0">
                     <div className="flex-1 min-w-0">
@@ -207,6 +222,31 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
 
                 {/* Row 2 — Action bar (no overflow, so dropdowns render freely) */}
                 <div className="relative flex items-center gap-2 px-4 py-1.5 border-b border-slate-800 bg-slate-950/40 shrink-0">
+                    {/* Java Version Selector */}
+                    {isJava && (
+                        <div className="flex items-center gap-2 mr-2 border-r border-slate-800 pr-3">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">JDK:</span>
+                            <select
+                                value={projectJdks[projectPath] || ''}
+                                onChange={(e) => setProjectJdk(projectPath, e.target.value || null)}
+                                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[10px] text-slate-300 outline-none focus:border-nexus-neon transition-colors"
+                            >
+                                <option value="">Default (System)</option>
+                                {jdks.map(jdk => (
+                                    <option key={jdk.path} value={jdk.path}>{jdk.name} ({jdk.version})</option>
+                                ))}
+                            </select>
+                            <button 
+                                onClick={() => setJdkModalOpen(true)}
+                                title="Gestionar JDKs"
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-slate-400 border border-slate-700 rounded-lg hover:border-nexus-neon hover:text-nexus-neon transition-colors"
+                            >
+                                <Plus size={12} />
+                                <span className="font-bold">Descargar JDK</span>
+                            </button>
+                        </div>
+                    )}
+
                     {/* Copiar desde */}
                     {otherEnvs.length > 0 && (
                         <div className="relative">
@@ -395,5 +435,12 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
                 </div>
             </div>
         </div>
+
+            <JdkManagerModal 
+                open={jdkModalOpen} 
+                onOpenChange={setJdkModalOpen} 
+                projectPath={projectPath}
+            />
+        </>
     );
 };

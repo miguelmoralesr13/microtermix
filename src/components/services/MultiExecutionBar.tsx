@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Play, Square, RotateCcw, FileCode, Wand2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Play, Square, RotateCcw, FileCode, Wand2, Coffee, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -19,6 +19,7 @@ interface MultiExecutionBarProps {
     onRestart: () => void;
     onOpenViteWrapper: () => void;
     selectedCount: number;
+    activeSelectionType: string | null;
 }
 
 export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
@@ -33,33 +34,69 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
     onRestart,
     onOpenViteWrapper,
     selectedCount,
+    activeSelectionType,
 }) => {
     const disabled = selectedCount === 0;
     const [builderOpen, setBuilderOpen] = useState(false);
     const { state, addSavedCommand } = useWorkspace();
 
-    const savedNames = Object.keys(state.savedCommands || {});
+    const filteredSavedNames = useMemo(() => {
+        return Object.keys(state.savedCommands || {}).filter(name => {
+            const savedType = state.savedCommandTypes?.[name];
+            if (!savedType) return true; // Global
+            return savedType === activeSelectionType;
+        });
+    }, [state.savedCommands, state.savedCommandTypes, activeSelectionType]);
 
-    // The options should include:
-    // 1. All standard package.json scripts
-    // 2. All saved command names
-    // 3. The current multiScript if it somehow isn't in either list
-    const extendedScripts = [...new Set([...allScripts, ...savedNames])];
-    if (multiScript && !extendedScripts.includes(multiScript)) {
-        extendedScripts.push(multiScript);
-    }
+    const extendedScripts = useMemo(() => {
+        let list = [...new Set([...allScripts, ...filteredSavedNames])];
+        
+        // Smart Filter by Active Selection Type
+        if (activeSelectionType === 'java') {
+            const javaKeywords = ['mvn', 'gradle', 'java', 'javac', 'jar', 'spring-boot', 'bootRun'];
+            list = list.filter(s => {
+                const slc = s.toLowerCase();
+                return javaKeywords.some(kw => slc.includes(kw));
+            });
+        } else if (activeSelectionType === 'node' || activeSelectionType === 'bun') {
+            const forbiddenKeywords = ['mvn', 'gradle', './gradlew', 'java -jar', 'javac', 'spring-boot', 'bootRun'];
+            
+            list = list.filter(s => {
+                const slc = s.toLowerCase();
+                // Hide Java stuff explicitly
+                if (forbiddenKeywords.some(kw => slc.includes(kw))) return false;
+                return true;
+            });
+        }
+        
+        if (multiScript && !list.includes(multiScript)) {
+            list.push(multiScript);
+        }
+        return list;
+    }, [allScripts, filteredSavedNames, activeSelectionType, multiScript]);
 
     return (
-        <div className="bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0">
+        <div className={`bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0 transition-colors ${activeSelectionType === 'java' ? 'bg-orange-500/5 border-orange-500/20' : ''}`}>
             <TooltipProvider delay={400}>
             <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-950 border border-slate-800 shrink-0">
+                    {activeSelectionType === 'java' ? (
+                        <Coffee size={12} className="text-orange-400" />
+                    ) : (
+                        <Terminal size={12} className="text-nexus-neon" />
+                    )}
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                        {activeSelectionType || 'General'}
+                    </span>
+                </div>
+
                 <Select value={multiScript || undefined} onValueChange={(v) => v != null && onScriptChange(v)}>
-                    <SelectTrigger size="sm" className="w-40">
-                        <SelectValue placeholder="Comando" />
+                    <SelectTrigger size="sm" className={`w-56 ${activeSelectionType === 'java' ? 'border-orange-500/30 text-orange-400' : ''}`}>
+                        <SelectValue placeholder="Comando por lote" />
                     </SelectTrigger>
                     <SelectContent>
-                        {extendedScripts.map(s => (
-                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                        {extendedScripts.map((s: string) => (
+                            <SelectItem key={s} value={s} className="font-mono text-[11px]">{s}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
@@ -139,8 +176,8 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
             <CommandBuilderModal
                 open={builderOpen}
                 onOpenChange={setBuilderOpen}
-                onSave={(name, cmd, steps) => {
-                    addSavedCommand(name, cmd, steps);
+                onSave={(name, cmd, steps, projectType) => {
+                    addSavedCommand(name, cmd, steps, projectType);
                     onScriptChange(name);
                     setBuilderOpen(false);
                 }}

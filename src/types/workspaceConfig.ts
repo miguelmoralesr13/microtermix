@@ -33,6 +33,7 @@ export interface NexusWorkspaceConfig {
     vitePreviewOpen?: boolean;
     savedCommands?: Record<string, string>;
     savedCommandSteps?: Record<string, CommandStep[]>;
+    savedCommandTypes?: Record<string, string>;
     pipelines?: PipelineConfig[];
     /** Nombre de carpeta del tab de terminal activo. */
     activeTerminalTabId?: string | null;
@@ -122,12 +123,13 @@ export function applyWorkspaceConfigToStorage(
             } catch (_) { }
         }
     }
-    if (config.savedCommands || config.savedCommandSteps) {
+    if (config.savedCommands || config.savedCommandSteps || config.savedCommandTypes) {
         try {
             const current = localStorage.getItem('nexus-workspace-settings');
             const parsed = current ? JSON.parse(current) : {};
             if (config.savedCommands) parsed.savedCommands = config.savedCommands;
             if (config.savedCommandSteps) parsed.savedCommandSteps = config.savedCommandSteps;
+            if (config.savedCommandTypes) parsed.savedCommandTypes = config.savedCommandTypes;
             localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
         } catch (_) { }
     }
@@ -143,6 +145,7 @@ export function buildWorkspaceConfigFromCurrentState(
     projectPaths: string[],
     savedCommands: Record<string, string> = {},
     savedCommandSteps: Record<string, CommandStep[]> = {},
+    savedCommandTypes: Record<string, string> = {},
     pipelines: PipelineConfig[] = [],
 ): NexusWorkspaceConfig {
     const pathKey = (p: string) => p.replace(/[/\\:]/g, '_');
@@ -181,6 +184,7 @@ export function buildWorkspaceConfigFromCurrentState(
         vitePreviewOpen,
         savedCommands,
         savedCommandSteps: Object.keys(savedCommandSteps).length ? savedCommandSteps : undefined,
+        savedCommandTypes: Object.keys(savedCommandTypes).length ? savedCommandTypes : undefined,
         pipelines: pipelines.length ? pipelines : undefined,
         activeTerminalTabId: activeTerminalTabId ? getFolderName(activeTerminalTabId) : undefined,
         projectEnvs: Object.keys(projectEnvs).length ? projectEnvs : undefined,

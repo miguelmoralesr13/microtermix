@@ -13,6 +13,7 @@ mod ssm;
 mod crypto;
 mod mock_server;
 mod apigateway;
+mod java_manager;
 mod json_processor;
 mod notes;
 
@@ -343,6 +344,8 @@ pub fn run() {
             notes::notes_create_folder,
             notes::notes_delete_entry,
             notes::notes_rename_entry,
+            java_manager::list_local_jdks,
+            java_manager::download_jdk,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

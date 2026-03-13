@@ -5,16 +5,23 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import {
     BarChart3, Play, Square, Settings,
     TerminalSquare, ShieldCheck, AlertCircle, LayoutDashboard,
-    ListFilter, RefreshCw, ChevronDown, ChevronRight,
+    Activity, RefreshCw, ChevronDown, ChevronRight,
     Bug, ShieldAlert, FileSearch, Waves, Copy, Search, X,
     ExternalLink,
 } from 'lucide-react';
-
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useProcessStore } from '../stores/processStore';
 import { TerminalView } from './TerminalView';
+import { useGitStore } from '../stores/gitStore';
+import { Badge } from './ui/badge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface SonarRule {
+    key: string;
+    name: string;
+    type: string;
+}
 
 interface ProjectLink {
     projectKey?: string;
@@ -40,14 +47,6 @@ interface SonarMetrics {
     duplications: number;
 }
 
-interface SonarRule {
-    key: string;
-    name: string;
-    severity: string;
-    type: string;
-    langName: string;
-}
-
 interface SonarIssue {
     key: string;
     severity: 'BLOCKER' | 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
@@ -68,6 +67,17 @@ interface DebugLog {
     type: 'info' | 'error' | 'network' | 'cmd';
     message: string;
 }
+
+// ─── Constants (Moved to top to avoid hoisting issues) ────────────────────────
+
+const SEVERITY_ORDER: SonarIssue['severity'][] = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'];
+const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+    BLOCKER: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
+    CRITICAL: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' },
+    MAJOR: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' },
+    MINOR: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-600/30' },
+    INFO: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
+};
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
@@ -94,11 +104,6 @@ function loadMetricsCache(): Record<string, SonarMetrics> {
         if (raw) return JSON.parse(raw);
     } catch (_) { }
     return {};
-}
-
-const RULES_KEY = 'nexus-sonar-rules';
-function loadRules(): SonarRule[] {
-    try { const r = localStorage.getItem(RULES_KEY); return r ? JSON.parse(r) : []; } catch { return []; }
 }
 
 function issuesCacheKey(path: string) {
@@ -137,15 +142,6 @@ function extractReportUrl(logs: string[]): string | null {
     return null;
 }
 
-function extractLocalQG(logs: string[]): 'PASSED' | 'FAILED' | null {
-    for (let i = logs.length - 1; i >= 0; i--) {
-        const clean = stripAnsi(logs[i]).toUpperCase();
-        if (clean.includes('QUALITY GATE STATUS: PASSED')) return 'PASSED';
-        if (clean.includes('QUALITY GATE STATUS: FAILED') || clean.includes('QUALITY GATE STATUS: ERROR')) return 'FAILED';
-    }
-    return null;
-}
-
 // ─── Small components ─────────────────────────────────────────────────────────
 
 const QGBadge: React.FC<{ status?: 'OK' | 'ERROR' | 'NONE' }> = ({ status }) => {
@@ -178,15 +174,6 @@ const MetricCard: React.FC<{
     </div>
 );
 
-const SEVERITY_ORDER: SonarIssue['severity'][] = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'];
-const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = {
-    BLOCKER: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30' },
-    CRITICAL: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30' },
-    MAJOR: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/30' },
-    MINOR: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-600/30' },
-    INFO: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/30' },
-};
-
 const DirectKeyForm: React.FC<{ onLink: (key: string) => void }> = ({ onLink }) => {
     const [val, setVal] = useState('');
     return (
@@ -215,6 +202,7 @@ export const SonarPanel: React.FC = () => {
     const { state, executeProjectScript } = useWorkspace();
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
+    const repos = useGitStore(s => s.repos);
     
     const projects = state.projects;
 
@@ -237,31 +225,15 @@ export const SonarPanel: React.FC = () => {
 
     // Per-project: project key + token
     const [link, setLink] = useState<ProjectLink>(() => selectedPath ? loadLink(selectedPath) : {});
-    const [projectTokenDraft, setProjectTokenDraft] = useState<string>(() =>
-        selectedPath ? (loadLink(selectedPath).token ?? '') : ''
-    );
 
     useEffect(() => {
         if (selectedPath) {
             const loaded = loadLink(selectedPath);
             setLink(loaded);
-            setProjectTokenDraft(loaded.token ?? '');
             setIssues(loadIssuesCache(selectedPath));
-            setMetricsError(null);
-            setIssuesError(null);
-            setRulesError(null);
+            setTestResult(null);
         }
     }, [selectedPath]);
-
-    const saveProjectToken = useCallback(() => {
-        if (!selectedPath) return;
-        const current = loadLink(selectedPath);
-        const updated: ProjectLink = { ...current, token: projectTokenDraft || undefined };
-        saveLink(selectedPath, updated);
-        setLink(updated);
-        setMetricsCache(prev => { const n = { ...prev }; delete n[selectedPath]; return n; });
-        addLog('info', `Token de proyecto ${projectTokenDraft ? 'guardado' : 'eliminado'} para: ${selectedPath}`);
-    }, [selectedPath, projectTokenDraft]);
 
     // ── Metrics cache
     const [metricsCache, setMetricsCache] = useState<Record<string, SonarMetrics>>(loadMetricsCache);
@@ -278,21 +250,14 @@ export const SonarPanel: React.FC = () => {
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['MINOR', 'INFO']));
 
     // ── Rules
-    const [rules, setRules] = useState<SonarRule[]>(loadRules);
-    const [rulesSearch, setRulesSearch] = useState('');
-    useEffect(() => {
-        try { localStorage.setItem(RULES_KEY, JSON.stringify(rules)); } catch { }
-    }, [rules]);
+    // rules deleted
 
     // ── UI
-    const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'rules' | 'issues'>(() => {
+    const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'issues'>(() => {
         const saved = localStorage.getItem(STORAGE_SONAR_TAB);
-        return (saved === 'overview' || saved === 'analysis' || saved === 'rules' || saved === 'issues') ? saved : 'overview';
+        return (saved === 'overview' || saved === 'analysis' || saved === 'issues') ? saved : 'overview';
     });
     useEffect(() => { localStorage.setItem(STORAGE_SONAR_TAB, activeTab); }, [activeTab]);
-    const [metricsError, setMetricsError] = useState<string | null>(null);
-    const [issuesError, setIssuesError] = useState<string | null>(null);
-    const [rulesError, setRulesError] = useState<string | null>(null);
     const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState(false);
     const [testResult, setTestResult] = useState<{ ok: boolean | null; message: string } | null>(null);
@@ -300,19 +265,24 @@ export const SonarPanel: React.FC = () => {
     // ── Auto-link search
     const [searchingFor, setSearchingFor] = useState<string | null>(null);
     const [searchResults, setSearchResults] = useState<SonarProjectResult[] | null>(null);
-    const [searchLoading, setSearchLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     // ── Derived config
     const projectKey = link.projectKey || (projects.find(p => p.path === selectedPath)?.name as string || '');
     const effectiveToken = link.token || globalConfig.token;
 
+    const currentBranch = useMemo(() => {
+        if (!selectedPath) return null;
+        return repos[selectedPath]?.status.currentBranch || null;
+    }, [selectedPath, repos]);
+
     const scanCommand = useMemo(() => {
         const { serverUrl, token, organization } = globalConfig;
         let cmd = `npx sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${serverUrl} -Dsonar.token=${token}`;
         if (organization) cmd += ` -Dsonar.organization=${organization}`;
+        if (currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
         return cmd;
-    }, [globalConfig, projectKey]);
+    }, [globalConfig, projectKey, currentBranch]);
 
     const serviceId = useMemo(() => `${selectedPath}::${scanCommand} `, [selectedPath, scanCommand]);
     const processState = activeProcesses[serviceId];
@@ -322,11 +292,6 @@ export const SonarPanel: React.FC = () => {
     const reportUrl = useMemo(() => {
         const logs = processState?.logs ?? [];
         return extractReportUrl(logs);
-    }, [processState?.logs]);
-
-    const localQG = useMemo(() => {
-        const logs = processState?.logs ?? [];
-        return extractLocalQG(logs);
     }, [processState?.logs]);
 
     const addLog = useCallback((type: DebugLog['type'], message: string) => {
@@ -349,9 +314,7 @@ export const SonarPanel: React.FC = () => {
             return;
         }
         const testBase = globalConfig.serverUrl.replace(/\/+$/, '');
-        const testAuth = globalConfig.authType === 'bearer'
-            ? `Bearer ${globalConfig.token}`
-            : `Basic ${btoa(globalConfig.token + ':')}`;
+        const testAuth = authHeader(globalConfig.token);
         const url = `${testBase}/api/authentication/validate`;
         setTestResult({ ok: null, message: 'Probando conexión...' });
         try {
@@ -372,22 +335,13 @@ export const SonarPanel: React.FC = () => {
     }, [globalConfig]);
 
     const fetchMetrics = useCallback(async () => {
-        if (!projectKey || !effectiveToken || !globalConfig.serverUrl) {
-            setMetricsError('Configura el Server URL y Token en Configuración Global.');
-            return;
-        }
+        if (!projectKey || !effectiveToken || !globalConfig.serverUrl) return;
         setLoadingMetrics(true);
-        setMetricsError(null);
         const metricKeys = 'alert_status,bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating';
         const url = `${baseUrl}/api/measures/component?component=${encodeURIComponent(projectKey)}&metricKeys=${metricKeys}`;
-        addLog('network', `GET ${url}`);
         try {
             const resp = await tauriFetch(url, { headers: { Authorization: authHeader(effectiveToken) } });
-            if (!resp.ok) {
-                if (resp.status === 403) throw new Error('HTTP 403 — Permiso denegado.');
-                if (resp.status === 401) throw new Error('HTTP 401 — Token inválido o expirado.');
-                throw new Error(`HTTP ${resp.status}`);
-            }
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             const measures = data.component?.measures || [];
             const getVal = (k: string) => measures.find((m: any) => m.metric === k)?.value;
@@ -411,7 +365,6 @@ export const SonarPanel: React.FC = () => {
             addLog('info', `Metrics OK → ${projectKey}`);
         } catch (e: any) {
             addLog('error', `Metrics failed: ${e.message || e}`);
-            setMetricsError(`Error al obtener métricas: ${e.message || e}`);
         } finally {
             setLoadingMetrics(false);
         }
@@ -420,37 +373,10 @@ export const SonarPanel: React.FC = () => {
     const fetchMetricsRef = useRef(fetchMetrics);
     useEffect(() => { fetchMetricsRef.current = fetchMetrics; });
 
-    const fetchRules = useCallback(async () => {
-        if (!effectiveToken) { setRulesError('Configura el Token en Configuración Global.'); return; }
-        setLoadingMetrics(true);
-        setRulesError(null);
-        const url = `${baseUrl}/api/rules/search?activation=true&ps=100`;
-        addLog('network', `GET ${url}`);
-        try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(effectiveToken) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
-            if (data.rules) {
-                setRules(data.rules.map((r: any) => ({ key: r.key, name: r.name, severity: r.severity, type: r.type, langName: r.langName })));
-                addLog('info', `${data.rules.length} reglas cargadas.`);
-            }
-        } catch (e) {
-            addLog('error', `Rules failed: ${e}`);
-            setRulesError(`Error al obtener reglas: ${e}`);
-        } finally {
-            setLoadingMetrics(false);
-        }
-    }, [effectiveToken, globalConfig, addLog, baseUrl]);
-
     const fetchIssues = useCallback(async () => {
-        if (!projectKey || !effectiveToken) {
-            setIssuesError('Vincula el proyecto y configura el Token para ver issues.');
-            return;
-        }
+        if (!projectKey || !effectiveToken) return;
         setLoadingIssues(true);
-        setIssuesError(null);
         const url = `${baseUrl}/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}&resolved=false&ps=100`;
-        addLog('network', `GET ${url}`);
         try {
             const resp = await tauriFetch(url, { headers: { Authorization: authHeader(effectiveToken) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -468,7 +394,6 @@ export const SonarPanel: React.FC = () => {
             addLog('info', `${mapped.length} issues abiertos encontrados.`);
         } catch (e) {
             addLog('error', `Issues failed: ${e}`);
-            setIssuesError(`Error al obtener issues: ${e}`);
         } finally {
             setLoadingIssues(false);
         }
@@ -478,7 +403,6 @@ export const SonarPanel: React.FC = () => {
         setSearchingFor(projectPath);
         setSearchQuery(initialName);
         setSearchResults(null);
-        setSearchLoading(true);
         const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(initialName)}&ps=5`;
         addLog('network', `GET ${url} (auto-link)`);
         try {
@@ -486,21 +410,16 @@ export const SonarPanel: React.FC = () => {
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
-            addLog('info', `Auto-link: ${(data.components || []).length} resultado(s)`);
         } catch (e) {
             addLog('error', `Search failed: ${e}`);
             setSearchResults([]);
-        } finally {
-            setSearchLoading(false);
         }
     }, [globalConfig, addLog, baseUrl]);
 
     const handleSearchQuery = useCallback(async () => {
         if (!searchingFor || !searchQuery.trim() || !globalConfig.token) return;
         setSearchResults(null);
-        setSearchLoading(true);
         const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(searchQuery)}&ps=5`;
-        addLog('network', `GET ${url}`);
         try {
             const resp = await tauriFetch(url, { headers: { Authorization: authHeader(globalConfig.token) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -508,10 +427,8 @@ export const SonarPanel: React.FC = () => {
             setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
         } catch (_) {
             setSearchResults([]);
-        } finally {
-            setSearchLoading(false);
         }
-    }, [searchingFor, searchQuery, globalConfig, addLog, baseUrl]);
+    }, [searchingFor, searchQuery, globalConfig, baseUrl]);
 
     const handleLinkProject = useCallback((projectPath: string, result: SonarProjectResult) => {
         const existing = loadLink(projectPath);
@@ -519,7 +436,6 @@ export const SonarPanel: React.FC = () => {
         saveLink(projectPath, newLink);
         if (projectPath === selectedPath) {
             setLink(newLink);
-            setProjectTokenDraft(newLink.token ?? '');
         }
         setMetricsCache(prev => { const next = { ...prev }; delete next[projectPath]; return next; });
         setSearchingFor(null);
@@ -564,17 +480,18 @@ export const SonarPanel: React.FC = () => {
         try { await invoke('kill_service', { serviceId }); updateProcessStatus(serviceId, 'stopped'); } catch (_) { }
     };
 
-    const filteredRules = rules.filter(r =>
-        r.name.toLowerCase().includes(rulesSearch.toLowerCase()) ||
-        r.key.toLowerCase().includes(rulesSearch.toLowerCase())
-    );
-
     const issuesByGroup = useMemo(() => {
         const map: Record<string, SonarIssue[]> = {};
         SEVERITY_ORDER.forEach(s => { map[s] = []; });
         issues.forEach(i => { map[i.severity]?.push(i); });
         return map;
     }, [issues]);
+
+    const handleOpenIssue = (issue: SonarIssue) => {
+        if (!selectedPath || !issue.component) return;
+        const fullPath = `${selectedPath}/${issue.component}`;
+        invoke('open_in_editor', { path: fullPath, line: issue.line }).catch(console.error);
+    };
 
     return (
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
@@ -648,46 +565,60 @@ export const SonarPanel: React.FC = () => {
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                         <div className="shrink-0 px-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                             <div className="flex">
-                                {([['overview', LayoutDashboard, 'Overview'], ['analysis', TerminalSquare, 'Análisis'], ['rules', ListFilter, 'Reglas'], ['issues', AlertCircle, 'Issues']] as const).map(([tab, Icon, label]) => (
+                                {([['overview', LayoutDashboard, 'Overview'], ['analysis', TerminalSquare, 'Análisis'], ['issues', AlertCircle, 'Issues']] as const).map(([tab, Icon, label]) => (
                                     <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${activeTab === tab ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}>
                                         <Icon size={13} />{label}
                                     </button>
                                 ))}
                             </div>
+                            {currentBranch && <div className="pr-3 flex items-center gap-1.5"><span className="text-[9px] font-bold text-slate-500 uppercase">Branch:</span><Badge variant="secondary" className="text-[10px] bg-slate-800 text-blue-400 border-blue-500/30">{currentBranch}</Badge></div>}
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-5">
-                            {activeTab === 'overview' && metrics && (
+                            {activeTab === 'overview' && (
                                 <div className="space-y-5">
-                                    <div className={`p-5 rounded-2xl border flex items-center justify-between ${metrics.qualityGate === 'OK' ? 'bg-nexus-success/10 border-nexus-success/30' : 'bg-nexus-danger/10 border-nexus-danger/30'}`}>
-                                        <div className="flex items-center gap-4">
-                                            <div className={`p-3 rounded-xl ${metrics.qualityGate === 'OK' ? 'bg-nexus-success/20' : 'bg-nexus-danger/20'}`}>
-                                                <ShieldCheck size={28} className={metrics.qualityGate === 'OK' ? 'text-nexus-success' : 'text-nexus-danger'} />
+                                    {metrics ? (
+                                        <>
+                                            <div className={`p-5 rounded-2xl border flex items-center justify-between ${metrics.qualityGate === 'OK' ? 'bg-nexus-success/10 border-nexus-success/30' : 'bg-nexus-danger/10 border-nexus-danger/30'}`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`p-3 rounded-xl ${metrics.qualityGate === 'OK' ? 'bg-nexus-success/20' : 'bg-nexus-danger/20'}`}>
+                                                        <ShieldCheck size={28} className={metrics.qualityGate === 'OK' ? 'text-nexus-success' : 'text-nexus-danger'} />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-base font-black text-slate-200">Quality Gate {metrics.qualityGate}</h3>
+                                                        <p className="text-xs text-slate-400 font-mono">{projectKey}</p>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => openUrl(`${globalConfig.serverUrl}/dashboard?id=${projectKey}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors">
+                                                    <ExternalLink size={13} /> Ver en Sonar
+                                                </button>
                                             </div>
-                                            <div>
-                                                <h3 className="text-base font-black text-slate-200">Quality Gate {metrics.qualityGate}</h3>
-                                                <p className="text-xs text-slate-400 font-mono">{projectKey}</p>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <MetricCard label="Bugs" value={metrics.bugs} rating={metrics.reliability} icon={Bug} colorClass="text-nexus-danger" />
+                                                <MetricCard label="Vulnerabilidades" value={metrics.vulnerabilities} rating={metrics.security} icon={ShieldAlert} colorClass="text-yellow-400" />
+                                                <MetricCard label="Code Smells" value={metrics.codeSmells} rating={metrics.maintainability} icon={FileSearch} colorClass="text-blue-400" />
                                             </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5">
+                                                    <div className="flex items-center justify-between mb-3"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Waves size={14} className="text-blue-400" /> Cobertura</h4><span className="text-2xl font-black text-slate-200">{metrics.coverage}%</span></div>
+                                                    <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800"><div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${metrics.coverage}%` }} /></div>
+                                                </div>
+                                                <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5">
+                                                    <div className="flex items-center justify-between mb-3"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Copy size={14} className="text-yellow-400" /> Duplicaciones</h4><span className="text-2xl font-black text-slate-200">{metrics.duplications}%</span></div>
+                                                    <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800"><div className="h-full bg-yellow-500 transition-all duration-700" style={{ width: `${Math.min(metrics.duplications * 5, 100)}%` }} /></div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center py-20 bg-slate-950/20 border-2 border-dashed border-slate-800 rounded-3xl">
+                                            <Activity size={40} className="text-slate-700 mb-4" />
+                                            <p className="text-slate-400 font-medium">No hay métricas disponibles</p>
+                                            <p className="text-xs text-slate-600 mt-1 max-w-xs text-center">Ejecuta un análisis o configura tu token para traer los datos del servidor.</p>
+                                            <button onClick={fetchMetrics} disabled={loadingMetrics} className="mt-6 px-4 py-2 bg-slate-800 text-xs font-bold rounded-xl hover:bg-slate-700 text-slate-300 flex items-center gap-2 transition-all">
+                                                <RefreshCw size={14} className={loadingMetrics ? 'animate-spin' : ''} /> Refrescar ahora
+                                            </button>
                                         </div>
-                                        <button onClick={() => openUrl(`${globalConfig.serverUrl}/dashboard?id=${projectKey}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors">
-                                            <ExternalLink size={13} /> Ver en Sonar
-                                        </button>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <MetricCard label="Bugs" value={metrics.bugs} rating={metrics.reliability} icon={Bug} colorClass="text-nexus-danger" />
-                                        <MetricCard label="Vulnerabilidades" value={metrics.vulnerabilities} rating={metrics.security} icon={ShieldAlert} colorClass="text-yellow-400" />
-                                        <MetricCard label="Code Smells" value={metrics.codeSmells} rating={metrics.maintainability} icon={FileSearch} colorClass="text-blue-400" />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5">
-                                            <div className="flex items-center justify-between mb-3"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Waves size={14} className="text-blue-400" /> Cobertura</h4><span className="text-2xl font-black text-slate-200">{metrics.coverage}%</span></div>
-                                            <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800"><div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${metrics.coverage}%` }} /></div>
-                                        </div>
-                                        <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5">
-                                            <div className="flex items-center justify-between mb-3"><h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Copy size={14} className="text-yellow-400" /> Duplicaciones</h4><span className="text-2xl font-black text-slate-200">{metrics.duplications}%</span></div>
-                                            <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800"><div className="h-full bg-yellow-500 transition-all duration-700" style={{ width: `${Math.min(metrics.duplications * 5, 100)}%` }} /></div>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             )}
 
@@ -723,7 +654,24 @@ export const SonarPanel: React.FC = () => {
                                                     <div className="flex items-center gap-2"><span className={`text-xs font-black uppercase ${s.text}`}>{severity}</span><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${s.border} ${s.text}`}>{group.length}</span></div>
                                                     {collapsed ? <ChevronRight size={13} className={s.text} /> : <ChevronDown size={13} className={s.text} />}
                                                 </button>
-                                                {!collapsed && <div className="divide-y divide-slate-800/40">{group.slice(0, 10).map(i => <div key={i.key} className="px-4 py-2.5 hover:bg-slate-800/30 transition-colors"><div className="flex items-start gap-2"><span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase mt-0.5 ${s.bg} ${s.text}`}>{i.type}</span><div className="flex-1 min-w-0"><p className="text-xs text-slate-200 leading-snug">{i.message}</p><p className="text-[10px] text-slate-500 mt-0.5 font-mono truncate">{i.component}{i.line ? `:${i.line}` : ''}</p></div></div></div>)}</div>}
+                                                {!collapsed && <div className="divide-y divide-slate-800/40">{group.map(i => (
+                                                    <div 
+                                                        key={i.key} 
+                                                        onClick={() => handleOpenIssue(i)}
+                                                        className="px-4 py-2.5 hover:bg-slate-800/30 cursor-pointer transition-colors group/issue"
+                                                    >
+                                                        <div className="flex items-start gap-2">
+                                                            <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase mt-0.5 ${s.bg} ${s.text}`}>{i.type}</span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-xs text-slate-200 leading-snug group-hover/issue:text-white transition-colors">{i.message}</p>
+                                                                <p className="text-[10px] text-slate-500 mt-0.5 font-mono truncate group-hover/issue:text-slate-400">
+                                                                    {i.component}{i.line ? `:${i.line}` : ''}
+                                                                </p>
+                                                            </div>
+                                                            <ExternalLink size={12} className="shrink-0 text-slate-700 opacity-0 group-hover/issue:opacity-100 transition-all" />
+                                                        </div>
+                                                    </div>
+                                                ))}</div>}
                                             </div>
                                         );
                                     })}
@@ -750,7 +698,6 @@ export const SonarPanel: React.FC = () => {
                             </button>
                         </div>
 
-                        {/* Selector de Tipo */}
                         <div className="grid grid-cols-2 gap-3">
                             <button 
                                 onClick={() => setGlobalConfig(g => ({ ...g, serverUrl: 'https://sonarcloud.io', authType: 'bearer' }))}

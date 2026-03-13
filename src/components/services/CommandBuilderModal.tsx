@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 interface CommandBuilderModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSave: (name: string, command: string, steps: CommandStep[]) => void;
+    onSave: (name: string, command: string, steps: CommandStep[], projectType?: string) => void;
     initialName?: string;
     initialSteps?: CommandStep[];
 }
@@ -26,6 +26,12 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
     const savedCommandNames = Object.keys(state.savedCommands || {});
 
     const [commandName, setCommandName] = useState(initialName || '');
+    const [projectType, setProjectType] = useState<string>(() => {
+        if (initialName && state.savedCommandTypes && state.savedCommandTypes[initialName]) {
+            return state.savedCommandTypes[initialName];
+        }
+        return 'all';
+    });
     const [steps, setSteps] = useState<CommandStep[]>(() => {
         if (initialSteps && initialSteps.length > 0) return initialSteps;
         return [
@@ -85,9 +91,9 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
 
     const generateCommandPreview = () => {
         // Reglas de construcción:
-        // - {{ENVS}} seguido de un comando → "cross-env {{ENVS}} cmd" (sin && entre ellos)
+        // - {{ENVS}} seguido de un comando → "{{ENVS}} cmd"
         // - Comando seguido de otro comando → "cmd1 && cmd2"
-        // - Comando seguido de (ENVS + cmd) → "cmd1 && cross-env {{ENVS}} cmd2"
+        // - Comando seguido de (ENVS + cmd) → "cmd1 && {{ENVS}} cmd2"
         // - {{ENVS}} al final sin comando siguiente → se ignora
         const parts: string[] = [];
         let pendingEnv = false;
@@ -97,7 +103,7 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                 pendingEnv = true;
             } else if (step.value.trim()) {
                 const cmd = step.value.trim();
-                parts.push(pendingEnv ? `npx cross-env {{ENVS}} ${cmd}` : cmd);
+                parts.push(pendingEnv ? `{{ENVS}} ${cmd}` : cmd);
                 pendingEnv = false;
             }
         }
@@ -109,7 +115,7 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
         const cmd = generateCommandPreview();
         const trimmedName = commandName.trim();
         if (cmd && trimmedName) {
-            onSave(trimmedName, cmd, steps);
+            onSave(trimmedName, cmd, steps, projectType === 'all' ? undefined : projectType);
         }
     };
 
@@ -117,7 +123,9 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
         if (!name) return;
         const savedSteps = (state.savedCommandSteps || {})[name];
         const rawCmd = (state.savedCommands || {})[name];
+        const savedType = (state.savedCommandTypes || {})[name] || 'all';
         setCommandName(name);
+        setProjectType(savedType);
         if (savedSteps && savedSteps.length > 0) {
             setSteps(savedSteps);
         } else if (rawCmd) {
@@ -152,7 +160,7 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                 {/* Body — todo el contenido existente */}
                 <div className="p-4 flex-1 overflow-y-auto">
                     <p className="text-xs text-slate-400 mb-4">
-                        Construye un comando compuesto arrastrando pasos. <span className="text-nexus-neon bg-slate-800 px-1 rounded font-mono">{"{{ENVS}}"}</span> seguido de un comando genera <span className="font-mono bg-slate-800 px-1 rounded text-xs">cross-env KEY=VAL cmd</span>. Los comandos sin env se unen con <span className="font-mono bg-slate-800 px-1 rounded">&&</span>.
+                        Construye un comando compuesto arrastrando pasos. El marcador <span className="text-nexus-neon bg-slate-800 px-1 rounded font-mono">{"{{ENVS}}"}</span> se adaptará automáticamente: <span className="text-slate-200 font-mono">cross-env</span> para Node, <span className="text-slate-200 font-mono">-D</span> para Java (Maven/Gradle) o <span className="text-slate-200 font-mono">KEY=VAL</span> para otros.
                     </p>
 
                     {/* Load existing command selector */}
@@ -177,15 +185,36 @@ export const CommandBuilderModal: React.FC<CommandBuilderModalProps> = ({
                         </div>
                     )}
 
-                    <div className="mb-6">
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nombre del Comando</label>
-                        <Input
-                            placeholder="Ej: Build & Preview"
-                            value={commandName}
-                            onChange={(e) => setCommandName(e.target.value)}
-                            className="bg-slate-950 border-slate-700 focus-visible:ring-nexus-neon text-sm"
-                            autoFocus
-                        />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nombre del Comando</label>
+                            <Input
+                                placeholder="Ej: Build & Preview"
+                                value={commandName}
+                                onChange={(e) => setCommandName(e.target.value)}
+                                className="bg-slate-950 border-slate-700 focus-visible:ring-nexus-neon text-sm"
+                                autoFocus
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Tipo de Proyecto</label>
+                            <Select
+                                value={projectType}
+                                onValueChange={(v) => v && setProjectType(v)}
+                            >
+                                <SelectTrigger className="bg-slate-950 border-slate-700 focus:ring-nexus-neon text-sm">
+                                    <SelectValue placeholder="Aplicar a..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Cualquier Proyecto (Global)</SelectItem>
+                                    <SelectItem value="node">Node.js / Bun</SelectItem>
+                                    <SelectItem value="java">Java (Maven/Gradle)</SelectItem>
+                                    <SelectItem value="python">Python</SelectItem>
+                                    <SelectItem value="go">Go</SelectItem>
+                                    <SelectItem value="rust">Rust</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
 
                     <div className="space-y-2 mb-6">

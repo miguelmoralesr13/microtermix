@@ -101,10 +101,18 @@ const STORAGE_TESTS_TAB  = 'nexus-tests-active-tab';
 
 function detectLanguage(project: any): TestLanguage {
     const type = (project.project_type || '').toLowerCase();
+    const framework = (project.framework || '').toLowerCase();
+
+    if (type === 'bun') return 'node'; // Bun use Node preset for now or we could add one
     if (type === 'node') return 'node';
     if (type === 'python') return 'python';
     if (type === 'java' || type === 'maven') return 'java';
     if (type === 'go') return 'go';
+    
+    // Framework based fallbacks
+    if (framework === 'spring-boot') return 'java';
+    if (framework === 'django' || framework === 'fastapi' || framework === 'flask') return 'python';
+
     return 'custom';
 }
 

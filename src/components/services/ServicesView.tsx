@@ -40,14 +40,47 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
     const [viteWrapperCandidates, setViteWrapperCandidates] = useState<ProxyCandidateItem[]>([]);
 
+    const JAVA_PRESETS = useMemo(() => [
+        { name: 'Mvn: Clean & Install', cmd: 'mvn clean install -DskipTests' },
+        { name: 'Mvn: Spring Boot Run', cmd: 'mvn spring-boot:run' },
+        { name: 'Mvn: Package', cmd: 'mvn package' },
+        { name: 'Mvn: Test', cmd: 'mvn test' },
+        { name: 'Gradle: Build', cmd: './gradlew build' },
+        { name: 'Gradle: BootRun', cmd: './gradlew bootRun' },
+        { name: 'Gradle: Clean', cmd: './gradlew clean' },
+        { name: 'Jar: Run (target)', cmd: 'java -jar target/*.jar' },
+        { name: 'Jar: Run (build/libs)', cmd: 'java -jar build/libs/*.jar' },
+        { name: 'Java: Compile & Run', cmd: 'javac Main.java && java Main' },
+    ], []);
+
     // ─── Derived State / Memos ───────────────────────────────────────────
+    const selectedProjectTypes = useMemo(() => {
+        const types = new Set<string>();
+        selectedProjects.forEach(path => {
+            const p = state.projects.find(proj => proj.path === path);
+            if (p?.project_type) types.add(String(p.project_type));
+        });
+        return Array.from(types);
+    }, [selectedProjects, state.projects]);
+
+    const activeSelectionType = selectedProjectTypes.length > 0 ? selectedProjectTypes[0] : null;
+
     const allScripts = useMemo(() => {
         const scripts = new Set<string>();
+        
+        // Add Java presets if we are working with Java
+        if (activeSelectionType === 'java') {
+            JAVA_PRESETS.forEach(p => scripts.add(p.cmd));
+        }
+
         state.projects.forEach(p => {
+            // If we have an active type, only collect scripts from projects of that type
+            if (activeSelectionType && String(p.project_type) !== activeSelectionType) return;
+            
             if (p.scripts) p.scripts.forEach(s => scripts.add(s));
         });
         return Array.from(scripts);
-    }, [state.projects]);
+    }, [state.projects, activeSelectionType, JAVA_PRESETS]);
 
     const allEnvs = useMemo(() => {
         const envs = new Set<string>();
@@ -72,7 +105,28 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
 
     // ─── Handlers ────────────────────────────────────────────────────────
     const toggleProjectSelect = (path: string) => {
-        setSelectedProjects(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
+        const project = state.projects.find(p => p.path === path);
+        if (!project) return;
+
+        setSelectedProjects(prev => {
+            if (prev.includes(path)) return prev.filter(p => p !== path);
+            
+            // Smart Filter: If we have an active type, only allow same type
+            if (activeSelectionType && String(project.project_type) !== activeSelectionType) {
+                return prev;
+            }
+            
+            return [...prev, path];
+        });
+    };
+
+    const handleSelectAll = () => {
+        // If there's an active type, select all of that type. Otherwise select all.
+        if (activeSelectionType) {
+            setSelectedProjects(state.projects.filter(p => String(p.project_type) === activeSelectionType).map(p => p.path as string));
+        } else {
+            setSelectedProjects(state.projects.map(p => p.path as string));
+        }
     };
 
     const handlePlayScript = async (projectPath: string, script: string) => {
@@ -135,12 +189,26 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         });
     };
 
+    const handleOpenViteWrapper = async () => {
+        try {
+            const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
+            setViteWrapperCandidates(list.map((p: ProxyCandidateItem) => ({ 
+                project_path: p.project_path, 
+                display_name: p.display_name 
+            })));
+            setViteWrapperModalOpen(true);
+        } catch (_) {
+            setViteWrapperCandidates([]);
+            setViteWrapperModalOpen(true);
+        }
+    };
+
     return (
         <>
             <ProjectListPane
                 projects={state.projects}
                 selectedProjects={selectedProjects}
-                onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path as string))}
+                onSelectAll={handleSelectAll}
                 onDeselectAll={() => setSelectedProjects([])}
                 onToggleSelect={toggleProjectSelect}
                 onPlayScript={handlePlayScript}
@@ -157,18 +225,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     onPlay={handleBatchPlay}
                     onStop={handleBatchStop}
                     onRestart={handleBatchRestart}
-                    onOpenViteWrapper={async () => {
-                        if (!state.currentPath) return;
-                        try {
-                            const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
-                            setViteWrapperCandidates(list.map((p: ProxyCandidateItem) => ({ project_path: p.project_path, display_name: p.display_name })));
-                            setViteWrapperModalOpen(true);
-                        } catch (_) {
-                            setViteWrapperCandidates([]);
-                            setViteWrapperModalOpen(true);
-                        }
-                    }}
+                    onOpenViteWrapper={handleOpenViteWrapper}
                     selectedCount={selectedProjects.length}
+                    activeSelectionType={activeSelectionType}
                 />
 
                 <ViteWrapperModal
@@ -186,19 +245,15 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     onVitePreviewToggle={setVitePreviewOpen}
                     onTabSelect={setActiveTerminalTab}
                     onTabStop={async (e, serviceId) => {
-                        e.stopPropagation();
+                        e.preventDefault(); e.stopPropagation();
                         await invoke('kill_service', { serviceId });
                         updateProcessStatus(serviceId, 'stopped');
                     }}
                     onTabRestart={handleTabRestart}
                     onTabClose={async (e, serviceId) => {
-                        e.stopPropagation();
+                        e.preventDefault(); e.stopPropagation();
                         await invoke('kill_service', { serviceId });
-                        updateProcessStatus(serviceId, 'idle');
-                        if (activeTerminalTab === serviceId) {
-                            const remaining = processIds.filter(id => id !== serviceId);
-                            setActiveTerminalTab(remaining.length > 0 ? remaining[0] : null);
-                        }
+                        updateProcessStatus(serviceId, 'stopped');
                     }}
                 />
             </div>

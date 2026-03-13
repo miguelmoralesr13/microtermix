@@ -26,6 +26,35 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
     
     const projectPath = project.path as string;
     const isNode = project.project_type === 'node';
+    const isJava = project.project_type === 'java';
+
+    const JAVA_PRESETS = [
+        { name: 'Mvn: Clean & Install', cmd: 'mvn clean install -DskipTests' },
+        { name: 'Mvn: Spring Boot Run', cmd: 'mvn spring-boot:run' },
+        { name: 'Mvn: Package', cmd: 'mvn package' },
+        { name: 'Mvn: Test', cmd: 'mvn test' },
+        { name: 'Gradle: Build', cmd: './gradlew build' },
+        { name: 'Gradle: BootRun', cmd: './gradlew bootRun' },
+        { name: 'Gradle: Clean', cmd: './gradlew clean' },
+        { name: 'Jar: Run (target)', cmd: 'java -jar target/*.jar' },
+        { name: 'Jar: Run (build/libs)', cmd: 'java -jar build/libs/*.jar' },
+    ];
+
+    const filteredScripts = useMemo(() => {
+        let scripts = project.scripts || [];
+        
+        // Smart Filter: If Node, hide obvious Java commands that might be in global saved commands
+        if (isNode) {
+            scripts = scripts.filter(s => !['mvn ', 'gradle', './gradlew', 'java -jar'].some(k => s.includes(k)));
+        }
+        
+        // If Java, hide Node commands
+        if (isJava) {
+            scripts = scripts.filter(s => !['npm ', 'yarn ', 'pnpm ', 'bun '].some(k => s.includes(k)));
+        }
+        
+        return scripts;
+    }, [project.scripts, isNode, isJava]);
 
     const { activeVars } = useProjectEnvs(projectPath);
     const [envManagerOpen, setEnvManagerOpen] = useState(false);
@@ -68,9 +97,19 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
     const status = processState?.status || 'idle';
 
     const TYPE_BADGE: Record<string, string> = {
-        node: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-        go:   'bg-sky-500/15 text-sky-400 border-sky-500/30',
-        rust: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+        node:   'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        bun:    'bg-amber-500/15 text-amber-400 border-amber-500/30',
+        go:     'bg-sky-500/15 text-sky-400 border-sky-500/30',
+        rust:   'bg-orange-500/15 text-orange-400 border-orange-500/30',
+        python: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+        java:   'bg-red-500/15 text-red-400 border-red-500/30',
+    };
+
+    const FRAMEWORK_BADGE: Record<string, string> = {
+        django:        'bg-emerald-700/20 text-emerald-300 border-emerald-700/40',
+        fastapi:       'bg-teal-500/20 text-teal-300 border-teal-500/40',
+        flask:         'bg-slate-500/20 text-slate-300 border-slate-500/40',
+        'spring-boot': 'bg-green-600/20 text-green-300 border-green-600/40',
     };
 
     const STATUS_BAR: Record<string, string> = {
@@ -105,14 +144,24 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggleSelect}>
                     <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-xs font-semibold text-slate-200 truncate">{project.name}</span>
-                        {project.project_type && (
-                            <Badge className={cn(
-                                'text-[9px] px-1.5 py-0 border shrink-0 font-mono uppercase rounded',
-                                TYPE_BADGE[project.project_type as string] ?? 'bg-slate-700 text-slate-400 border-slate-600',
-                            )}>
-                                {project.project_type}
-                            </Badge>
-                        )}
+                        <div className="flex items-center gap-1 overflow-hidden">
+                            {project.project_type && (
+                                <Badge className={cn(
+                                    'text-[8px] px-1 py-0 border shrink-0 font-mono uppercase rounded leading-tight',
+                                    TYPE_BADGE[project.project_type as string] ?? 'bg-slate-700 text-slate-400 border-slate-600',
+                                )}>
+                                    {project.project_type}
+                                </Badge>
+                            )}
+                            {project.framework && (
+                                <Badge className={cn(
+                                    'text-[8px] px-1 py-0 border shrink-0 font-mono uppercase rounded leading-tight',
+                                    FRAMEWORK_BADGE[project.framework] ?? 'bg-slate-800 text-slate-500 border-slate-700',
+                                )}>
+                                    {project.framework}
+                                </Badge>
+                            )}
+                        </div>
                     </div>
                     {status !== 'idle' && (
                         <p className={cn(
@@ -140,12 +189,34 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                                 <PopoverContent
                                     side="bottom"
                                     align="start"
-                                    className="w-44 p-1 bg-slate-900 border-slate-700"
+                                    className="w-56 p-1 bg-slate-900 border-slate-700 max-h-80 overflow-y-auto"
                                 >
+                                    {isJava && (
+                                        <>
+                                            <p className="px-2 py-1 text-[9px] font-bold text-orange-500 uppercase tracking-wider border-b border-slate-800/60 mb-1 bg-orange-500/5">
+                                                Java Presets
+                                            </p>
+                                            {JAVA_PRESETS.map(preset => (
+                                                <button
+                                                    key={preset.name}
+                                                    className="w-full text-left px-2 py-1 text-[11px] text-slate-300 hover:bg-orange-500/10 hover:text-orange-400 rounded transition-colors flex flex-col"
+                                                    onClick={() => { onPlayScript(preset.cmd); setScriptMenuOpen(false); }}
+                                                >
+                                                    <span className="font-bold">{preset.name}</span>
+                                                    <span className="text-[9px] opacity-40 truncate">{preset.cmd}</span>
+                                                </button>
+                                            ))}
+                                            <div className="h-px bg-slate-800 my-1" />
+                                        </>
+                                    )}
+
                                     <p className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-800 mb-1">
                                         Scripts
                                     </p>
-                                    {project.scripts.map(s => (
+                                    {filteredScripts.length === 0 && (
+                                        <p className="px-2 py-2 text-[10px] text-slate-600 italic">No scripts found</p>
+                                    )}
+                                    {filteredScripts.map(s => (
                                         <button
                                             key={s}
                                             className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-nexus-neon rounded transition-colors"

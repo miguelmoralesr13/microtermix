@@ -160,6 +160,7 @@ export const ServiceManager: React.FC = () => {
                 state.projects.map(p => p.path as string),
                 state.savedCommands,
                 state.savedCommandSteps,
+                state.savedCommandTypes,
                 state.pipelines,
             );
             await invoke('write_workspace_config_in_folder', {
@@ -188,6 +189,7 @@ export const ServiceManager: React.FC = () => {
                     state.projects.map(p => p.path as string),
                     state.savedCommands,
                     state.savedCommandSteps,
+                    state.savedCommandTypes,
                     state.pipelines,
                 );
                 await invoke('write_workspace_config_in_folder', {
