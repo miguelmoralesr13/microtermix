@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Settings, RefreshCw, CheckCircle, AlertCircle, ClipboardPaste } from 'lucide-react';
-import { 
-    CwCredentials, 
-    loadCwConfig, 
-    saveCwConfig, 
-    cwGetLogGroups, 
-    ssmCheckPlugin 
+import {
+    CwCredentials,
+    loadCwConfig,
+    saveCwConfig,
+    cwGetLogGroups,
+    ssmCheckPlugin
 } from '../../services/cloudwatchApi';
 import { parseAwsCredentialBlock, detectOs, OsTab } from './cwUtils';
 

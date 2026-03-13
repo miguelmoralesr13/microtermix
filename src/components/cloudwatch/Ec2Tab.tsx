@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Loader, RefreshCw, Monitor, AlertCircle, X } from 'lucide-react';
-import { 
-    Ec2Instance, 
-    SshDefaults, 
-    Ec2StateFilter, 
-    SshSession, 
-    loadSshDefaults, 
-    toEc2Rust 
+import {
+    Ec2Instance,
+    SshDefaults,
+    Ec2StateFilter,
+    SshSession,
+    loadSshDefaults,
+    toEc2Rust
 } from './ec2Types';
 import { Ec2InstanceRow } from './Ec2InstanceRow';
 import { Ec2SshSettings } from './Ec2SshSettings';
@@ -58,7 +58,7 @@ export function Ec2Tab({ cfg }: Ec2TabProps) {
         onError: (err, { action }) => {
             alert(`Error al ${action} instancia: ${err}`);
         },
-        onSettled: (data, error, { id }) => {
+        onSettled: (_, __, { id }) => {
             setPendingMap(p => { const n = { ...p }; delete n[id]; return n; });
         }
     });

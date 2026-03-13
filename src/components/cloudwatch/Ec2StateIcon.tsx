@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckCircle, X, Loader, Circle, AlertCircle } from 'lucide-react';
 import { ec2StateColor } from './ec2Types';
 

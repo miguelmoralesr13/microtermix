@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { 
-    ChevronDown, ChevronRight, Play, Square, RotateCcw, Terminal, Loader 
+import { useState } from 'react';
+import {
+    ChevronDown, ChevronRight, Play, Square, RotateCcw, Terminal, Loader
 } from 'lucide-react';
 import { Ec2Instance, SshDefaults, ec2StateColor, formatLaunchTime } from './ec2Types';
 import { Ec2StateIcon } from './Ec2StateIcon';
@@ -16,8 +16,8 @@ interface Ec2InstanceRowProps {
     ssmAvailable: boolean | null; // null=checking, false=not found
 }
 
-export function Ec2InstanceRow({ 
-    inst, ssh, onAction, pending, onSshConnect, onSsmConnect, connecting, ssmAvailable 
+export function Ec2InstanceRow({
+    inst, ssh, onAction, pending, onSshConnect, onSsmConnect, connecting, ssmAvailable
 }: Ec2InstanceRowProps) {
     const [expanded, setExpanded] = useState(false);
     const displayName = inst.name ?? inst.instance_id;

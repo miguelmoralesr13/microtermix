@@ -1,13 +1,12 @@
-import React from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, X } from 'lucide-react';
-import { 
-    CwCredentials, 
-    CwMetricItem, 
-    CwDimension, 
-    CwDatapoint, 
-    cwListMetrics, 
-    cwGetMetricData 
+import {
+    CwCredentials,
+    CwMetricItem,
+    CwDimension,
+    CwDatapoint,
+    cwListMetrics,
+    cwGetMetricData
 } from '../../services/cloudwatchApi';
 import { usePersistedState } from './cwUtils';
 

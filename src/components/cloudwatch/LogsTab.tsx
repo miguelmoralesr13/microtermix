@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, Star, X, Copy, Check } from 'lucide-react';
-import { 
-    CwCredentials, 
-    CwLogEvent, 
-    cwGetLogGroups, 
-    cwGetLogStreams, 
+import {
+    CwCredentials,
+    CwLogEvent,
+    cwGetLogGroups,
+    cwGetLogStreams,
     cwGetLogEvents,
-    cwFilterLogEvents 
+    cwFilterLogEvents
 } from '../../services/cloudwatchApi';
 import { usePersistedState, LogMessage } from './cwUtils';
 
@@ -15,12 +15,12 @@ interface LogsTabProps {
     cfg: CwCredentials;
 }
 
-const Sidebar = React.memo(({ 
+const Sidebar = React.memo(({
     sidebarWidth, groupSearch, setGroupSearch, fetchGroups, loadingGroups, groupError, sortedGroups, selectedGroup, setSelectedGroup, favorites, toggleFavorite,
     selectedGroupSelected, loadingStreams, streamSearch, setStreamSearch, fetchStreams, streamError, filteredStreams, setSelectedStream, selectedStream, streamFavorites, toggleStreamFavorite
 }: any) => {
     return (
-        <div 
+        <div
             className="shrink-0 border-r border-slate-800 flex flex-col min-h-0 bg-slate-950/20"
             style={{ width: sidebarWidth }}
         >
@@ -167,7 +167,7 @@ const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, 
                 loadHistory();
             }
         }, {
-            rootMargin: '400px', 
+            rootMargin: '400px',
             threshold: 0
         });
 
@@ -192,7 +192,7 @@ const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, 
                     <p>No se encontraron eventos en el periodo seleccionado.</p>
                 </div>
             )}
-            
+
             {events.map((e: any, i: number) => {
                 const lineId = `${e.timestamp}-${i}`;
                 return (
@@ -203,7 +203,7 @@ const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, 
                         <div className="flex-1 min-w-0">
                             <LogMessage message={e.message} />
                         </div>
-                        <button 
+                        <button
                             onClick={() => copyLine(e.message, lineId)}
                             className={`absolute right-2 top-2 p-1.5 rounded bg-slate-900/80 border border-slate-700 opacity-0 group-hover:opacity-100 transition-all hover:bg-slate-800 ${copiedId === lineId ? 'text-emerald-400 opacity-100' : 'text-slate-400'}`}
                             title="Copiar línea"
@@ -250,7 +250,6 @@ export function LogsTab({ cfg }: LogsTabProps) {
     const [logFilters, setLogFilters] = useState<string[]>([]);
     const [filterInput, setFilterInput] = useState('');
     const tailRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const bottomRef = useRef<HTMLDivElement>(null);
     const nextTokenRef = useRef<string | null>(null);
 
     // Queries
@@ -281,19 +280,6 @@ export function LogsTab({ cfg }: LogsTabProps) {
     const groupError = groupQueryError ? String(groupQueryError) : null;
     const streamError = streamQueryError ? String(streamQueryError) : null;
 
-    const toggleFavorite = (name: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setFavorites(prev =>
-            prev.includes(name) ? prev.filter(f => f !== name) : [...prev, name]
-        );
-    };
-
-    const toggleStreamFavorite = (name: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setStreamFavorites(prev =>
-            prev.includes(name) ? prev.filter(f => f !== name) : [...prev, name]
-        );
-    };
 
     // Keep ref in sync with state for use inside interval
     useEffect(() => { nextTokenRef.current = nextToken; }, [nextToken]);
@@ -302,7 +288,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
     useEffect(() => {
         if (!selectedGroup) return;
         if (!mergedView && !selectedStream) return;
-        
+
         // Cancel any pending tail
         setTailing(false);
         setEvents([]);
@@ -313,7 +299,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
         const rangeMinutes = Number(timeRange) || 10;
         const startMs = Date.now() - (rangeMinutes * 60 * 1000);
 
-        const fetchFn = mergedView 
+        const fetchFn = mergedView
             ? () => cwFilterLogEvents(cfg, selectedGroup, null, null, startMs)
             : () => cwGetLogEvents(cfg, selectedGroup, selectedStream!, null, startMs);
 
@@ -348,7 +334,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                 setEvents(prev => {
                     const combined = [...prev, ...sortedHistory];
                     // Memory safety: Cap the total number of events in memory
-                    return combined.slice(0, 5000); 
+                    return combined.slice(0, 5000);
                 });
             }
             // Even if no events, update backToken (CloudWatch might return empty pages)
@@ -389,21 +375,21 @@ export function LogsTab({ cfg }: LogsTabProps) {
                 const res = await fetchFn();
                 if (res.events.length > 0) {
                     const sortedNew = [...res.events].sort((a, b) => b.timestamp - a.timestamp);
-                    
+
                     setEvents(prev => {
                         // Efficient deduplication using a temporary set (only need to check against the top of the list)
                         const existingIds = new Set(prev.slice(0, 50).map(e => `${e.timestamp}-${e.message}`));
                         const uniqueNew = sortedNew.filter(e => !existingIds.has(`${e.timestamp}-${e.message}`));
-                        
+
                         if (uniqueNew.length === 0) return prev;
                         return [...uniqueNew, ...prev].slice(0, 5000);
                     });
                 }
-                
+
                 if (res.next_forward_token !== undefined && res.next_forward_token !== currentNextToken) {
                     setNextToken(res.next_forward_token);
                 }
-            } catch (err) { 
+            } catch (err) {
                 console.error("Tail error:", err);
             }
         }, 5000);
@@ -508,7 +494,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
 
     return (
         <div className="flex h-full min-h-0 relative">
-            <Sidebar 
+            <Sidebar
                 sidebarWidth={sidebarWidth}
                 groupSearch={groupSearch}
                 setGroupSearch={setGroupSearch}
@@ -545,7 +531,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                     <div className="flex-1 flex flex-col items-center justify-center text-slate-600 text-sm gap-4">
                         <p>Selecciona un grupo y un stream</p>
                         {selectedGroup && (
-                            <button 
+                            <button
                                 onClick={() => setMergedView(true)}
                                 className="px-4 py-2 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 rounded-lg text-xs font-bold hover:bg-nexus-neon/20 transition-colors"
                             >
@@ -569,7 +555,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                 {loadingEvents && <RefreshCw size={11} className="animate-spin text-slate-500 shrink-0" />}
 
                                 <div className="flex items-center gap-1.5 ml-2 shrink-0 flex-wrap sm:flex-nowrap justify-end">
-                                    <select 
+                                    <select
                                         value={timeRange}
                                         onChange={(e) => setTimeRange(Number(e.target.value))}
                                         className="bg-slate-800 border border-slate-700 text-[10px] text-slate-300 rounded px-1.5 py-1 focus:outline-none focus:border-nexus-neon"
@@ -616,7 +602,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                         {tailing ? 'Live' : 'Pausado'}
                                     </button>
                                     <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
-                                    <button 
+                                    <button
                                         onClick={() => {
                                             const all = filteredEvents.map(e => `${new Date(e.timestamp).toISOString()} ${e.message}`).join('\n');
                                             navigator.clipboard.writeText(all);
@@ -644,8 +630,8 @@ export function LogsTab({ cfg }: LogsTabProps) {
                             )}
                         </div>
 
-                        <LogViewer 
-                            events={filteredEvents} 
+                        <LogViewer
+                            events={filteredEvents}
                             backToken={backToken}
                             loadingHistory={loadingHistory}
                             loadHistory={loadHistory}
