@@ -235,6 +235,15 @@ async fn git_ahead_behind_native(project_path: String) -> Result<git_native::Ahe
     }
 }
 
+#[tauri::command]
+fn git_get_diff_model_native(
+    project_path: String,
+    file_path: String,
+    mode: String,
+) -> Result<git_native::DiffModelResult, String> {
+    git_native::git_get_diff_model_native_impl(project_path, file_path, mode)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -283,6 +292,7 @@ pub fn run() {
             git_status_native,
             git_log_native,
             git_ahead_behind_native,
+            git_get_diff_model_native,
             watch_repo,
             stop_watching_repo,
             read_project_envs,

@@ -1,8 +1,16 @@
 use git2::{Repository, StatusOptions, BranchType};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::fs;
 
 // ── Return types ──────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct DiffModelResult {
+    pub original: String,
+    pub modified: String,
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -385,6 +393,75 @@ pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadB
         .map_err(|e| e.to_string())?;
 
     Ok(AheadBehindResult { ahead, behind, has_upstream: true })
+}
+
+pub fn git_get_diff_model_native_impl(
+    project_path: String,
+    file_path: String,
+    mode: String,
+) -> Result<DiffModelResult, String> {
+    let repo = repo_open(&project_path)?;
+    let mut original = String::new();
+    let mut modified = String::new();
+
+    if mode == "staged" {
+        // Original: HEAD
+        if let Ok(head) = repo.head() {
+            if let Ok(commit) = head.peel_to_commit() {
+                if let Ok(tree) = commit.tree() {
+                    if let Ok(entry) = tree.get_path(Path::new(&file_path)) {
+                        if let Ok(obj) = entry.to_object(&repo) {
+                            if let Some(blob) = obj.as_blob() {
+                                original = String::from_utf8_lossy(blob.content()).to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Modified: Index
+        let index = repo.index().map_err(|e| e.to_string())?;
+        if let Some(entry) = index.get_path(Path::new(&file_path), 0) {
+            if let Ok(blob) = repo.find_blob(entry.id) {
+                modified = String::from_utf8_lossy(blob.content()).to_string();
+            }
+        }
+    } else {
+        // Mode: unstaged
+        // Original: Index (if exists) else HEAD
+        let index = repo.index().map_err(|e| e.to_string())?;
+        let mut found_in_index = false;
+        if let Some(entry) = index.get_path(Path::new(&file_path), 0) {
+            if let Ok(blob) = repo.find_blob(entry.id) {
+                original = String::from_utf8_lossy(blob.content()).to_string();
+                found_in_index = true;
+            }
+        }
+        
+        if !found_in_index {
+             if let Ok(head) = repo.head() {
+                if let Ok(commit) = head.peel_to_commit() {
+                    if let Ok(tree) = commit.tree() {
+                        if let Ok(entry) = tree.get_path(Path::new(&file_path)) {
+                            if let Ok(obj) = entry.to_object(&repo) {
+                                if let Some(blob) = obj.as_blob() {
+                                    original = String::from_utf8_lossy(blob.content()).to_string();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Modified: Working Directory
+        let full_path = Path::new(&project_path).join(&file_path);
+        if full_path.exists() {
+            modified = fs::read_to_string(full_path).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(DiffModelResult { original, modified })
 }
 
 // ── Internal helpers (git2) ───────────────────────────────────────────────────
