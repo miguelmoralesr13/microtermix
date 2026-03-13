@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Star, X } from 'lucide-react';
+import { RefreshCw, Star, X, Copy, Check } from 'lucide-react';
 import { 
     CwCredentials, 
     CwLogEvent, 
@@ -149,38 +149,83 @@ const Sidebar = React.memo(({
     );
 });
 
-const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory }: any) => {
+const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, loading }: any) => {
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+
+    const copyLine = (msg: string, id: string) => {
+        navigator.clipboard.writeText(msg);
+        setCopiedId(id);
+        setTimeout(() => setCopiedId(null), 2000);
+    };
+
+    useEffect(() => {
+        if (!backToken || loadingHistory || loading) return;
+
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                loadHistory();
+            }
+        }, {
+            rootMargin: '400px', 
+            threshold: 0
+        });
+
+        const currentSentinel = sentinelRef.current;
+        if (currentSentinel) observer.observe(currentSentinel);
+        return () => {
+            if (currentSentinel) observer.unobserve(currentSentinel);
+        };
+    }, [backToken, loadingHistory, loadHistory, loading]);
+
     return (
-        <div className="flex-1 overflow-y-auto bg-slate-950 p-3 font-mono text-[11px] text-slate-300 space-y-1">
-            {events.length === 0 && !loadingHistory && (
+        <div className="flex-1 overflow-y-auto bg-slate-950 p-3 font-mono text-[11px] text-slate-300 space-y-1 scroll-smooth">
+            {loading && events.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
+                    <RefreshCw size={24} className="animate-spin text-nexus-neon" />
+                    <p className="text-xs animate-pulse">Sincronizando con CloudWatch...</p>
+                </div>
+            )}
+
+            {events.length === 0 && !loading && !loadingHistory && (
                 <div className="flex flex-col items-center justify-center py-10 text-slate-600 italic gap-2 text-center">
-                    <p>No se encontraron eventos recientes.</p>
+                    <p>No se encontraron eventos en el periodo seleccionado.</p>
                 </div>
             )}
             
-            {events.map((e: any, i: number) => (
-                <div key={`${e.timestamp}-${i}`} className="flex gap-3 leading-relaxed hover:bg-slate-800/40 p-1.5 rounded-md transition-colors w-full group overflow-hidden">
-                    <span className="text-slate-600 shrink-0 select-none whitespace-nowrap mt-0.5" title={new Date(e.timestamp).toLocaleString()}>
-                        {new Date(e.timestamp).toLocaleTimeString()}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                        <LogMessage message={e.message} />
+            {events.map((e: any, i: number) => {
+                const lineId = `${e.timestamp}-${i}`;
+                return (
+                    <div key={lineId} className="flex gap-3 leading-relaxed hover:bg-slate-800/40 p-1.5 rounded-md transition-colors w-full group overflow-hidden relative">
+                        <span className="text-slate-600 shrink-0 select-none whitespace-nowrap mt-0.5" title={new Date(e.timestamp).toLocaleString()}>
+                            {new Date(e.timestamp).toLocaleTimeString()}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                            <LogMessage message={e.message} />
+                        </div>
+                        <button 
+                            onClick={() => copyLine(e.message, lineId)}
+                            className={`absolute right-2 top-2 p-1.5 rounded bg-slate-900/80 border border-slate-700 opacity-0 group-hover:opacity-100 transition-all hover:bg-slate-800 ${copiedId === lineId ? 'text-emerald-400 opacity-100' : 'text-slate-400'}`}
+                            title="Copiar línea"
+                        >
+                            {copiedId === lineId ? <Check size={12} /> : <Copy size={12} />}
+                        </button>
                     </div>
-                </div>
-            ))}
+                );
+            })}
 
-            {backToken && (
-                <div className="flex justify-center pt-4 border-t border-slate-900 mt-4">
-                    <button 
-                        onClick={loadHistory} 
-                        disabled={loadingHistory}
-                        className="text-[10px] text-slate-500 hover:text-nexus-neon flex items-center gap-1.5 px-3 py-1 rounded bg-slate-900/50 hover:bg-slate-900 transition-colors"
-                    >
-                        {loadingHistory ? <RefreshCw size={10} className="animate-spin" /> : null}
-                        {loadingHistory ? 'Cargando historia...' : 'Cargar logs más antiguos'}
-                    </button>
-                </div>
-            )}
+            <div ref={sentinelRef} className="h-20 flex flex-col items-center justify-center gap-2 text-[10px] text-slate-600 mt-4 border-t border-slate-900/50">
+                {loadingHistory ? (
+                    <>
+                        <RefreshCw size={14} className="animate-spin text-nexus-neon" />
+                        <span>Cargando más logs...</span>
+                    </>
+                ) : backToken ? (
+                    <span className="opacity-50 italic text-[9px]">Desplaza para cargar historia</span>
+                ) : events.length > 0 ? (
+                    <span className="opacity-20 text-[9px]">Inicio del periodo alcanzado</span>
+                ) : null}
+            </div>
         </div>
     );
 });
@@ -258,12 +303,15 @@ export function LogsTab({ cfg }: LogsTabProps) {
         if (!selectedGroup) return;
         if (!mergedView && !selectedStream) return;
         
+        // Cancel any pending tail
+        setTailing(false);
         setEvents([]);
         setNextToken(null);
         setBackToken(null);
         setLoadingEvents(true);
 
-        const startMs = Date.now() - (timeRange * 60 * 1000);
+        const rangeMinutes = Number(timeRange) || 10;
+        const startMs = Date.now() - (rangeMinutes * 60 * 1000);
 
         const fetchFn = mergedView 
             ? () => cwFilterLogEvents(cfg, selectedGroup, null, null, startMs)
@@ -276,13 +324,16 @@ export function LogsTab({ cfg }: LogsTabProps) {
                 setEvents(sorted);
                 setNextToken(res.next_forward_token);
                 setBackToken(res.next_backward_token);
+                // Reactivate tailing after initial success
                 setTailing(true);
             })
-            .catch(() => { })
+            .catch(err => {
+                console.error("Initial load error:", err);
+            })
             .finally(() => setLoadingEvents(false));
     }, [selectedStream, mergedView, timeRange, cfg, selectedGroup]);
 
-    const loadHistory = async () => {
+    const loadHistory = useCallback(async () => {
         if (!selectedGroup || (!mergedView && !selectedStream) || !backToken || loadingHistory) return;
         setLoadingHistory(true);
         try {
@@ -294,20 +345,25 @@ export function LogsTab({ cfg }: LogsTabProps) {
             if (res.events.length > 0) {
                 // Sort history descending and append to end (older)
                 const sortedHistory = [...res.events].sort((a, b) => b.timestamp - a.timestamp);
-                setEvents(prev => [...prev, ...sortedHistory]);
+                setEvents(prev => {
+                    const combined = [...prev, ...sortedHistory];
+                    // Memory safety: Cap the total number of events in memory
+                    return combined.slice(0, 5000); 
+                });
             }
+            // Even if no events, update backToken (CloudWatch might return empty pages)
             setBackToken(res.next_backward_token);
         } catch (err) {
             console.error("Error loading history:", err);
         } finally {
             setLoadingHistory(false);
         }
-    };
+    }, [selectedGroup, mergedView, selectedStream, backToken, loadingHistory, cfg]);
 
 
     // Live tail interval
     useEffect(() => {
-        if (!tailing || !selectedGroup || (!mergedView && !selectedStream)) {
+        if (!tailing || !selectedGroup || (!mergedView && !selectedStream) || loadingEvents) {
             if (tailRef.current) clearInterval(tailRef.current);
             tailRef.current = null;
             return;
@@ -315,35 +371,36 @@ export function LogsTab({ cfg }: LogsTabProps) {
 
         tailRef.current = setInterval(async () => {
             try {
-                // If we don't have a token, we use the timestamp of the last event + 1ms to avoid duplicates
-                // or the timeRange if we have no events yet.
                 let fallbackStartMs: number | null = null;
-                if (!nextTokenRef.current) {
+                const currentNextToken = nextTokenRef.current;
+
+                if (!currentNextToken) {
                     if (events.length > 0) {
-                        fallbackStartMs = events[events.length - 1].timestamp + 1;
+                        fallbackStartMs = events[0].timestamp + 1;
                     } else {
-                        fallbackStartMs = Date.now() - (timeRange * 60 * 1000);
+                        fallbackStartMs = Date.now() - (Number(timeRange) * 60 * 1000);
                     }
                 }
 
                 const fetchFn = mergedView
-                    ? () => cwFilterLogEvents(cfg, selectedGroup, null, nextTokenRef.current, fallbackStartMs)
-                    : () => cwGetLogEvents(cfg, selectedGroup, selectedStream!, nextTokenRef.current, fallbackStartMs);
+                    ? () => cwFilterLogEvents(cfg, selectedGroup, null, currentNextToken, fallbackStartMs)
+                    : () => cwGetLogEvents(cfg, selectedGroup, selectedStream!, currentNextToken, fallbackStartMs);
 
                 const res = await fetchFn();
                 if (res.events.length > 0) {
-                    // Filter duplicates and prepend (newest at top)
-                    const newUniqueEvents = !nextTokenRef.current 
-                        ? res.events.filter(e => !events.some(p => p.timestamp === e.timestamp && p.message === e.message))
-                        : res.events;
+                    const sortedNew = [...res.events].sort((a, b) => b.timestamp - a.timestamp);
                     
-                    if (newUniqueEvents.length > 0) {
-                        const sortedNew = [...newUniqueEvents].sort((a, b) => b.timestamp - a.timestamp);
-                        setEvents(prev => [...sortedNew, ...prev.slice(0, 2000)]);
-                    }
+                    setEvents(prev => {
+                        // Efficient deduplication using a temporary set (only need to check against the top of the list)
+                        const existingIds = new Set(prev.slice(0, 50).map(e => `${e.timestamp}-${e.message}`));
+                        const uniqueNew = sortedNew.filter(e => !existingIds.has(`${e.timestamp}-${e.message}`));
+                        
+                        if (uniqueNew.length === 0) return prev;
+                        return [...uniqueNew, ...prev].slice(0, 5000);
+                    });
                 }
                 
-                if (res.next_forward_token !== undefined && res.next_forward_token !== nextTokenRef.current) {
+                if (res.next_forward_token !== undefined && res.next_forward_token !== currentNextToken) {
                     setNextToken(res.next_forward_token);
                 }
             } catch (err) { 
@@ -352,7 +409,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
         }, 5000);
 
         return () => { if (tailRef.current) clearInterval(tailRef.current); };
-    }, [tailing, selectedGroup, selectedStream, mergedView, cfg, timeRange, events.length]);
+    }, [tailing, selectedGroup, selectedStream, mergedView, cfg, timeRange, loadingEvents]);
 
     // Local filtered lists for UI
     const sortedGroups = useMemo(() => {
@@ -558,6 +615,16 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                         <span className={`w-1.5 h-1.5 rounded-full ${tailing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
                                         {tailing ? 'Live' : 'Pausado'}
                                     </button>
+                                    <div className="h-4 w-px bg-slate-800 mx-1 shrink-0" />
+                                    <button 
+                                        onClick={() => {
+                                            const all = filteredEvents.map(e => `${new Date(e.timestamp).toISOString()} ${e.message}`).join('\n');
+                                            navigator.clipboard.writeText(all);
+                                        }}
+                                        className="text-[10px] text-slate-500 hover:text-nexus-neon flex items-center gap-1 transition-colors"
+                                    >
+                                        <Copy size={10} /> Copiar todo
+                                    </button>
                                     <button onClick={() => setEvents([])} className="text-[10px] text-slate-600 hover:text-slate-400 ml-1">Limpiar</button>
                                 </div>
                             </div>
@@ -582,6 +649,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                             backToken={backToken}
                             loadingHistory={loadingHistory}
                             loadHistory={loadHistory}
+                            loading={loadingEvents}
                         />
                     </>
                 )}
