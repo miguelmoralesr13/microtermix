@@ -101,12 +101,12 @@ function TreeNode({ node, projectPath, token, branch, apiUrl, onFileSelect, leve
                 {isFolder ? (
                     <>
                         {isOpen ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
-                        <Folder size={14} className={cn("text-nexus-neon/70", isOpen && "text-nexus-neon")} />
+                        <Folder size={14} className={cn("text-microtermix-neon/70", isOpen && "text-microtermix-neon")} />
                     </>
                 ) : (
                     <>
                         <div className="w-3.5 h-3.5" />
-                        <FileCode size={14} className="text-slate-400 group-hover:text-nexus-neon transition-colors" />
+                        <FileCode size={14} className="text-slate-400 group-hover:text-microtermix-neon transition-colors" />
                     </>
                 )}
                 <span className={cn("text-xs text-slate-400 group-hover:text-slate-200", isFolder && isOpen && "text-slate-100 font-medium")}>

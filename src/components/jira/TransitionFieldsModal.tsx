@@ -51,7 +51,7 @@ export function TransitionFieldsModal({ target, onConfirm, onClose }: {
     };
 
     const borderColor = isDiscard ? 'border-red-500/30' : 'border-slate-700';
-    const accentColor = isDiscard ? 'text-red-400' : 'text-nexus-neon';
+    const accentColor = isDiscard ? 'text-red-400' : 'text-microtermix-neon';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -120,7 +120,7 @@ export function TransitionFieldsModal({ target, onConfirm, onClose }: {
                             Cancelar
                         </button>
                         <button type="submit" disabled={!allFilled || submitting}
-                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${isDiscard ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30' : 'bg-nexus-neon/10 border-nexus-neon/30 text-nexus-neon hover:bg-nexus-neon/20'}`}>
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold border transition-colors disabled:opacity-50 ${isDiscard ? 'bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30' : 'bg-microtermix-neon/10 border-microtermix-neon/30 text-microtermix-neon hover:bg-microtermix-neon/20'}`}>
                             {submitting ? <RefreshCw size={11} className="animate-spin mx-auto" /> : 'Confirmar'}
                         </button>
                     </div>

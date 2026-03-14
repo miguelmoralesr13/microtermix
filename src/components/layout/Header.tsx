@@ -40,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <button
                         type="button"
                         onClick={() => scanWorkspace(state.currentPath!)}
-                        className="p-1.5 text-slate-500 hover:text-nexus-neon rounded border border-slate-700 hover:border-slate-600 transition-colors hover:rotate-[-90deg] active:rotate-[-180deg]"
+                        className="p-1.5 text-slate-500 hover:text-microtermix-neon rounded border border-slate-700 hover:border-slate-600 transition-colors hover:rotate-[-90deg] active:rotate-[-180deg]"
                         title="Refrescar proyectos del workspace"
                     >
                         <RotateCcw size={14} />
@@ -49,7 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Centro: Título */}
-            <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-nexus-neon to-nexus-accent capitalize shrink-0 text-center flex-none">
+            <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-microtermix-neon to-microtermix-accent capitalize shrink-0 text-center flex-none">
                 Microtermix {getTitleSuffix()}
             </h1>
 
@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
                                 icon={Save}
                                 onClick={onSaveConfig}
                                 variant="outline"
-                                title="Guardar config en carpeta del workspace (nexus-workspace.json)"
+                                title="Guardar config en carpeta del workspace (microtermix.json)"
                             />
                         )}
                         {onLoadConfigApplyCurrent && (

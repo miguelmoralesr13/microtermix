@@ -1549,7 +1549,7 @@ const TABS = [
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
-const STORAGE_KEY = 'nexus-json-processor-tab';
+const STORAGE_KEY = 'microtermix-json-processor-tab';
 
 export const JsonProcessorPanel: React.FC = () => {
     const [active, setActive] = useState<TabId>(() => {

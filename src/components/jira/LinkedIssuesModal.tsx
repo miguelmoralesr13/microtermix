@@ -28,7 +28,7 @@ export function LinkedIssuesModal({ parentKey, onClose, onDetail }: {
             <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg max-h-[85vh] shadow-2xl flex flex-col" onClick={(e: React.MouseEvent) => e.stopPropagation()}>                {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
                     <h3 className="text-sm font-bold text-slate-200">
-                        Defectos Asociados a <span className="font-mono text-nexus-neon">{parentKey}</span>
+                        Defectos Asociados a <span className="font-mono text-microtermix-neon">{parentKey}</span>
                     </h3>
                     <button onClick={onClose} className="text-slate-500 hover:text-white shrink-0"><X size={16} /></button>
                 </div>

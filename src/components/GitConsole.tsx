@@ -85,7 +85,7 @@ export const GitConsole: React.FC = () => {
                 className="h-10 border-t border-slate-800 bg-slate-900/90 hover:bg-slate-800/90 text-slate-400 hover:text-white flex items-center justify-between px-4 cursor-pointer transition-colors shadow-[0_-4px_15px_rgba(0,0,0,0.5)] z-30 shrink-0"
             >
                 <div className="flex items-center text-xs font-mono">
-                    <TerminalSquare size={14} className="mr-2 text-nexus-neon" />
+                    <TerminalSquare size={14} className="mr-2 text-microtermix-neon" />
                     Git Operations Console ({logs.length} logs)
                 </div>
                 <ChevronUp size={16} />
@@ -104,11 +104,11 @@ export const GitConsole: React.FC = () => {
                 className="h-8 shrink-0 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 cursor-pointer select-none"
             >
                 <div className="flex items-center text-xs font-bold text-slate-300">
-                    <TerminalSquare size={14} className="mr-2 text-nexus-neon" />
+                    <TerminalSquare size={14} className="mr-2 text-microtermix-neon" />
                     Git Console
                 </div>
                 <div className="flex items-center space-x-2">
-                    <button onClick={(e) => { e.stopPropagation(); handleClear(e); }} className="p-1 text-slate-500 hover:text-nexus-danger rounded transition-colors" title="Clear Console">
+                    <button onClick={(e) => { e.stopPropagation(); handleClear(e); }} className="p-1 text-slate-500 hover:text-microtermix-danger rounded transition-colors" title="Clear Console">
                         <Trash2 size={14} />
                     </button>
                     <div className="p-1 text-slate-500 hover:text-white">
@@ -133,7 +133,7 @@ export const GitConsole: React.FC = () => {
                                 <span className="mr-3">[{log.timestamp.toLocaleTimeString()}]</span>
                                 <span className="truncate">{log.payload.project_path}</span>
                             </div>
-                            <div className="text-nexus-accent font-bold mb-1">
+                            <div className="text-microtermix-accent font-bold mb-1">
                                 $ {log.payload.command}
                             </div>
                             {log.payload.stdout && (
@@ -142,7 +142,7 @@ export const GitConsole: React.FC = () => {
                                 </div>
                             )}
                             {log.payload.stderr && (
-                                <div className="text-nexus-danger whitespace-pre-wrap break-all mt-1 bg-nexus-danger/10 p-2 rounded">
+                                <div className="text-microtermix-danger whitespace-pre-wrap break-all mt-1 bg-microtermix-danger/10 p-2 rounded">
                                     {log.payload.stderr}
                                 </div>
                             )}

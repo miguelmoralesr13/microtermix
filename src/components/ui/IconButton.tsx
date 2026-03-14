@@ -17,16 +17,16 @@ export const IconButton: React.FC<IconButtonProps> = ({
     let variantClasses = '';
     switch (variant) {
         case 'ghost':
-            variantClasses = 'text-slate-500 hover:text-nexus-neon hover:bg-slate-800';
+            variantClasses = 'text-slate-500 hover:text-microtermix-neon hover:bg-slate-800';
             break;
         case 'danger':
-            variantClasses = 'text-slate-500 hover:text-nexus-danger hover:bg-nexus-danger/10';
+            variantClasses = 'text-slate-500 hover:text-microtermix-danger hover:bg-microtermix-danger/10';
             break;
         case 'success':
-            variantClasses = 'text-slate-500 hover:text-nexus-success hover:bg-slate-700';
+            variantClasses = 'text-slate-500 hover:text-microtermix-success hover:bg-slate-700';
             break;
         case 'outline':
-            variantClasses = 'text-slate-500 hover:text-nexus-neon border border-slate-700 hover:border-slate-600';
+            variantClasses = 'text-slate-500 hover:text-microtermix-neon border border-slate-700 hover:border-slate-600';
             break;
         default:
             variantClasses = 'text-slate-500 hover:text-slate-200';

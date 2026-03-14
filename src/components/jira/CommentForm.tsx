@@ -71,7 +71,7 @@ export function CommentForm({ issueKey, onSuccess }: { issueKey: string; onSucce
                     <Button
                         onClick={handleSubmit}
                         disabled={submitting || (!text.trim() && files.length === 0)}
-                        className="gap-1.5 bg-nexus-accent/20 hover:bg-nexus-accent/30 text-nexus-accent border border-nexus-accent/30 text-xs font-bold rounded-lg"
+                        className="gap-1.5 bg-microtermix-accent/20 hover:bg-microtermix-accent/30 text-microtermix-accent border border-microtermix-accent/30 text-xs font-bold rounded-lg"
                         size="sm"
                     >
                         {submitting ? <RefreshCw size={12} className="animate-spin" /> : <Send size={12} />}

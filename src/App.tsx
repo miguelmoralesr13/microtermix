@@ -33,7 +33,7 @@ function AppContent() {
     if (state.projects.length > 0) {
       const paths = state.projects.map(p => p.path as string);
       let cleanup: (() => Promise<void>) | undefined;
-      
+
       initWatchers(paths).then(c => {
         cleanup = c;
       });
@@ -86,7 +86,7 @@ function AppContent() {
     }
   }, [state.currentPath]);
 
-  // Al tener proyectos, cargar config del workspace desde nexus-workspace.json en la carpeta (o crearlo si no existe)
+  // Al tener proyectos, cargar config del workspace desde microtermix.json en la carpeta (o crearlo si no existe)
   React.useEffect(() => {
     if (!state.currentPath || state.projects.length === 0) return;
     if (configLoadedForPathRef.current === state.currentPath) return;
@@ -112,18 +112,18 @@ function AppContent() {
     return (
       <div className="flex flex-col items-center justify-center h-screen w-full bg-[#020617] text-slate-100 relative overflow-hidden">
         {/* Animated Background Gradients */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-nexus-neon/20 blur-[120px] rounded-full animate-pulse pointer-events-none" />
-        <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] bg-nexus-accent/10 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-microtermix-neon/20 blur-[120px] rounded-full animate-pulse pointer-events-none" />
+        <div className="absolute top-[20%] right-[-10%] w-[30%] h-[50%] bg-microtermix-accent/10 blur-[120px] rounded-full pointer-events-none" />
 
         <div className="relative z-10 w-full max-w-lg p-10 rounded-3xl bg-slate-900/40 border border-slate-700/50 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl flex flex-col items-center group">
 
-          <div className="w-20 h-20 mb-6 rounded-2xl bg-gradient-to-tr from-nexus-neon to-nexus-accent p-[2px] shadow-lg shadow-nexus-neon/20 group-hover:scale-105 transition-transform duration-500">
+          <div className="w-20 h-20 mb-6 rounded-2xl bg-gradient-to-tr from-microtermix-neon to-microtermix-accent p-[2px] shadow-lg shadow-microtermix-neon/20 group-hover:scale-105 transition-transform duration-500">
             <div className="w-full h-full bg-[#020617] rounded-2xl flex items-center justify-center">
-              <TerminalSquare size={36} className="text-nexus-neon" />
+              <TerminalSquare size={36} className="text-microtermix-neon" />
             </div>
           </div>
 
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-nexus-neon via-white to-nexus-accent mb-3 text-center tracking-tight">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-microtermix-neon via-white to-microtermix-accent mb-3 text-center tracking-tight">
             Microtermix
           </h1>
           <p className="text-slate-400 text-sm mb-10 text-center max-w-sm leading-relaxed">
@@ -133,7 +133,7 @@ function AppContent() {
           <div className="w-full gap-4 flex flex-col">
             <button
               onClick={openFolderInThisWindow}
-              className="relative w-full overflow-hidden rounded-xl bg-nexus-neon/10 border border-nexus-neon/30 text-nexus-neon font-semibold py-3.5 px-6 transition-all duration-300 hover:bg-nexus-neon hover:text-white hover:border-nexus-neon hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] focus:outline-none flex items-center justify-center gap-3 cursor-pointer"
+              className="relative w-full overflow-hidden rounded-xl bg-microtermix-neon/10 border border-microtermix-neon/30 text-microtermix-neon font-semibold py-3.5 px-6 transition-all duration-300 hover:bg-microtermix-neon hover:text-white hover:border-microtermix-neon hover:shadow-[0_0_20px_rgba(56,189,248,0.4)] focus:outline-none flex items-center justify-center gap-3 cursor-pointer"
             >
               <FolderOpen size={18} />
               Abrir Workspace Local

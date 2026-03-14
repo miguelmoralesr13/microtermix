@@ -23,7 +23,7 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
             {/* Request name */}
             <input
                 type="text"
-                className="bg-transparent border-none text-white font-semibold outline-none focus:ring-1 focus:ring-nexus-neon rounded px-1 w-full"
+                className="bg-transparent border-none text-white font-semibold outline-none focus:ring-1 focus:ring-microtermix-neon rounded px-1 w-full"
                 value={request.name}
                 onChange={(e) => onChange({ ...request, name: e.target.value })}
                 placeholder="Request Name"
@@ -32,7 +32,7 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
             {/* Method + URL + Send */}
             <div className="flex gap-2">
                 <select
-                    className="bg-slate-950 border border-slate-700 text-nexus-neon font-bold rounded px-4 py-2 outline-none focus:border-nexus-neon appearance-none w-28 text-center"
+                    className="bg-slate-950 border border-slate-700 text-microtermix-neon font-bold rounded px-4 py-2 outline-none focus:border-microtermix-neon appearance-none w-28 text-center"
                     value={request.method}
                     onChange={(e) => onChange({ ...request, method: e.target.value as HttpMethod })}
                 >
@@ -56,7 +56,7 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
                     disabled={loading || !request.url}
                     className={`flex items-center gap-2 px-6 py-2 rounded font-bold transition-all ${loading || !request.url
                         ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        : 'bg-nexus-neon text-slate-900 hover:bg-sky-400 hover:shadow-[0_0_10px_rgba(56,189,248,0.4)]'
+                        : 'bg-microtermix-neon text-slate-900 hover:bg-sky-400 hover:shadow-[0_0_10px_rgba(56,189,248,0.4)]'
                         }`}
                 >
                     {loading ? (

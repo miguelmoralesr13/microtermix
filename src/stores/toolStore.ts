@@ -12,7 +12,7 @@ interface ToolStore {
     jdks: JdkInfo[];
     downloading: boolean;
     error: string | null;
-    
+
     // Actions
     fetchJdks: () => Promise<void>;
     downloadJdk: (version: number) => Promise<void>;
@@ -64,7 +64,7 @@ export const useToolStore = create<ToolStore>()(
                 }
             }),
             {
-                name: 'nexus-tools-store',
+                name: 'microtermix-tools-store',
                 partialize: (state) => ({ projectJdks: state.projectJdks }),
             }
         ),

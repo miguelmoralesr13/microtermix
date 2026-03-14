@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const VITE_WRAPPER_STORAGE_PREFIX = 'nexus-vite-wrapper-';
+const VITE_WRAPPER_STORAGE_PREFIX = 'microtermix-vite-wrapper-';
 
 function storageKey(projectPath: string): string {
     return `${VITE_WRAPPER_STORAGE_PREFIX}${projectPath.replace(/[/\\:]/g, '_')}`;
@@ -182,7 +182,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                             <div>
                                 <label className="block text-xs text-slate-400 mb-1">Proyecto</label>
                                 <Select value={selectedPath} onValueChange={(v) => v && handleProjectChange(v)}>
-                                    <SelectTrigger className="w-full h-9 border-slate-600 bg-slate-800 text-slate-200 focus-visible:border-nexus-neon">
+                                    <SelectTrigger className="w-full h-9 border-slate-600 bg-slate-800 text-slate-200 focus-visible:border-microtermix-neon">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -209,7 +209,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                             type="checkbox"
                                             checked={enabled}
                                             onChange={e => setEnabled(e.target.checked)}
-                                            className="accent-nexus-neon"
+                                            className="accent-microtermix-neon"
                                         />
                                         <span className="text-sm text-slate-300">Usar Vite wrapper en las ejecuciones</span>
                                     </label>
@@ -222,7 +222,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                 value={base}
                                                 onChange={e => setBase(e.target.value)}
                                                 placeholder="/my-app/"
-                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none"
+                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none"
                                             />
                                         </div>
                                         <div className="flex-1 min-w-[160px]">
@@ -232,7 +232,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                 value={host}
                                                 onChange={e => setHost(e.target.value)}
                                                 placeholder="0.0.0.0"
-                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none"
+                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none"
                                             />
                                         </div>
                                         <div className="flex items-end pb-0.5">
@@ -241,7 +241,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                     type="checkbox"
                                                     checked={sourcemap}
                                                     onChange={e => setSourcemap(e.target.checked)}
-                                                    className="accent-nexus-neon"
+                                                    className="accent-microtermix-neon"
                                                 />
                                                 <span className="text-sm text-slate-300">sourcemap</span>
                                             </label>
@@ -259,7 +259,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                             type="checkbox"
                                                             checked={isEnabled}
                                                             onChange={() => toggleRemote(r.name)}
-                                                            className="accent-nexus-neon shrink-0"
+                                                            className="accent-microtermix-neon shrink-0"
                                                             title={isEnabled ? 'Deshabilitar remote' : 'Habilitar remote'}
                                                         />
                                                         <span className="w-36 shrink-0 text-xs font-mono text-slate-400 truncate" title={r.name}>
@@ -270,13 +270,13 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                             value={remotes[r.name] ?? r.default_url}
                                                             onChange={e => setRemoteUrl(r.name, e.target.value)}
                                                             disabled={!isEnabled}
-                                                            className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none disabled:cursor-not-allowed"
+                                                            className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none disabled:cursor-not-allowed"
                                                             placeholder={r.default_url || 'http://localhost:PORT/.../remoteEntry.js'}
                                                         />
                                                         <button
                                                             type="button"
                                                             onClick={() => removeRemote(r.name)}
-                                                            className="p-1 text-slate-500 hover:text-nexus-danger rounded transition-colors shrink-0"
+                                                            className="p-1 text-slate-500 hover:text-microtermix-danger rounded transition-colors shrink-0"
                                                             title="Quitar"
                                                         >
                                                             <Trash2 size={14} />
@@ -294,7 +294,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                                 type="checkbox"
                                                                 checked={isEnabled}
                                                                 onChange={() => toggleRemote(name)}
-                                                                className="accent-nexus-neon shrink-0"
+                                                                className="accent-microtermix-neon shrink-0"
                                                                 title={isEnabled ? 'Deshabilitar remote' : 'Habilitar remote'}
                                                             />
                                                             <span className="w-36 shrink-0 text-xs font-mono text-slate-400 truncate" title={name}>
@@ -305,13 +305,13 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                                 value={url}
                                                                 onChange={e => setRemoteUrl(name, e.target.value)}
                                                                 disabled={!isEnabled}
-                                                                className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-nexus-neon focus:outline-none disabled:cursor-not-allowed"
+                                                                className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none disabled:cursor-not-allowed"
                                                                 placeholder="http://localhost:PORT/.../remoteEntry.js"
                                                             />
                                                             <button
                                                                 type="button"
                                                                 onClick={() => removeRemote(name)}
-                                                                className="p-1 text-slate-500 hover:text-nexus-danger rounded transition-colors shrink-0"
+                                                                className="p-1 text-slate-500 hover:text-microtermix-danger rounded transition-colors shrink-0"
                                                                 title="Quitar"
                                                             >
                                                                 <Trash2 size={14} />
@@ -338,7 +338,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={addManualRemote}
-                                                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-nexus-neon hover:bg-nexus-neon/10 rounded-lg transition-colors"
+                                                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-microtermix-neon hover:bg-microtermix-neon/10 rounded-lg transition-colors"
                                             >
                                                 <Plus size={12} /> Añadir
                                             </button>
@@ -356,7 +356,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                     </Button>
                     <Button
                         onClick={handleSave}
-                        className="bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/80 font-bold"
+                        className="bg-microtermix-neon text-microtermix-darker hover:bg-microtermix-neon/80 font-bold"
                     >
                         Guardar
                     </Button>

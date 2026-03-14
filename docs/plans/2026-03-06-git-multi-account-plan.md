@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Añadir soporte de múltiples cuentas GitHub/GitLab al panel Git, con asignación por repo persistida en nexus-workspace.json, eliminando el panel remoto (GithubPanel).
+**Goal:** Añadir soporte de múltiples cuentas GitHub/GitLab al panel Git, con asignación por repo persistida en microtermix.json, eliminando el panel remoto (GithubPanel).
 
-**Architecture:** Las cuentas viven en `gitStore` solo en memoria (excluidas del `partialize` de Zustand). `nexus-workspace.json` es la única fuente de verdad via los mecanismos de save/load ya existentes. `WorkspaceContext` pierde `gitConfig` por completo. `GitConfigModal` se reemplaza con `AccountManagerModal`.
+**Architecture:** Las cuentas viven en `gitStore` solo en memoria (excluidas del `partialize` de Zustand). `microtermix.json` es la única fuente de verdad via los mecanismos de save/load ya existentes. `WorkspaceContext` pierde `gitConfig` por completo. `GitConfigModal` se reemplaza con `AccountManagerModal`.
 
 **Tech Stack:** React 19, TypeScript, Zustand (persist/devtools), TailwindCSS v4, Tauri v2 (`invoke`), `crypto.randomUUID()` (sin dependencias nuevas).
 
@@ -46,7 +46,7 @@ export interface GitUi {
 Añadir al interface `GitStore`, después del campo `ui`:
 
 ```ts
-// Cuentas en memoria — NO persisten en Zustand, solo en nexus-workspace.json
+// Cuentas en memoria — NO persisten en Zustand, solo en microtermix.json
 accounts: GitAccount[];
 repoAccounts: Record<string, string>; // repoPath → accountId
 
@@ -156,7 +156,7 @@ git commit -m "feat(git): add GitAccount type + multi-account state to gitStore"
 **Files:**
 - Modify: `src/types/workspaceConfig.ts`
 
-**Step 1: Importar `GitAccount` y añadir campos a `NexusWorkspaceConfig`**
+**Step 1: Importar `GitAccount` y añadir campos a `MicrotermixConfig`**
 
 Añadir al inicio del archivo:
 
@@ -164,7 +164,7 @@ Añadir al inicio del archivo:
 import type { GitAccount } from '../stores/gitStore';
 ```
 
-En `NexusWorkspaceConfig`, reemplazar la línea:
+En `MicrotermixConfig`, reemplazar la línea:
 
 ```ts
 gitConfig?: { provider: string; url: string; token: string };
@@ -205,7 +205,7 @@ export function buildWorkspaceConfigFromCurrentState(
     projectPaths: string[],
     savedCommands: Record<string, string> = {},
     savedCommandSteps: Record<string, CommandStep[]> = {},
-): NexusWorkspaceConfig {
+): MicrotermixConfig {
 ```
 
 Dentro del return, añadir y quitar:
@@ -250,7 +250,7 @@ git commit -m "feat(git): replace gitConfig with gitAccounts/repoAccounts in wor
 
 - Borrar el `export interface GitConfig { ... }` (ya no se usa)
 - En `WorkspaceState`, eliminar el campo `gitConfig: GitConfig`
-- En la inicialización del estado (el `useState` callback), eliminar toda la lógica que lee `nexus-git-settings` y construye `gitConfig`
+- En la inicialización del estado (el `useState` callback), eliminar toda la lógica que lee `microtermix-git-settings` y construye `gitConfig`
 - Eliminar `gitConfig` del objeto de estado inicial
 
 **Step 2: Eliminar `setGitConfig` del contexto**
@@ -259,12 +259,12 @@ git commit -m "feat(git): replace gitConfig with gitAccounts/repoAccounts in wor
 - En el provider, eliminar la función `setGitConfig`
 - En el objeto `value` del provider, eliminar `setGitConfig`
 
-**Step 3: Eliminar el `useEffect` que persiste `nexus-git-settings`**
+**Step 3: Eliminar el `useEffect` que persiste `microtermix-git-settings`**
 
 Borrar:
 ```ts
 React.useEffect(() => {
-    localStorage.setItem('nexus-git-settings', JSON.stringify(state.gitConfig));
+    localStorage.setItem('microtermix-git-settings', JSON.stringify(state.gitConfig));
 }, [state.gitConfig]);
 ```
 
@@ -278,12 +278,12 @@ import { useGitStore } from '../stores/gitStore';
 Dentro de `WorkspaceProvider`, antes del return, añadir un `useEffect` de una sola ejecución para migrar:
 
 ```ts
-// Migración one-time desde gitConfig legacy (nexus-git-settings en localStorage)
+// Migración one-time desde gitConfig legacy (microtermix-git-settings en localStorage)
 React.useEffect(() => {
     const store = useGitStore.getState();
     if (store.accounts.length > 0) return; // ya migrado
     try {
-        const raw = localStorage.getItem('nexus-git-settings');
+        const raw = localStorage.getItem('microtermix-git-settings');
         if (!raw) return;
         const cfg = JSON.parse(raw);
         if (cfg?.provider && cfg.provider !== 'none' && cfg.token) {
@@ -293,7 +293,7 @@ React.useEffect(() => {
                 url: cfg.url || (cfg.provider === 'github' ? 'https://api.github.com' : 'https://gitlab.com'),
                 token: cfg.token,
             });
-            localStorage.removeItem('nexus-git-settings');
+            localStorage.removeItem('microtermix-git-settings');
         }
     } catch (_) {}
 }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -566,7 +566,7 @@ Justo después del header div (`</div>` que cierra el header), añadir:
 ```tsx
 {/* Banner auto-detección: múltiples cuentas coinciden */}
 {detectedAccounts.length > 1 && ui.activeTab && (
-    <div className="flex items-center gap-2 px-4 py-2 bg-nexus-accent/10 border-b border-nexus-accent/30 text-xs text-slate-300 shrink-0">
+    <div className="flex items-center gap-2 px-4 py-2 bg-microtermix-accent/10 border-b border-microtermix-accent/30 text-xs text-slate-300 shrink-0">
         <span>Se detectaron {detectedAccounts.length} cuentas para este repo. Selecciona:</span>
         {detectedAccounts.map(a => (
             <button
@@ -757,7 +757,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
                                     <select
                                         value={activeAccountId ?? ''}
                                         onChange={e => setRepoAccount(repoPath, e.target.value || null)}
-                                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon"
+                                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon"
                                     >
                                         <option value="">Sin cuenta</option>
                                         {accounts.map(a => (
@@ -835,7 +835,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
                             {editingId === null && (
                                 <button
                                     onClick={startAdd}
-                                    className="flex items-center gap-1.5 text-xs text-nexus-neon hover:text-white transition-colors py-1"
+                                    className="flex items-center gap-1.5 text-xs text-microtermix-neon hover:text-white transition-colors py-1"
                                 >
                                     <Plus size={13} /> Añadir cuenta
                                 </button>
@@ -864,7 +864,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
     const canSave = form.alias.trim().length > 0 && form.token.trim().length > 0;
 
     return (
-        <div className="rounded-lg border border-nexus-accent/40 bg-slate-800/60 p-4 space-y-3">
+        <div className="rounded-lg border border-microtermix-accent/40 bg-slate-800/60 p-4 space-y-3">
             {/* Alias */}
             <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">Alias</label>
@@ -873,7 +873,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                     value={form.alias}
                     onChange={e => onChange({ ...form, alias: e.target.value })}
                     placeholder="Trabajo GitHub, Personal GitLab..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-nexus-neon"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-microtermix-neon"
                 />
             </div>
 
@@ -888,7 +888,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                             onClick={() => onProviderChange(p)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-all ${
                                 form.provider === p
-                                    ? 'border-nexus-accent bg-nexus-accent/10 text-white'
+                                    ? 'border-microtermix-accent bg-microtermix-accent/10 text-white'
                                     : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500'
                             }`}
                         >
@@ -906,7 +906,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                     type="url"
                     value={form.url}
                     onChange={e => onChange({ ...form, url: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-nexus-neon"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-microtermix-neon"
                 />
             </div>
 
@@ -919,7 +919,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                         value={form.token}
                         onChange={e => onChange({ ...form, token: e.target.value })}
                         placeholder={form.provider === 'github' ? 'ghp_...' : 'glpat-...'}
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 font-mono focus:outline-none focus:border-nexus-neon"
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 font-mono focus:outline-none focus:border-microtermix-neon"
                     />
                     <button
                         type="button"
@@ -957,7 +957,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                     type="button"
                     onClick={onSave}
                     disabled={!canSave}
-                    className="px-4 py-1.5 rounded text-xs font-bold bg-nexus-neon text-slate-900 hover:bg-opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="px-4 py-1.5 rounded text-xs font-bold bg-microtermix-neon text-slate-900 hover:bg-opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                     Guardar
                 </button>
@@ -1046,5 +1046,5 @@ git commit -m "feat(git): wire AccountManagerModal into GitPanel, complete multi
 5. Asignar la cuenta al repo actual desde la sección "Repo actual"
 6. Cerrar y reabrir → el badge en el header debe mostrar el alias de la cuenta
 7. Abrir otro repo → si no tiene cuenta, y solo hay una del mismo proveedor → auto-asignación
-8. Guardar workspace (auto-save 1.5s) → abrir `nexus-workspace.json` → debe contener `gitAccounts` y `repoAccounts`
+8. Guardar workspace (auto-save 1.5s) → abrir `microtermix.json` → debe contener `gitAccounts` y `repoAccounts`
 9. Confirmar que NO aparece el campo `gitConfig` legacy en el JSON

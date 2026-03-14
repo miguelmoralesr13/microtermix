@@ -114,7 +114,7 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
               onChange={e => setIssueInput(e.target.value)}
               placeholder="PROJ-123"
               disabled={isEditing}
-              className="bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-nexus-neon disabled:opacity-60"
+              className="bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-microtermix-neon disabled:opacity-60"
             />
           </div>
           <div className="space-y-1.5">
@@ -141,13 +141,13 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-400">
               Tiempo
-              {parsedSeconds ? <span className="text-nexus-neon ml-2">→ {formatDuration(parsedSeconds)}</span> : null}
+              {parsedSeconds ? <span className="text-microtermix-neon ml-2">→ {formatDuration(parsedSeconds)}</span> : null}
             </Label>
             <Input
               value={timeInput}
               onChange={e => { setTimeInput(e.target.value); setTimeError(''); }}
               placeholder="1h 30m · 1.5h · 90m"
-              className={cn('bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-nexus-neon', timeError && 'border-red-500')}
+              className={cn('bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-microtermix-neon', timeError && 'border-red-500')}
             />
             {timeError && <p className="text-xs text-red-400">{timeError}</p>}
           </div>
@@ -158,7 +158,7 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
               onChange={e => setDescription(e.target.value)}
               placeholder="¿En qué trabajaste?"
               rows={3}
-              className="bg-slate-800 border-slate-700 text-white text-sm resize-none focus:border-nexus-neon"
+              className="bg-slate-800 border-slate-700 text-white text-sm resize-none focus:border-microtermix-neon"
             />
           </div>
         </div>
@@ -174,7 +174,7 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
           <Button
             onClick={handleSave}
             disabled={saving || !issueInput.trim() || !timeInput.trim()}
-            className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
+            className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold"
             size="sm"
           >
             {saving && <Loader2 size={12} className="animate-spin mr-1.5" />}

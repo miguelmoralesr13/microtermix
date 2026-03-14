@@ -488,7 +488,7 @@ export interface CwDatapoint {
 
 // ── localStorage ──────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'nexus-cloudwatch-cfg';
+const STORAGE_KEY = 'microtermix-cloudwatch-cfg';
 
 export function loadCwConfig(): CwCredentials {
     try {
@@ -726,7 +726,7 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
                 value={draft[key] ?? ''}
                 onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))}
                 placeholder={placeholder}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-nexus-accent placeholder:text-slate-700"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-microtermix-accent placeholder:text-slate-700"
             />
         </div>
     );
@@ -744,7 +744,7 @@ function SettingsTab({ onSaved }: { onSaved: () => void }) {
             <div className="flex items-center gap-3 pt-2">
                 <button
                     onClick={handleSave}
-                    className="px-4 py-2 bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-lg text-xs font-bold transition-colors"
+                    className="px-4 py-2 bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 rounded-lg text-xs font-bold transition-colors"
                 >
                     Guardar
                 </button>
@@ -788,11 +788,11 @@ export const CloudWatchPanel: React.FC = () => {
         <div className="flex flex-col h-full min-h-0 bg-slate-950">
             {/* Tab bar */}
             <div className="flex items-center gap-1 px-4 pt-3 border-b border-slate-800 shrink-0 bg-slate-900/50">
-                <Cloud size={15} className="text-nexus-neon mr-2 shrink-0" />
+                <Cloud size={15} className="text-microtermix-neon mr-2 shrink-0" />
                 {tabs.map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                         className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === t.id
-                            ? 'border-nexus-neon text-white'
+                            ? 'border-microtermix-neon text-white'
                             : 'border-transparent text-slate-500 hover:text-slate-300'
                         }`}>
                         {t.label}
@@ -825,7 +825,7 @@ function NeedConfig({ onGo }: { onGo: () => void }) {
         <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500 p-12">
             <AlertCircle size={36} />
             <p className="text-sm text-center">Primero configura tus credenciales AWS.</p>
-            <button onClick={onGo} className="text-xs text-nexus-accent hover:underline">Ir a Configuración →</button>
+            <button onClick={onGo} className="text-xs text-microtermix-accent hover:underline">Ir a Configuración →</button>
         </div>
     );
 }
@@ -977,7 +977,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                             value={groupSearch}
                             onChange={e => setGroupSearch(e.target.value)}
                             placeholder="Buscar grupo…"
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                         />
                         {loadingGroups && <RefreshCw size={10} className="animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />}
                     </div>
@@ -988,7 +988,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                     {filteredGroups.map(g => (
                         <button key={g.name} onClick={() => setSelectedGroup(g.name)}
                             className={`w-full text-left px-3 py-2 text-xs font-mono truncate transition-colors ${selectedGroup === g.name
-                                ? 'bg-nexus-neon/10 text-nexus-neon'
+                                ? 'bg-microtermix-neon/10 text-microtermix-neon'
                                 : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                             }`} title={g.name}>
                             {g.name}
@@ -1005,7 +1005,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                                 value={streamSearch}
                                 onChange={e => setStreamSearch(e.target.value)}
                                 placeholder="Buscar stream…"
-                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                             />
                             {loadingStreams && <RefreshCw size={10} className="animate-spin mt-1 text-slate-500" />}
                         </div>
@@ -1013,7 +1013,7 @@ function LogsTab({ cfg }: { cfg: CwCredentials }) {
                             {filteredStreams.map(s => (
                                 <button key={s.name} onClick={() => setSelectedStream(s.name)}
                                     className={`w-full text-left px-3 py-1.5 text-[11px] font-mono truncate transition-colors ${selectedStream === s.name
-                                        ? 'bg-nexus-accent/10 text-nexus-accent'
+                                        ? 'bg-microtermix-accent/10 text-microtermix-accent'
                                         : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
                                     }`} title={s.name}>
                                     {s.name}
@@ -1261,7 +1261,7 @@ function MetricsTab({ cfg }: { cfg: CwCredentials }) {
                         value={namespace}
                         onChange={e => setNamespace(e.target.value)}
                         placeholder="AWS/Lambda"
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-44 focus:outline-none focus:border-nexus-neon placeholder:text-slate-600"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-44 focus:outline-none focus:border-microtermix-neon placeholder:text-slate-600"
                     />
                     <datalist id="ns-suggestions">
                         {NAMESPACE_SUGGESTIONS.map(n => <option key={n} value={n} />)}
@@ -1274,7 +1274,7 @@ function MetricsTab({ cfg }: { cfg: CwCredentials }) {
                         onChange={e => setMetricSearch(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && searchMetrics()}
                         placeholder="Errors ↵"
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-36 focus:outline-none focus:border-nexus-neon placeholder:text-slate-600"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-36 focus:outline-none focus:border-microtermix-neon placeholder:text-slate-600"
                     />
                 </div>
                 <button onClick={searchMetrics} disabled={loadingMetrics}
@@ -1290,7 +1290,7 @@ function MetricsTab({ cfg }: { cfg: CwCredentials }) {
                     {metrics.map((m, i) => (
                         <button key={i} onClick={() => handleSelectMetric(m)}
                             className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b border-slate-800 last:border-0 transition-colors">
-                            <span className="text-nexus-neon font-mono">{m.namespace}</span>
+                            <span className="text-microtermix-neon font-mono">{m.namespace}</span>
                             <span className="text-slate-400 mx-1">/</span>
                             <span className="text-slate-200">{m.metric_name}</span>
                             {m.dimensions.length > 0 && (
@@ -1321,7 +1321,7 @@ function MetricsTab({ cfg }: { cfg: CwCredentials }) {
                                     <span className="text-[11px] text-slate-400 font-mono w-28 shrink-0">{d.name}</span>
                                     <input value={d.value}
                                         onChange={e => setDimensions(prev => prev.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
-                                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-nexus-neon"
+                                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-microtermix-neon"
                                     />
                                 </div>
                             ))}
@@ -1333,27 +1333,27 @@ function MetricsTab({ cfg }: { cfg: CwCredentials }) {
                         <div className="flex flex-col gap-1">
                             <label className="text-[9px] text-slate-500 uppercase tracking-wider">Estadística</label>
                             <select value={stat} onChange={e => setStat(e.target.value)}
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon">
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon">
                                 {STAT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col gap-1">
                             <label className="text-[9px] text-slate-500 uppercase tracking-wider">Período</label>
                             <select value={period} onChange={e => setPeriod(Number(e.target.value))}
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon">
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon">
                                 {PERIOD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col gap-1">
                             <label className="text-[9px] text-slate-500 uppercase tracking-wider">Rango</label>
                             <select value={range} onChange={e => setRange(Number(e.target.value))}
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon">
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon">
                                 {RANGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col justify-end">
                             <button onClick={loadData} disabled={loadingData}
-                                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 disabled:opacity-40 rounded-lg transition-colors">
+                                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 disabled:opacity-40 rounded-lg transition-colors">
                                 {loadingData ? <RefreshCw size={11} className="animate-spin" /> : null}
                                 {loadingData ? 'Cargando…' : 'Cargar'}
                             </button>

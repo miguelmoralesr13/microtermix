@@ -31,7 +31,7 @@ const TARGET_HOST_OPTIONS = [
 export const ProxyPanel: React.FC = () => {
     const { state } = useWorkspace();
     const activeProcesses = useProcessStore(s => s.activeProcesses);
-    
+
     const [proxyOn, setProxyOn] = useState(false);
     const [proxyPort, setProxyPort] = useState(DEFAULT_PROXY_PORT);
     const [hostPort, setHostPort] = useState<number | ''>('');
@@ -155,7 +155,7 @@ export const ProxyPanel: React.FC = () => {
         <div className="flex flex-col h-full overflow-hidden bg-slate-900">
             <div className="flex-1 overflow-auto p-4">
                 {error && (
-                    <div className="mb-3 px-3 py-2 rounded-lg bg-nexus-danger/10 border border-nexus-danger/30 text-nexus-danger text-xs">
+                    <div className="mb-3 px-3 py-2 rounded-lg bg-microtermix-danger/10 border border-microtermix-danger/30 text-microtermix-danger text-xs">
                         {error}
                     </div>
                 )}
@@ -173,51 +173,51 @@ export const ProxyPanel: React.FC = () => {
                     />
                     {!proxyOn && (
                         <>
-                        <label className="text-xs text-slate-400" title="Sirve / y recursos (JS, CSS) desde este puerto para evitar error de MIME type">Host (/)</label>
-                        <input
-                            type="number"
-                            min={1}
-                            max={65535}
-                            value={hostPort === '' ? '' : hostPort}
-                            onChange={e => setHostPort(e.target.value === '' ? '' : parseInt(e.target.value, 10) || '')}
-                            placeholder="ej. 4000"
-                            className="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-500"
-                        />
-                        <label className="text-xs text-slate-400" title="Solo se interceptan rutas bajo este prefijo (ej. /mfe). El resto pasa transparente al Host (/). Relacionado con VITE_VAR_PF_POS_URL_DOMAIN.">Solo interceptar bajo</label>
-                        <input
-                            type="text"
-                            value={interceptPrefix}
-                            onChange={e => setInterceptPrefix(e.target.value)}
-                            placeholder="ej. /mfe"
-                            className="w-24 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-500"
-                        />
-                        <label className="text-xs text-slate-400">Enlace (listen)</label>
-                        <select
-                            value={bindHost}
-                            onChange={e => setBindHost(e.target.value)}
-                            className="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono"
-                        >
-                            {BIND_HOST_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                        </select>
-                        <label className="text-xs text-slate-400">Host para destinos</label>
-                        <select
-                            value={targetHost}
-                            onChange={e => setTargetHost(e.target.value)}
-                            className="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono"
-                        >
-                            {TARGET_HOST_OPTIONS.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                        </select>
+                            <label className="text-xs text-slate-400" title="Sirve / y recursos (JS, CSS) desde este puerto para evitar error de MIME type">Host (/)</label>
+                            <input
+                                type="number"
+                                min={1}
+                                max={65535}
+                                value={hostPort === '' ? '' : hostPort}
+                                onChange={e => setHostPort(e.target.value === '' ? '' : parseInt(e.target.value, 10) || '')}
+                                placeholder="ej. 4000"
+                                className="w-20 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-500"
+                            />
+                            <label className="text-xs text-slate-400" title="Solo se interceptan rutas bajo este prefijo (ej. /mfe). El resto pasa transparente al Host (/). Relacionado con VITE_VAR_PF_POS_URL_DOMAIN.">Solo interceptar bajo</label>
+                            <input
+                                type="text"
+                                value={interceptPrefix}
+                                onChange={e => setInterceptPrefix(e.target.value)}
+                                placeholder="ej. /mfe"
+                                className="w-24 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono placeholder:text-slate-500"
+                            />
+                            <label className="text-xs text-slate-400">Enlace (listen)</label>
+                            <select
+                                value={bindHost}
+                                onChange={e => setBindHost(e.target.value)}
+                                className="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono"
+                            >
+                                {BIND_HOST_OPTIONS.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                            </select>
+                            <label className="text-xs text-slate-400">Host para destinos</label>
+                            <select
+                                value={targetHost}
+                                onChange={e => setTargetHost(e.target.value)}
+                                className="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs text-slate-200 font-mono"
+                            >
+                                {TARGET_HOST_OPTIONS.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                            </select>
                         </>
                     )}
                     {!proxyOn && (
                         <button
                             onClick={loadCandidates}
                             disabled={loading || !state.currentPath}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-400 hover:text-nexus-neon border border-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-400 hover:text-microtermix-neon border border-slate-700 rounded-lg transition-colors disabled:opacity-50"
                         >
                             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
                             Refrescar candidatos
@@ -236,7 +236,7 @@ export const ProxyPanel: React.FC = () => {
                         <button
                             onClick={handleStartProxy}
                             disabled={!state.currentPath}
-                            className="flex items-center gap-2 px-4 py-2 bg-nexus-neon text-nexus-darker font-bold rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 text-sm mb-4"
+                            className="flex items-center gap-2 px-4 py-2 bg-microtermix-neon text-microtermix-darker font-bold rounded-lg hover:bg-opacity-90 transition-colors disabled:opacity-50 text-sm mb-4"
                         >
                             <Power size={14} />
                             Encender proxy
@@ -245,13 +245,13 @@ export const ProxyPanel: React.FC = () => {
                 ) : (
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-nexus-success animate-pulse" />
+                            <span className="w-2 h-2 rounded-full bg-microtermix-success animate-pulse" />
                             <span className="text-sm font-bold text-slate-200">Proxy encendido</span>
                             <span className="text-xs text-slate-500 font-mono">http://{bindHost}:{proxyPort}</span>
                         </div>
                         <button
                             onClick={handleStopProxy}
-                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-nexus-danger hover:bg-nexus-danger/10 rounded-lg transition-colors"
+                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-microtermix-danger hover:bg-microtermix-danger/10 rounded-lg transition-colors"
                         >
                             <PowerOff size={14} />
                             Apagar proxy
@@ -260,62 +260,62 @@ export const ProxyPanel: React.FC = () => {
                 )}
 
                 {candidates.length > 0 && (
-                        <div className="rounded-lg border border-slate-700 overflow-hidden mb-4">
-                            <table className="w-full text-xs">
-                                <thead>
-                                    <tr className="bg-slate-800/80">
-                                        <th className="text-left py-2 px-3 font-semibold text-slate-500">Proyecto</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-slate-500">Ruta</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-slate-500">Puerto destino</th>
-                                        <th className="text-left py-2 px-3 font-semibold text-slate-500">Redirigir</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {candidates.map(c => {
-                                        const running = isProjectRunning(c.project_path);
-                                        return (
-                                            <tr key={c.project_path} className="border-t border-slate-800">
-                                                <td className="py-2 px-3 font-mono text-slate-300">{c.display_name}</td>
-                                                <td className="py-2 px-3">
-                                                    <input
-                                                        type="text"
-                                                        value={pathFor(c)}
-                                                        onChange={e => setPathOverrides(prev => ({ ...prev, [c.project_path]: e.target.value }))}
-                                                        className="w-full max-w-[180px] bg-slate-800 border border-slate-600 rounded px-2 py-1 font-mono text-slate-200 text-[11px]"
-                                                        placeholder="/nombre"
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        max={65535}
-                                                        value={portFor(c)}
-                                                        onChange={e => setPortOverrides(prev => ({ ...prev, [c.project_path]: parseInt(e.target.value, 10) || c.port }))}
-                                                        className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-1 font-mono text-slate-200 text-[11px]"
-                                                    />
-                                                </td>
-                                                <td className="py-2 px-3">
-                                                    {running ? (
-                                                        <label className="flex items-center gap-2 cursor-pointer">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={!!enabledRoutes[c.project_path]}
-                                                                onChange={e => setEnabledRoutes(prev => ({ ...prev, [c.project_path]: e.target.checked }))}
-                                                                className="accent-nexus-neon"
-                                                            />
-                                                            <span className="text-slate-400">Activo</span>
-                                                        </label>
-                                                    ) : (
-                                                        <span className="text-slate-500 italic text-[10px]">Enciende el proceso en Terminals</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div className="rounded-lg border border-slate-700 overflow-hidden mb-4">
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="bg-slate-800/80">
+                                    <th className="text-left py-2 px-3 font-semibold text-slate-500">Proyecto</th>
+                                    <th className="text-left py-2 px-3 font-semibold text-slate-500">Ruta</th>
+                                    <th className="text-left py-2 px-3 font-semibold text-slate-500">Puerto destino</th>
+                                    <th className="text-left py-2 px-3 font-semibold text-slate-500">Redirigir</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {candidates.map(c => {
+                                    const running = isProjectRunning(c.project_path);
+                                    return (
+                                        <tr key={c.project_path} className="border-t border-slate-800">
+                                            <td className="py-2 px-3 font-mono text-slate-300">{c.display_name}</td>
+                                            <td className="py-2 px-3">
+                                                <input
+                                                    type="text"
+                                                    value={pathFor(c)}
+                                                    onChange={e => setPathOverrides(prev => ({ ...prev, [c.project_path]: e.target.value }))}
+                                                    className="w-full max-w-[180px] bg-slate-800 border border-slate-600 rounded px-2 py-1 font-mono text-slate-200 text-[11px]"
+                                                    placeholder="/nombre"
+                                                />
+                                            </td>
+                                            <td className="py-2 px-3">
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={65535}
+                                                    value={portFor(c)}
+                                                    onChange={e => setPortOverrides(prev => ({ ...prev, [c.project_path]: parseInt(e.target.value, 10) || c.port }))}
+                                                    className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-1 font-mono text-slate-200 text-[11px]"
+                                                />
+                                            </td>
+                                            <td className="py-2 px-3">
+                                                {running ? (
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={!!enabledRoutes[c.project_path]}
+                                                            onChange={e => setEnabledRoutes(prev => ({ ...prev, [c.project_path]: e.target.checked }))}
+                                                            className="accent-microtermix-neon"
+                                                        />
+                                                        <span className="text-slate-400">Activo</span>
+                                                    </label>
+                                                ) : (
+                                                    <span className="text-slate-500 italic text-[10px]">Enciende el proceso en Terminals</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
 
                 {candidates.length === 0 && !loading && state.currentPath && (

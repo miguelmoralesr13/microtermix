@@ -1,6 +1,6 @@
 # GEMINI.md - Microtermix
 
-Core mandates and project-specific instructions for **Microtermix** (devflow-nexus).
+Core mandates and project-specific instructions for **Microtermix** (devflow-microtermix).
 
 ## Project Identity
 Microtermix is a desktop developer workspace manager built with **Tauri v2 + React 19 + TypeScript + TailwindCSS v4**. It manages multi-project monorepos, AWS resources, Git operations, and CI/CD integrations.
@@ -29,7 +29,7 @@ Microtermix is a desktop developer workspace manager built with **Tauri v2 + Rea
 - **Frontend-Backend Split:** 
     - Heavy lifting (Git native, AWS, Process execution, Proxy) resides in Rust (`src-tauri/`).
     - UI and orchestration reside in React (`src/`).
-- **Workspace Config:** Persistent state is saved to `nexus-workspace.json` in the workspace root.
+- **Workspace Config:** Persistent state is saved to `microtermix.json` in the workspace root.
 - **Async Events:** Use Tauri's event system (e.g., `service-logs`) for real-time log streaming.
 
 ## Development Workflow

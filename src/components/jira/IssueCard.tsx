@@ -10,7 +10,7 @@ import { cn } from '../../lib/utils';
 export function IssueCard({ issue, onClick }: { issue: JiraIssue; onClick: () => void }) {
     const { fields } = issue;
     const cfg = loadConfig();
-    
+
     return (
         <Card
             onClick={onClick}
@@ -38,12 +38,12 @@ export function IssueCard({ issue, onClick }: { issue: JiraIssue; onClick: () =>
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="font-mono text-[10px] font-bold text-nexus-neon/60 hover:text-nexus-neon flex items-center gap-1 transition-colors"
+                        className="font-mono text-[10px] font-bold text-microtermix-neon/60 hover:text-microtermix-neon flex items-center gap-1 transition-colors"
                     >
                         {issue.key}
                         <ExternalLink size={9} className="opacity-0 group-hover:opacity-100 transition-opacity" />
                     </a>
-                    
+
                     <StatusBadge status={fields.status} />
 
                     {/* Priority Icon */}
@@ -64,9 +64,9 @@ export function IssueCard({ issue, onClick }: { issue: JiraIssue; onClick: () =>
                 {fields.labels.length > 0 && (
                     <div className="flex gap-1 flex-wrap">
                         {fields.labels.slice(0, 3).map(l => (
-                            <Badge 
-                                key={l} 
-                                variant="outline" 
+                            <Badge
+                                key={l}
+                                variant="outline"
                                 className="px-1.5 py-0 h-4 text-[9px] rounded-sm bg-slate-800/50 border-slate-700 text-slate-400 font-mono leading-none"
                             >
                                 {l}

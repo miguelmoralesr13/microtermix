@@ -2,40 +2,54 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  /* ── Nexus design tokens ──────────────────────────── */
-  --color-nexus-dark:    #0f172a;
-  --color-nexus-darker:  #020617;
-  --color-nexus-neon:    #38bdf8;
-  --color-nexus-accent:  #818cf8;
-  --color-nexus-success: #34d399;
-  --color-nexus-danger:  #fb7185;
-  --color-nexus-warn:    #fbbf24;
+  /* ── Microtermix design tokens ──────────────────────────── */
+  --color-microtermix-dark: #0f172a;
+  --color-microtermix-darker: #020617;
+  --color-microtermix-neon: #38bdf8;
+  --color-microtermix-accent: #818cf8;
+  --color-microtermix-success: #34d399;
+  --color-microtermix-danger: #fb7185;
+  --color-microtermix-warn: #fbbf24;
 
   /* ── shadcn/ui color tokens (TailwindCSS v4 format) ─ */
-  --color-background:          #0f172a;  /* slate-900 */
-  --color-foreground:          #e2e8f0;  /* slate-200 */
-  --color-card:                #0f172a;
-  --color-card-foreground:     #e2e8f0;
-  --color-popover:             #0f172a;  /* fondo de dropdowns y popovers */
-  --color-popover-foreground:  #e2e8f0;
-  --color-primary:             #38bdf8;  /* nexus-neon */
-  --color-primary-foreground:  #020617;  /* nexus-darker */
-  --color-secondary:           #1e293b;  /* slate-800 */
-  --color-secondary-foreground:#94a3b8;  /* slate-400 */
-  --color-muted:               #1e293b;  /* slate-800 */
-  --color-muted-foreground:    #64748b;  /* slate-500 */
-  --color-accent:              #1e293b;  /* hover en items de dropdown */
-  --color-accent-foreground:   #e2e8f0;
-  --color-destructive:         #fb7185;  /* nexus-danger */
-  --color-destructive-foreground:#fff;
-  --color-border:              #334155;  /* slate-700 */
-  --color-input:               #1e293b;  /* slate-800 */
-  --color-ring:                #38bdf8;  /* nexus-neon focus ring */
+  --color-background: #0f172a;
+  /* slate-900 */
+  --color-foreground: #e2e8f0;
+  /* slate-200 */
+  --color-card: #0f172a;
+  --color-card-foreground: #e2e8f0;
+  --color-popover: #0f172a;
+  /* fondo de dropdowns y popovers */
+  --color-popover-foreground: #e2e8f0;
+  --color-primary: #38bdf8;
+  /* microtermix-neon */
+  --color-primary-foreground: #020617;
+  /* microtermix-darker */
+  --color-secondary: #1e293b;
+  /* slate-800 */
+  --color-secondary-foreground: #94a3b8;
+  /* slate-400 */
+  --color-muted: #1e293b;
+  /* slate-800 */
+  --color-muted-foreground: #64748b;
+  /* slate-500 */
+  --color-accent: #1e293b;
+  /* hover en items de dropdown */
+  --color-accent-foreground: #e2e8f0;
+  --color-destructive: #fb7185;
+  /* microtermix-danger */
+  --color-destructive-foreground: #fff;
+  --color-border: #334155;
+  /* slate-700 */
+  --color-input: #1e293b;
+  /* slate-800 */
+  --color-ring: #38bdf8;
+  /* microtermix-neon focus ring */
 }
 
 :root {
   color-scheme: dark;
-  --background: var(--color-nexus-darker);
+  --background: var(--color-microtermix-darker);
   --foreground: #f8fafc;
   --scrollbar-track: #0f172a;
   --scrollbar-thumb: #334155;
@@ -104,20 +118,24 @@ body {
   --diff-gutter-selected-background-color: rgba(129, 140, 248, 0.2);
   --diff-code-selected-background-color: rgba(129, 140, 248, 0.15);
 }
+
 /* Diff: una línea de código por línea, sin partir letras. Scroll horizontal solo dentro del diff si hace falta */
 .react-diff-view-dark {
   width: 100%;
   max-width: 100%;
 }
+
 .react-diff-view-dark .diff {
   table-layout: fixed;
   width: 100%;
   min-width: 100%;
 }
+
 .react-diff-view-dark .diff-gutter-col {
   width: 5ch;
   min-width: 5ch;
 }
+
 /* Líneas de código normales: pre, sin word-break que parta caracteres */
 .react-diff-view-dark .diff-code {
   font-size: 12px;
@@ -126,16 +144,19 @@ body {
   word-break: normal;
   overflow-wrap: normal;
 }
+
 .react-diff-view-dark .diff-line {
   white-space: pre;
   word-break: normal;
 }
+
 /* Celdas de código con ancho mínimo para que no colapsen; scroll horizontal dentro de la celda si la línea es larga */
 .react-diff-view-dark .diff td:nth-child(1),
 .react-diff-view-dark .diff td:nth-child(3) {
   width: 5ch;
   min-width: 5ch;
 }
+
 .react-diff-view-dark .diff td:nth-child(2),
 .react-diff-view-dark .diff td:nth-child(4) {
   width: 50%;
@@ -149,29 +170,48 @@ body {
   width: 3px;
   height: 3px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #334155 transparent;
 }
 
 /* ── Sin scrollbar (para contenedores con indicadores propios) ─── */
-.scrollbar-none::-webkit-scrollbar { display: none; }
-.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* ── Swagger UI: reset inside white preview pane ─── */
-.swagger-ui .wrapper { max-width: 100%; padding: 0 16px; }
-.swagger-ui .info { margin: 16px 0 8px; }
-.swagger-ui .scheme-container { padding: 8px 0; }
+.swagger-ui .wrapper {
+  max-width: 100%;
+  padding: 0 16px;
+}
+
+.swagger-ui .info {
+  margin: 16px 0 8px;
+}
+
+.swagger-ui .scheme-container {
+  padding: 8px 0;
+}
 
 /* ── Visual Designer Resets ── */
 .react-flow__node {

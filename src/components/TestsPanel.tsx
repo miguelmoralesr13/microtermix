@@ -37,53 +37,53 @@ const DEFAULT_CONFIG: TestConfig = {
 };
 
 const PRESETS: Record<TestLanguage, { label: string; config: TestConfig }> = {
-    node: { 
-        label: 'Node (Vitest/Jest)', 
-        config: { 
+    node: {
+        label: 'Node (Vitest/Jest)',
+        config: {
             language: 'node',
-            command: 'npm run test', 
+            command: 'npm run test',
             testFilter: '',
             junitXmlPath: 'junit.xml',
-            coverageXmlPath: 'coverage/clover.xml', 
-            coverageHtmlPath: 'coverage/lcov-report/index.html' 
-        } 
+            coverageXmlPath: 'coverage/clover.xml',
+            coverageHtmlPath: 'coverage/lcov-report/index.html'
+        }
     },
-    python: { 
-        label: 'Python (Pytest)', 
-        config: { 
+    python: {
+        label: 'Python (Pytest)',
+        config: {
             language: 'python',
-            command: 'pytest --junitxml=report.xml --cov=. --cov-report=xml --cov-report=html', 
+            command: 'pytest --junitxml=report.xml --cov=. --cov-report=xml --cov-report=html',
             testFilter: '',
             junitXmlPath: 'report.xml',
-            coverageXmlPath: 'coverage.xml', 
-            coverageHtmlPath: 'htmlcov/index.html' 
-        } 
+            coverageXmlPath: 'coverage.xml',
+            coverageHtmlPath: 'htmlcov/index.html'
+        }
     },
-    java: { 
-        label: 'Java (Maven)', 
-        config: { 
+    java: {
+        label: 'Java (Maven)',
+        config: {
             language: 'java',
-            command: 'mvn test', 
+            command: 'mvn test',
             testFilter: '',
             junitXmlPath: 'target/surefire-reports/TEST-*.xml',
-            coverageXmlPath: 'target/site/jacoco/jacoco.xml', 
-            coverageHtmlPath: 'target/site/jacoco/index.html' 
-        } 
+            coverageXmlPath: 'target/site/jacoco/jacoco.xml',
+            coverageHtmlPath: 'target/site/jacoco/index.html'
+        }
     },
-    go: { 
-        label: 'Go', 
-        config: { 
+    go: {
+        label: 'Go',
+        config: {
             language: 'go',
-            command: 'go test ./... -v -coverprofile=coverage.out', 
+            command: 'go test ./... -v -coverprofile=coverage.out',
             testFilter: '',
             junitXmlPath: 'report.xml', // Requiere gotestsum
-            coverageXmlPath: 'coverage.out', 
-            coverageHtmlPath: 'coverage.html' 
-        } 
+            coverageXmlPath: 'coverage.out',
+            coverageHtmlPath: 'coverage.html'
+        }
     },
-    custom: { 
-        label: 'Custom', 
-        config: { ...DEFAULT_CONFIG, language: 'custom' } 
+    custom: {
+        label: 'Custom',
+        config: { ...DEFAULT_CONFIG, language: 'custom' }
     }
 };
 
@@ -96,8 +96,8 @@ interface CoverageSummary {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const STORAGE_TESTS_PATH = 'nexus-tests-selected-path';
-const STORAGE_TESTS_TAB  = 'nexus-tests-active-tab';
+const STORAGE_TESTS_PATH = 'microtermix-tests-selected-path';
+const STORAGE_TESTS_TAB = 'microtermix-tests-active-tab';
 
 function detectLanguage(project: any): TestLanguage {
     const type = (project.project_type || '').toLowerCase();
@@ -108,7 +108,7 @@ function detectLanguage(project: any): TestLanguage {
     if (type === 'python') return 'python';
     if (type === 'java' || type === 'maven') return 'java';
     if (type === 'go') return 'go';
-    
+
     // Framework based fallbacks
     if (framework === 'spring-boot') return 'java';
     if (framework === 'django' || framework === 'fastapi' || framework === 'flask') return 'python';
@@ -135,7 +135,7 @@ function buildFinalCommand(config: TestConfig): string {
 }
 
 function configStorageKey(projectPath: string): string {
-    return `nexus-test-config-${projectPath.replace(/[/\\:]/g, '_')}`;
+    return `microtermix-test-config-${projectPath.replace(/[/\\:]/g, '_')}`;
 }
 function loadConfig(projectPath: string): TestConfig {
     try {
@@ -157,13 +157,13 @@ function parseCoverageXml(content: string): CoverageSummary | null {
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(content, 'text/xml');
-        
+
         // 1. Clover (Node)
         const cloverMetrics = doc.querySelector('project > metrics');
         if (cloverMetrics) {
             return {
-                lines:     { covered: parseInt(cloverMetrics.getAttribute('coveredstatements') || '0'), total: parseInt(cloverMetrics.getAttribute('statements') || '0') },
-                branches:  { covered: parseInt(cloverMetrics.getAttribute('coveredconditionals') || '0'), total: parseInt(cloverMetrics.getAttribute('conditionals') || '0') },
+                lines: { covered: parseInt(cloverMetrics.getAttribute('coveredstatements') || '0'), total: parseInt(cloverMetrics.getAttribute('statements') || '0') },
+                branches: { covered: parseInt(cloverMetrics.getAttribute('coveredconditionals') || '0'), total: parseInt(cloverMetrics.getAttribute('conditionals') || '0') },
                 functions: { covered: parseInt(cloverMetrics.getAttribute('coveredmethods') || '0'), total: parseInt(cloverMetrics.getAttribute('methods') || '0') },
             };
         }
@@ -175,7 +175,7 @@ function parseCoverageXml(content: string): CoverageSummary | null {
                 const el = Array.from(doc.querySelectorAll('report > counter')).find(c => c.getAttribute('type') === type);
                 if (el) {
                     const covered = parseInt(el.getAttribute('covered') || '0');
-                    const missed  = parseInt(el.getAttribute('missed') || '0');
+                    const missed = parseInt(el.getAttribute('missed') || '0');
                     return { covered, total: covered + missed };
                 }
                 return { covered: 0, total: 0 };
@@ -186,12 +186,12 @@ function parseCoverageXml(content: string): CoverageSummary | null {
         // 3. Cobertura/Coverage.py (Python)
         const coverageEl = doc.querySelector('coverage');
         if (coverageEl) {
-            const linesValid   = parseInt(coverageEl.getAttribute('lines-valid') || '0');
+            const linesValid = parseInt(coverageEl.getAttribute('lines-valid') || '0');
             const linesCovered = parseInt(coverageEl.getAttribute('lines-covered') || '0');
-            const branchRate   = parseFloat(coverageEl.getAttribute('branch-rate') || '0');
+            const branchRate = parseFloat(coverageEl.getAttribute('branch-rate') || '0');
             return {
-                lines:     { covered: linesCovered, total: linesValid },
-                branches:  { covered: Math.round(branchRate * 100), total: 100 },
+                lines: { covered: linesCovered, total: linesValid },
+                branches: { covered: Math.round(branchRate * 100), total: 100 },
                 functions: { covered: 0, total: 0 },
             };
         }
@@ -204,9 +204,9 @@ function pct(stat: CoverageStat): number {
     return Math.round((stat.covered / stat.total) * 100);
 }
 function pctColor(p: number) {
-    if (p >= 80) return { text: 'text-nexus-success', bar: 'bg-nexus-success' };
-    if (p >= 60) return { text: 'text-yellow-400',    bar: 'bg-yellow-400' };
-    return           { text: 'text-nexus-danger',     bar: 'bg-nexus-danger' };
+    if (p >= 80) return { text: 'text-microtermix-success', bar: 'bg-microtermix-success' };
+    if (p >= 60) return { text: 'text-yellow-400', bar: 'bg-yellow-400' };
+    return { text: 'text-microtermix-danger', bar: 'bg-microtermix-danger' };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -248,11 +248,11 @@ export const TestsPanel: React.FC = () => {
         if (selectedPath) localStorage.setItem(STORAGE_TESTS_PATH, selectedPath);
     }, [selectedPath]);
 
-    const [config, setConfig]       = useState<TestConfig>(() => selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG });
+    const [config, setConfig] = useState<TestConfig>(() => selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG });
     const [configOpen, setConfigOpen] = useState(false);
-    const [coverageMap, setCoverageMap]     = useState<Record<string, CoverageSummary | null>>({});
+    const [coverageMap, setCoverageMap] = useState<Record<string, CoverageSummary | null>>({});
     const [coverageLoading, setCoverageLoading] = useState(false);
-    const [coverageError, setCoverageError]     = useState<string | null>(null);
+    const [coverageError, setCoverageError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'execution' | 'report'>(() => {
         const saved = localStorage.getItem(STORAGE_TESTS_TAB);
         return saved === 'report' ? 'report' : 'execution';
@@ -272,9 +272,9 @@ export const TestsPanel: React.FC = () => {
 
     const finalCmd = useMemo(() => buildFinalCommand(config), [config]);
     const serviceId = useMemo(() => `${selectedPath}::${finalCmd} `, [selectedPath, finalCmd]);
-    
+
     const processState = activeProcesses[serviceId];
-    const isRunning    = processState?.status === 'running';
+    const isRunning = processState?.status === 'running';
     const processStatus = processState?.status;
 
     // Fetch test files when project or language changes
@@ -304,7 +304,7 @@ export const TestsPanel: React.FC = () => {
     const handleSelectProject = (path: string) => {
         stopCoverageServer();
         setSelectedPath(path);
-        
+
         // Auto-detección si no hay config guardada o es la primera vez
         const saved = localStorage.getItem(configStorageKey(path));
         if (!saved) {
@@ -388,11 +388,11 @@ export const TestsPanel: React.FC = () => {
     const statusBadge = processState ? (
         <Badge className={cn(
             'ml-auto text-[10px] font-semibold rounded-full border-0',
-            isRunning                          ? 'bg-nexus-success/20 text-nexus-success' :
-            processState.status === 'error'    ? 'bg-nexus-danger/20 text-nexus-danger'  :
-                                                 'bg-slate-700 text-slate-400'
+            isRunning ? 'bg-microtermix-success/20 text-microtermix-success' :
+                processState.status === 'error' ? 'bg-microtermix-danger/20 text-microtermix-danger' :
+                    'bg-slate-700 text-slate-400'
         )}>
-            {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-nexus-success animate-pulse mr-1 inline-block" />}
+            {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse mr-1 inline-block" />}
             {processState.status}
         </Badge>
     ) : null;
@@ -401,7 +401,7 @@ export const TestsPanel: React.FC = () => {
         <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
             {/* Header */}
             <div className="shrink-0 px-4 py-3 border-b border-slate-800 flex items-center gap-2">
-                <FlaskConical size={16} className="text-nexus-neon" />
+                <FlaskConical size={16} className="text-microtermix-neon" />
                 <h2 className="text-sm font-bold text-slate-200">Tests & Coverage</h2>
             </div>
 
@@ -418,10 +418,10 @@ export const TestsPanel: React.FC = () => {
                             <p className="px-3 py-4 text-xs text-slate-600 text-center">Sin proyectos</p>
                         )}
                         {projects.map(p => {
-                            const path  = p.path as string;
-                            const cov   = coverageMap[path];
+                            const path = p.path as string;
+                            const cov = coverageMap[path];
                             const linesP = cov ? pct(cov.lines) : null;
-                            const sid   = `${path}::${config.command} `;
+                            const sid = `${path}::${config.command} `;
                             const running = activeProcesses[sid]?.status === 'running';
                             const isSelected = selectedPath === path;
                             return (
@@ -431,17 +431,17 @@ export const TestsPanel: React.FC = () => {
                                     className={cn(
                                         'flex items-center justify-between px-3 py-2 cursor-pointer transition-colors border-l-2',
                                         isSelected
-                                            ? 'bg-nexus-neon/10 border-nexus-neon'
+                                            ? 'bg-microtermix-neon/10 border-microtermix-neon'
                                             : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600',
                                     )}
                                 >
                                     <div className="flex-1 min-w-0">
-                                        <p className={cn('text-xs font-medium truncate', isSelected ? 'text-nexus-neon' : 'text-slate-300')}>
+                                        <p className={cn('text-xs font-medium truncate', isSelected ? 'text-microtermix-neon' : 'text-slate-300')}>
                                             {p.name as string}
                                         </p>
                                         {running && (
-                                            <span className="text-[9px] text-nexus-success flex items-center gap-1 mt-0.5">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-nexus-success animate-pulse inline-block" />
+                                            <span className="text-[9px] text-microtermix-success flex items-center gap-1 mt-0.5">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse inline-block" />
                                                 running
                                             </span>
                                         )}
@@ -470,7 +470,7 @@ export const TestsPanel: React.FC = () => {
                                 <Button
                                     size="sm"
                                     onClick={handleStop}
-                                    className="bg-nexus-danger/20 text-nexus-danger hover:bg-nexus-danger/30 border border-nexus-danger/40 font-bold gap-1.5 h-7 text-xs"
+                                    className="bg-microtermix-danger/20 text-microtermix-danger hover:bg-microtermix-danger/30 border border-microtermix-danger/40 font-bold gap-1.5 h-7 text-xs"
                                 >
                                     <Square size={12} fill="currentColor" /> Stop
                                 </Button>
@@ -479,7 +479,7 @@ export const TestsPanel: React.FC = () => {
                                     size="sm"
                                     onClick={handleRun}
                                     disabled={!config.command}
-                                    className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold gap-1.5 h-7 text-xs"
+                                    className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold gap-1.5 h-7 text-xs"
                                 >
                                     <Play size={12} fill="currentColor" /> Run tests
                                 </Button>
@@ -488,7 +488,7 @@ export const TestsPanel: React.FC = () => {
                             <div className="relative flex-1 max-w-xs group">
                                 <Search size={12} className={cn(
                                     "absolute left-2.5 top-1/2 -translate-y-1/2 transition-colors",
-                                    config.testFilter ? "text-nexus-neon" : "text-slate-500"
+                                    config.testFilter ? "text-microtermix-neon" : "text-slate-500"
                                 )} />
                                 <input
                                     type="text"
@@ -501,11 +501,11 @@ export const TestsPanel: React.FC = () => {
                                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                                     placeholder={
                                         config.language === 'node' ? "Filtrar (archivo/regex)..." :
-                                        config.language === 'python' ? "Filtrar (archivo/keyword)..." :
-                                        config.language === 'java' ? "Filtrar (ClassName)..." :
-                                        "Filtrar tests..."
+                                            config.language === 'python' ? "Filtrar (archivo/keyword)..." :
+                                                config.language === 'java' ? "Filtrar (ClassName)..." :
+                                                    "Filtrar tests..."
                                     }
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-1.5 text-[11px] text-slate-300 outline-none focus:border-nexus-neon/50 focus:ring-1 focus:ring-nexus-neon/20 transition-all"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-1.5 text-[11px] text-slate-300 outline-none focus:border-microtermix-neon/50 focus:ring-1 focus:ring-microtermix-neon/20 transition-all"
                                     onKeyDown={e => {
                                         if (e.key === 'Enter' && !isRunning) {
                                             handleRun();
@@ -514,9 +514,9 @@ export const TestsPanel: React.FC = () => {
                                     }}
                                 />
                                 {config.testFilter && (
-                                    <button 
+                                    <button
                                         onClick={() => handleConfigChange({ testFilter: '' })}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-nexus-danger transition-colors p-0.5"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-microtermix-danger transition-colors p-0.5"
                                         title="Limpiar filtro"
                                     >
                                         <X size={12} />
@@ -532,7 +532,7 @@ export const TestsPanel: React.FC = () => {
                                         {suggestions.map((file, i) => (
                                             <button
                                                 key={i}
-                                                className="w-full text-left px-3 py-1.5 text-[10px] text-slate-300 hover:bg-nexus-neon/10 hover:text-nexus-neon transition-colors truncate font-mono"
+                                                className="w-full text-left px-3 py-1.5 text-[10px] text-slate-300 hover:bg-microtermix-neon/10 hover:text-microtermix-neon transition-colors truncate font-mono"
                                                 onClick={() => {
                                                     handleConfigChange({ testFilter: file });
                                                     setShowSuggestions(false);
@@ -594,15 +594,15 @@ export const TestsPanel: React.FC = () => {
                                     className={cn(
                                         'flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors',
                                         activeTab === tab
-                                            ? 'border-nexus-neon text-nexus-neon'
+                                            ? 'border-microtermix-neon text-microtermix-neon'
                                             : 'border-transparent text-slate-500 hover:text-slate-300',
                                     )}
                                 >
                                     {tab === 'execution'
                                         ? <><TerminalSquare size={12} /> Ejecución</>
                                         : <><ExternalLink size={12} /> Reporte
-                                            {coverageServerPort && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-nexus-success inline-block" />}
-                                          </>
+                                            {coverageServerPort && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-microtermix-success inline-block" />}
+                                        </>
                                     }
                                 </button>
                             ))}
@@ -635,8 +635,8 @@ export const TestsPanel: React.FC = () => {
 
                                     {coverage ? (
                                         <div className="space-y-4">
-                                            <CoverageStatBar label="Lines"     stat={coverage.lines} />
-                                            {coverage.branches.total > 0  && <CoverageStatBar label="Branches"  stat={coverage.branches} />}
+                                            <CoverageStatBar label="Lines" stat={coverage.lines} />
+                                            {coverage.branches.total > 0 && <CoverageStatBar label="Branches" stat={coverage.branches} />}
                                             {coverage.functions.total > 0 && <CoverageStatBar label="Functions" stat={coverage.functions} />}
                                         </div>
                                     ) : !coverageError && (
@@ -676,7 +676,7 @@ export const TestsPanel: React.FC = () => {
                                                 variant="ghost"
                                                 size="xs"
                                                 onClick={stopCoverageServer}
-                                                className="ml-auto text-slate-500 hover:text-nexus-danger h-auto py-0.5"
+                                                className="ml-auto text-slate-500 hover:text-microtermix-danger h-auto py-0.5"
                                             >
                                                 Cerrar servidor
                                             </Button>
@@ -710,7 +710,7 @@ export const TestsPanel: React.FC = () => {
             <Dialog open={configOpen} onOpenChange={setConfigOpen}>
                 <DialogContent className="max-w-lg bg-slate-900 border-slate-700 p-0" showCloseButton={false}>
                     <DialogHeader className="flex flex-row items-center gap-2 px-4 py-3 border-b border-slate-700">
-                        <Settings size={14} className="text-nexus-neon" />
+                        <Settings size={14} className="text-microtermix-neon" />
                         <DialogTitle className="text-slate-200 flex-1">Configuración de tests</DialogTitle>
                         <Button variant="ghost" size="icon-sm" onClick={() => setConfigOpen(false)} className="text-slate-500 hover:text-slate-200">
                             <X size={15} />
@@ -736,11 +736,11 @@ export const TestsPanel: React.FC = () => {
                                             className={cn(
                                                 "justify-start gap-2 h-9 px-3",
                                                 isActive
-                                                    ? 'bg-nexus-neon/20 text-nexus-neon border-nexus-neon/40'
+                                                    ? 'bg-microtermix-neon/20 text-microtermix-neon border-microtermix-neon/40'
                                                     : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'
                                             )}
                                         >
-                                            <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-nexus-neon shadow-[0_0_8px_rgba(56,189,248,0.6)]" : "bg-slate-700")} />
+                                            <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-microtermix-neon shadow-[0_0_8px_rgba(56,189,248,0.6)]" : "bg-slate-700")} />
                                             {preset.label}
                                         </Button>
                                     );
@@ -752,11 +752,11 @@ export const TestsPanel: React.FC = () => {
 
                         <div className="space-y-3">
                             <div>
-                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 text-nexus-neon/70">Comando Base</label>
+                                <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 text-microtermix-neon/70">Comando Base</label>
                                 <Input
                                     value={config.command}
                                     onChange={e => handleConfigChange({ command: e.target.value })}
-                                    className="bg-slate-950 border-slate-800 focus-visible:border-nexus-neon text-slate-200 font-mono text-xs"
+                                    className="bg-slate-950 border-slate-800 focus-visible:border-microtermix-neon text-slate-200 font-mono text-xs"
                                 />
                                 <p className="text-[9px] text-slate-600 mt-1">El filtro se añadirá automáticamente al final según el lenguaje.</p>
                             </div>
@@ -791,7 +791,7 @@ export const TestsPanel: React.FC = () => {
                     </div>
 
                     <div className="flex justify-end px-4 py-3 border-t border-slate-700">
-                        <Button onClick={() => setConfigOpen(false)} className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">
+                        <Button onClick={() => setConfigOpen(false)} className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold">
                             Listo
                         </Button>
                     </div>

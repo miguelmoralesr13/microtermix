@@ -18,39 +18,39 @@ import { JsonNodeEditorTab } from './JsonNodeEditorTab';
 import { JsonFlatTab } from './JsonFlatTab';
 
 const TABS = [
-    { 
+    {
         id: 'prettier', label: 'Prettier', Icon: AlignLeft,
         description: 'Formatea JSON, minifica, escapa strings o limpia caracteres de escape (ideal para logs de AWS).'
     },
-    { 
+    {
         id: 'validator', label: 'Validador', Icon: CheckCircle2,
         description: 'Verifica la sintaxis JSON y localiza errores exactos por número de línea.'
     },
-    { 
+    {
         id: 'converter', label: 'Tipos', Icon: Code2,
         description: 'Genera definiciones de tipos (TS, Go, C#, Python) a partir de una muestra JSON.'
     },
-    { 
+    {
         id: 'tree', label: 'Tree View', Icon: GitBranch,
         description: 'Explora visualmente la jerarquía del JSON en un árbol interactivo.'
     },
-    { 
+    {
         id: 'jsonpath', label: 'JSONPath', Icon: Search,
         description: 'Filtra y extrae datos específicos usando expresiones estándar de JSONPath.'
     },
-    { 
+    {
         id: 'format', label: 'Formatos', Icon: ArrowLeftRight,
         description: 'Transforma datos entre JSON y otros formatos como YAML, XML o CSV.'
     },
-    { 
+    {
         id: 'diff', label: 'Diff', Icon: GitCompareArrows,
         description: 'Compara dos JSONs para visualizar inserciones, eliminaciones y cambios.'
     },
-    { 
+    {
         id: 'nodes', label: 'Editor Visual', Icon: SquarePen,
         description: 'Manipula la estructura JSON usando un editor gráfico de nodos.'
     },
-    { 
+    {
         id: 'flat', label: 'Aplanar', Icon: Table2,
         description: 'Convierte objetos anidados en una lista plana de claves (ej: user.address.city).'
     },
@@ -58,7 +58,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]['id'];
 
-const STORAGE_KEY = 'nexus-json-processor-tab';
+const STORAGE_KEY = 'microtermix-json-processor-tab';
 
 export const JsonProcessorPanel: React.FC = () => {
     const [active, setActive] = useState<TabId>(() => {
@@ -108,7 +108,7 @@ export const JsonProcessorPanel: React.FC = () => {
                         } />
                         <PopoverContent side="bottom" align="end" className="bg-slate-800 border-slate-700 text-slate-200 p-4 max-w-[300px] shadow-2xl z-50">
                             <div className="space-y-2">
-                                <h4 className="font-bold text-nexus-neon flex items-center gap-2">
+                                <h4 className="font-bold text-microtermix-neon flex items-center gap-2">
                                     <activeTabData.Icon size={14} /> {activeTabData.label}
                                 </h4>
                                 <p className="text-xs leading-relaxed text-slate-300">

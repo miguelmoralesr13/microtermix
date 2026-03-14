@@ -92,7 +92,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         const parts = text.split(/(\{\{[^}]*\}\})/g);
         return parts.map((part, i) => {
             if (part.startsWith('{{') && part.endsWith('}}')) {
-                return <span key={i} className="text-nexus-neon font-bold">{part}</span>;
+                return <span key={i} className="text-microtermix-neon font-bold">{part}</span>;
             }
             return <span key={i}>{part}</span>;
         });
@@ -113,7 +113,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
                 onKeyDown={handleKeyDown}
                 placeholder={placeholder || ''}
                 className={cn(
-                    "bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-transparent caret-white outline-none focus:border-nexus-neon w-full font-mono",
+                    "bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-transparent caret-white outline-none focus:border-microtermix-neon w-full font-mono",
                     className
                 )}
             />
@@ -135,7 +135,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
                             }}
                             className={cn(
                                 "px-3 py-2 text-xs cursor-pointer transition-colors",
-                                i === selectedIndex ? "bg-nexus-neon text-slate-900 font-bold" : "text-slate-300 hover:bg-slate-800"
+                                i === selectedIndex ? "bg-microtermix-neon text-slate-900 font-bold" : "text-slate-300 hover:bg-slate-800"
                             )}
                         >
                             {s}

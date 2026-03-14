@@ -15,7 +15,7 @@ export const ResponsePanel: React.FC<ResponsePanelProps> = ({ response, loading 
     };
 
     return (
-        <div className="flex-1 flex flex-col min-h-0 bg-nexus-dark" style={{ minHeight: '150px' }}>
+        <div className="flex-1 flex flex-col min-h-0 bg-microtermix-dark" style={{ minHeight: '150px' }}>
             {!response && !loading && (
                 <div className="flex-1 flex items-center justify-center text-slate-600 text-sm italic">
                     Send a request to see the response

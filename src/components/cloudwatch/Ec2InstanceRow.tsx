@@ -84,7 +84,7 @@ export function Ec2InstanceRow({
                                 <button
                                     onClick={() => onSsmConnect(inst)}
                                     disabled={!!connecting || ssmAvailable === false}
-                                    className="px-2.5 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 flex items-center gap-1.5 disabled:opacity-40"
+                                    className="px-2.5 py-1 rounded text-xs bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 hover:bg-microtermix-neon/20 flex items-center gap-1.5 disabled:opacity-40"
                                     title={ssmAvailable === false ? 'session-manager-plugin no encontrado. Configura la ruta en Settings.' : 'Conectar via AWS SSM Session Manager (sin puerto 22)'}>
                                     {connecting === 'ssm' ? <Loader size={12} className="animate-spin" /> : <Terminal size={12} />} SSM
                                 </button>

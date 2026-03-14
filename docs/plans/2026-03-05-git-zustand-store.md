@@ -364,7 +364,7 @@ export const useGitStore = create<GitStore>()(
                 },
             }),
             {
-                name: 'nexus-git-store',
+                name: 'microtermix-git-store',
                 // Exclude loading flags from persistence — they always start false
                 partialize: (s) => ({
                     ui: s.ui,
@@ -410,10 +410,10 @@ Replace all local state that belongs in the store. Local state that stays: `acti
 
 Remove these lines (roughly lines 17–48):
 ```ts
-const STORAGE_SIDEBAR = 'nexus-git-sidebar-width';
-const STORAGE_STAGING = 'nexus-git-staging-width';
-const STORAGE_GIT_TAB = 'nexus-git-active-tab';
-const STORAGE_GIT_SUBTAB = 'nexus-git-active-subtab';
+const STORAGE_SIDEBAR = 'microtermix-git-sidebar-width';
+const STORAGE_STAGING = 'microtermix-git-staging-width';
+const STORAGE_GIT_TAB = 'microtermix-git-active-tab';
+const STORAGE_GIT_SUBTAB = 'microtermix-git-active-subtab';
 const MIN_PANEL = 150;
 const MAX_PANEL = 800;
 const DEFAULT_SIDEBAR = 230;
@@ -858,7 +858,7 @@ git commit -m "feat: migrate GitTimeline to useGitStore"
 
 Search for any remaining manual localStorage usage in Git components that the store now handles:
 ```bash
-grep -n "STORAGE_GIT\|STORAGE_SIDEBAR\|STORAGE_STAGING\|nexus-git" src/components/Git*.tsx
+grep -n "STORAGE_GIT\|STORAGE_SIDEBAR\|STORAGE_STAGING\|microtermix-git" src/components/Git*.tsx
 ```
 
 Remove any leftover constants or effects that the store now covers.

@@ -113,7 +113,7 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
             <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-xl w-full max-w-4xl h-[600px] flex flex-col overflow-hidden">
                 <div className="p-4 border-b border-slate-800 bg-slate-950 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <Settings size={18} className="text-nexus-accent" />
+                        <Settings size={18} className="text-microtermix-accent" />
                         <h3 className="font-semibold text-slate-200">Variables Manager</h3>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
@@ -125,13 +125,13 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                         <div className="flex flex-col gap-1 p-2 border-b border-slate-800">
                             <button
                                 onClick={() => setViewMode('global')}
-                                className={`px-3 py-1.5 text-sm text-left rounded font-medium ${viewMode === 'global' ? 'bg-nexus-neon text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}
+                                className={`px-3 py-1.5 text-sm text-left rounded font-medium ${viewMode === 'global' ? 'bg-microtermix-neon text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}
                             >
                                 Global Environments
                             </button>
                             <button
                                 onClick={() => setViewMode('collections')}
-                                className={`px-3 py-1.5 text-sm text-left rounded font-medium ${viewMode === 'collections' ? 'bg-nexus-neon text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}
+                                className={`px-3 py-1.5 text-sm text-left rounded font-medium ${viewMode === 'collections' ? 'bg-microtermix-neon text-slate-900' : 'text-slate-400 hover:text-slate-200'}`}
                             >
                                 Collection Variables
                             </button>
@@ -141,7 +141,7 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                                 <div className="flex flex-col gap-1">
                                     <div className="text-xs font-semibold text-slate-500 uppercase tracking-widest p-1 flex justify-between">
                                         <span>Environments</span>
-                                        <button onClick={handleAddEnv} className="hover:text-nexus-neon"><Plus size={14} /></button>
+                                        <button onClick={handleAddEnv} className="hover:text-microtermix-neon"><Plus size={14} /></button>
                                     </div>
                                     {(environments || []).map(env => (
                                         <div key={env.id} className="flex items-center gap-2 group">
@@ -188,7 +188,7 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                                         const nx = environments.map(en => en.id === selectedEnvId ? { ...en, name: e.target.value } : en);
                                         setEnvironments(nx);
                                     }}
-                                    className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-nexus-neon max-w-sm"
+                                    className="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-microtermix-neon max-w-sm"
                                 />
                             </div>
                         )}
@@ -204,7 +204,7 @@ export const EnvironmentManager: React.FC<EnvManagerProps> = ({
                                             type="checkbox"
                                             checked={item.isActive}
                                             onChange={(e) => handleRowChange(idx, 'isActive', e.target.checked)}
-                                            className="accent-nexus-neon cursor-pointer"
+                                            className="accent-microtermix-neon cursor-pointer"
                                             disabled={!item.key && !item.value}
                                         />
                                     </div>

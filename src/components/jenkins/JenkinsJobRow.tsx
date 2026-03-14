@@ -84,7 +84,7 @@ export function JenkinsJobRow({
     const toggleFavorite = useJenkinsStore(s => s.toggleFavorite);
 
     const [expanded, setExpanded] = useState(false);
-    
+
     if (!cfg) return null; // Defensive check
 
     const folder = isFolder(job);
@@ -142,7 +142,7 @@ export function JenkinsJobRow({
     const icon = folder
         ? <Folder size={12} className="text-amber-400/70 shrink-0" />
         : multi
-            ? <Layers size={12} className="text-nexus-accent shrink-0" />
+            ? <Layers size={12} className="text-microtermix-accent shrink-0" />
             : isBranch
                 ? <GitBranch size={11} className="text-slate-500 shrink-0" />
                 : null;
@@ -177,9 +177,9 @@ export function JenkinsJobRow({
                     <button onClick={handleOpenLastLog} className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 transition-colors"><Terminal size={11} /></button>
                 )}
                 <button onClick={() => openUrl(currentJob.url)} className="p-1 rounded text-slate-600 hover:text-slate-400 transition-colors"><ExternalLink size={10} /></button>
-                
-                <button 
-                    onClick={(e) => { e.stopPropagation(); toggleFavorite(jobToFavorite(currentJob)); }} 
+
+                <button
+                    onClick={(e) => { e.stopPropagation(); toggleFavorite(jobToFavorite(currentJob)); }}
                     className={cn(
                         "p-1.5 rounded transition-colors",
                         isFav ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400 hover:bg-amber-400/5'

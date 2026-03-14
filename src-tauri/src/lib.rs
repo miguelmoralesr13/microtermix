@@ -100,9 +100,9 @@ fn load_workspace_settings(app: AppHandle, workspace_path: String) -> Result<Str
 }
 
 /// Nombre del archivo de config del workspace dentro de la carpeta del workspace.
-const WORKSPACE_CONFIG_FILENAME: &str = "nexus-workspace.json";
+const WORKSPACE_CONFIG_FILENAME: &str = "microtermix.json";
 
-/// Lee la config del workspace desde un archivo en la carpeta del workspace (nexus-workspace.json).
+/// Lee la config del workspace desde un archivo en la carpeta del workspace (microtermix.json).
 #[tauri::command]
 fn read_workspace_config_in_folder(workspace_path: String) -> Result<String, String> {
     let path = Path::new(&workspace_path).join(WORKSPACE_CONFIG_FILENAME);
@@ -113,7 +113,7 @@ fn read_workspace_config_in_folder(workspace_path: String) -> Result<String, Str
     }
 }
 
-/// Escribe la config del workspace en un archivo en la carpeta del workspace (nexus-workspace.json).
+/// Escribe la config del workspace en un archivo en la carpeta del workspace (microtermix.json).
 #[tauri::command]
 fn write_workspace_config_in_folder(workspace_path: String, content: String) -> Result<(), String> {
     let path = Path::new(&workspace_path).join(WORKSPACE_CONFIG_FILENAME);

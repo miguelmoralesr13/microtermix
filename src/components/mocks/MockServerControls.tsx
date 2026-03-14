@@ -37,7 +37,7 @@ export const MockServerControls: React.FC = () => {
                             headers: ep.headers,
                         };
                     });
-                
+
                 await invoke('start_mock_server', {
                     port: serverPort,
                     endpoints,
@@ -65,19 +65,19 @@ export const MockServerControls: React.FC = () => {
             <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                     <label className="text-xs text-slate-500 font-semibold uppercase tracking-wider">Puerto</label>
-                    <Input 
-                        type="number" 
-                        value={serverPort} 
+                    <Input
+                        type="number"
+                        value={serverPort}
                         onChange={(e) => setServerPort(parseInt(e.target.value) || 3005)}
                         disabled={serverRunning}
                         className="w-20 h-7 text-xs bg-slate-900 border-slate-700"
                     />
                 </div>
 
-                <Button 
-                    variant={serverRunning ? "destructive" : "default"} 
-                    size="sm" 
-                    className={`h-7 px-3 text-xs font-bold gap-1.5 ${!serverRunning ? 'bg-nexus-neon text-slate-900 hover:bg-[#00ffd5]' : ''}`}
+                <Button
+                    variant={serverRunning ? "destructive" : "default"}
+                    size="sm"
+                    className={`h-7 px-3 text-xs font-bold gap-1.5 ${!serverRunning ? 'bg-microtermix-neon text-slate-900 hover:bg-[#00ffd5]' : ''}`}
                     onClick={handleToggleServer}
                 >
                     {serverRunning ? (

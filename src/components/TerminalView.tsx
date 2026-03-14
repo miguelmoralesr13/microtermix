@@ -24,7 +24,7 @@ function writeToClipboard(text: string) {
         document.body.removeChild(el);
         if (!ok) throw new Error('execCommand failed');
     } catch {
-        navigator.clipboard?.writeText(text).catch(() => {});
+        navigator.clipboard?.writeText(text).catch(() => { });
     }
 }
 
@@ -38,7 +38,7 @@ const EMPTY_LOGS: string[] = [];
 export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
     const logs = useProcessStore(s => s.activeProcesses[serviceId]?.logs || EMPTY_LOGS);
     const { parseLogLine } = useLogActions();
-    
+
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
     const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -53,7 +53,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         lastLines.forEach(line => {
             allActions.push(...parseLogLine(line));
         });
-        const uniqueActions = allActions.filter((a, i) => 
+        const uniqueActions = allActions.filter((a, i) =>
             allActions.findIndex(x => x.label === a.label) === i
         );
         setActions(uniqueActions);
@@ -93,13 +93,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         const fitAddon = new FitAddon();
         const searchAddon = new SearchAddon();
         const webLinksAddon = new WebLinksAddon();
-        
+
         term.loadAddon(fitAddon);
         term.loadAddon(searchAddon);
         term.loadAddon(webLinksAddon);
 
         const pathRegex = /((\/|[A-Z]:\\)[\w\d\s\.\-\/]+\.(ts|js|rs|py|go|json|html|css|md|txt))(:(\d+))?(:(\d+))?/gi;
-        
+
         term.registerLinkProvider({
             provideLinks(bufferLineNumber, callback) {
                 const line = term.buffer.active.getLine(bufferLineNumber - 1);
@@ -146,7 +146,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
                 navigator.clipboard?.readText().then(text => {
                     if (text) term.write(text);
-                }).catch(() => {});
+                }).catch(() => { });
                 return false;
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
@@ -156,30 +156,30 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             }
             return true;
         });
-xtermRef.current = term;
+        xtermRef.current = term;
 
-// Load initial logs from backend only if store is empty
-if (logs.length === 0) {
-    invoke<string[]>('get_service_logs', { serviceId, limit: 1000 })
-        .then(initialLogs => {
-            if (initialLogs && initialLogs.length > 0) {
-                // Solo guardamos en el store; el useEffect de sincronización se encargará de escribir en xterm
-                useProcessStore.getState().setLogs(serviceId, initialLogs);
+        // Load initial logs from backend only if store is empty
+        if (logs.length === 0) {
+            invoke<string[]>('get_service_logs', { serviceId, limit: 1000 })
+                .then(initialLogs => {
+                    if (initialLogs && initialLogs.length > 0) {
+                        // Solo guardamos en el store; el useEffect de sincronización se encargará de escribir en xterm
+                        useProcessStore.getState().setLogs(serviceId, initialLogs);
+                    }
+                })
+                .catch(console.error);
+        } else {
+            // Si ya hay logs, los escribimos inicialmente
+            logs.forEach(line => term.writeln(line));
+            lastWrittenLogCountRef.current = logs.length;
+        }
+
+        const resizeObserver = new ResizeObserver(() => {
+            if (terminalRef.current && terminalRef.current.offsetWidth > 0) {
+                try { fitAddon.fit(); } catch (_) { }
             }
-        })
-        .catch(console.error);
-} else {
-    // Si ya hay logs, los escribimos inicialmente
-    logs.forEach(line => term.writeln(line));
-    lastWrittenLogCountRef.current = logs.length;
-}
-
-const resizeObserver = new ResizeObserver(() => {
-    if (terminalRef.current && terminalRef.current.offsetWidth > 0) {
-        try { fitAddon.fit(); } catch (_) { }
-    }
-});
-resizeObserver.observe(terminalRef.current);
+        });
+        resizeObserver.observe(terminalRef.current);
 
         return () => {
             resizeObserver.disconnect();
@@ -227,11 +227,11 @@ resizeObserver.observe(terminalRef.current);
         <div className="w-full h-full min-h-[300px] rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col relative group">
             {/* Floating Clear Button */}
             <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Button 
-                    size="icon-xs" 
-                    variant="ghost" 
+                <Button
+                    size="icon-xs"
+                    variant="ghost"
                     onClick={handleClear}
-                    className="bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-nexus-danger hover:bg-slate-800 shadow-xl"
+                    className="bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-microtermix-danger hover:bg-slate-800 shadow-xl"
                     title="Limpiar terminal"
                 >
                     <Trash2 size={14} />
@@ -242,7 +242,7 @@ resizeObserver.observe(terminalRef.current);
                 <div className="absolute bottom-6 right-6 z-20">
                     <Popover>
                         <PopoverTrigger render={
-                            <Button size="sm" variant="outline" className="bg-nexus-dark/90 border-nexus-neon text-nexus-neon hover:bg-nexus-neon hover:text-black shadow-lg shadow-nexus-neon/20 gap-2">
+                            <Button size="sm" variant="outline" className="bg-microtermix-dark/90 border-microtermix-neon text-microtermix-neon hover:bg-microtermix-neon hover:text-black shadow-lg shadow-microtermix-neon/20 gap-2">
                                 <Lightbulb size={14} className="animate-pulse" />
                                 <span>Soluciones Sugeridas ({actions.length})</span>
                             </Button>
@@ -250,7 +250,7 @@ resizeObserver.observe(terminalRef.current);
                         <PopoverContent side="top" align="end" className="w-64 p-3 bg-slate-900 border-slate-700 shadow-xl">
                             <div className="flex flex-col gap-2">
                                 <h4 className="text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
-                                    <Zap size={12} className="text-nexus-neon" />
+                                    <Zap size={12} className="text-microtermix-neon" />
                                     Acciones Detectadas
                                 </h4>
                                 {actions.map((action, i) => (
@@ -288,10 +288,10 @@ resizeObserver.observe(terminalRef.current);
                         }}
                     />
                     <div className="flex items-center gap-1 shrink-0">
-                        <button onClick={handleFindPrev} className="p-1 hover:bg-slate-800 rounded text-slate-400"><ChevronUp size={14}/></button>
-                        <button onClick={handleFindNext} className="p-1 hover:bg-slate-800 rounded text-slate-400"><ChevronDown size={14}/></button>
+                        <button onClick={handleFindPrev} className="p-1 hover:bg-slate-800 rounded text-slate-400"><ChevronUp size={14} /></button>
+                        <button onClick={handleFindNext} className="p-1 hover:bg-slate-800 rounded text-slate-400"><ChevronDown size={14} /></button>
                         <div className="w-px h-3 bg-slate-700 mx-1" />
-                        <button onClick={() => setSearchOpen(false)} className="p-1 hover:bg-slate-800 rounded text-slate-400"><X size={14}/></button>
+                        <button onClick={() => setSearchOpen(false)} className="p-1 hover:bg-slate-800 rounded text-slate-400"><X size={14} /></button>
                     </div>
                 </div>
             )}

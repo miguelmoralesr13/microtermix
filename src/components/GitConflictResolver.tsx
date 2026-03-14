@@ -120,7 +120,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
     // Apply decorations when Monaco mounts or conflicts change
     useEffect(() => {
         if (!monaco || !editorRef.current || !isEditorReady) return;
-        
+
         const editor = editorRef.current;
         const totalLines = editor.getModel()?.getLineCount() || 0;
 
@@ -207,7 +207,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
             ];
         }
         const newText = [...before, ...resolvedLines, ...after].join('\n');
-        
+
         // Preserve undo stack by using executeEdits
         const fullRange = editor.getModel().getFullModelRange();
         editor.pushUndoStop();
@@ -240,7 +240,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
         setError(null);
         try {
             const finalContent = editorRef.current.getValue();
-            
+
             // CRITICAL SAFETY CHECK: Don't allow saving empty content if original had content
             if (!finalContent && originalContentRef.current.trim().length > 0) {
                 throw new Error('El contenido del editor parece estar vacío. No se guardará para evitar pérdida de datos. Prueba a Reiniciar archivo si te has quedado sin código.');
@@ -297,7 +297,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                             {remainingConflicts} Conflict{remainingConflicts !== 1 ? 's' : ''} Remaining
                         </span>
                     ) : (
-                        <span className="text-xs font-bold text-nexus-success flex items-center bg-nexus-success/10 px-2 py-1 rounded border border-nexus-success/20">
+                        <span className="text-xs font-bold text-microtermix-success flex items-center bg-microtermix-success/10 px-2 py-1 rounded border border-microtermix-success/20">
                             <Check size={12} className="mr-1" />
                             All Conflicts Resolved
                         </span>
@@ -306,7 +306,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                     <button
                         onClick={handleSaveAndAdd}
                         disabled={saving || remainingConflicts > 0}
-                        className="flex items-center px-3 py-1.5 bg-nexus-success hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-bold rounded transition-colors"
+                        className="flex items-center px-3 py-1.5 bg-microtermix-success hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-bold rounded transition-colors"
                     >
                         {saving ? <RefreshCw size={14} className="animate-spin mr-1" /> : <Save size={14} className="mr-1" />}
                         Guardar y marcar resuelto →
@@ -315,7 +315,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
             </div>
 
             {error && (
-                <div className="p-3 bg-nexus-danger/10 text-nexus-danger text-xs border-b border-nexus-danger/20 font-mono">
+                <div className="p-3 bg-microtermix-danger/10 text-microtermix-danger text-xs border-b border-microtermix-danger/20 font-mono">
                     {error}
                 </div>
             )}
@@ -380,7 +380,7 @@ export const GitConflictResolver: React.FC<GitConflictResolverProps> = ({ projec
                 {loading ? (
                     <div className="absolute inset-0 flex items-center justify-center bg-slate-900/30 backdrop-blur-sm z-10 transition-all">
                         <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 shadow-2xl flex items-center gap-3">
-                            <RefreshCw className="animate-spin text-nexus-accent" size={20} />
+                            <RefreshCw className="animate-spin text-microtermix-accent" size={20} />
                             <span className="text-sm font-medium text-slate-200">Analizando código...</span>
                         </div>
                     </div>

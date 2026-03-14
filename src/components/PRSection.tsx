@@ -136,7 +136,7 @@ export const PRSection: React.FC<PRSectionProps> = ({ projectPath, account, acti
                         <>
                             <button
                                 onClick={e => { e.stopPropagation(); setShowCreate(true); }}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-all rounded hover:bg-slate-700"
+                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-microtermix-neon transition-all rounded hover:bg-slate-700"
                                 title={`Nuevo ${label.slice(0, -1)}`}
                             >
                                 <Plus size={11} />

@@ -27,13 +27,13 @@ import { useJiraStore } from '../stores/jiraStore';
 import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore } from '../stores/processStore';
 
-const ACTIVE_TERMINAL_STORAGE_KEY = 'nexus-active-terminal-tab';
+const ACTIVE_TERMINAL_STORAGE_KEY = 'microtermix-active-terminal-tab';
 
 function activeTerminalKey(workspacePath: string): string {
     return `${ACTIVE_TERMINAL_STORAGE_KEY}-${(workspacePath || '').replace(/[/\\:]/g, '_')}`;
 }
 
-const SELECTED_PROJECTS_STORAGE_KEY = 'nexus-selected-projects';
+const SELECTED_PROJECTS_STORAGE_KEY = 'microtermix-selected-projects';
 
 function selectedProjectsKey(workspacePath: string): string {
     return `${SELECTED_PROJECTS_STORAGE_KEY}-${(workspacePath || '').replace(/[/\\:]/g, '_')}`;
@@ -41,7 +41,7 @@ function selectedProjectsKey(workspacePath: string): string {
 
 export const ServiceManager: React.FC = () => {
     const { state, setTargetTerminalTab, applyWorkspaceConfig, setWorkspacePath, scanWorkspace } = useWorkspace();
-    
+
     // Zustand Store
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const activeTerminalTab = useProcessStore(s => s.activeTerminalTab);
@@ -65,24 +65,24 @@ export const ServiceManager: React.FC = () => {
         }
     }, [state.currentPath, setActiveTerminalTabStore]);
 
-    const [multiScript, setMultiScript] = useState<string>(() => localStorage.getItem('nexus-multi-script') || '');
-    const [globalEnvName, setGlobalEnvName] = useState<string>(() => localStorage.getItem('nexus-multi-env-name') || 'dev');
+    const [multiScript, setMultiScript] = useState<string>(() => localStorage.getItem('microtermix-multi-script') || '');
+    const [globalEnvName, setGlobalEnvName] = useState<string>(() => localStorage.getItem('microtermix-multi-env-name') || 'dev');
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const restoredSelectedRef = React.useRef(false);
     const [vitePreviewOpen, setVitePreviewOpen] = useState(() => {
-        try { return localStorage.getItem('nexus-vite-preview-open') === '1'; } catch { return false; }
+        try { return localStorage.getItem('microtermix-vite-preview-open') === '1'; } catch { return false; }
     });
 
     React.useEffect(() => {
-        if (multiScript) localStorage.setItem('nexus-multi-script', multiScript);
+        if (multiScript) localStorage.setItem('microtermix-multi-script', multiScript);
     }, [multiScript]);
 
     React.useEffect(() => {
-        if (globalEnvName) localStorage.setItem('nexus-multi-env-name', globalEnvName);
+        if (globalEnvName) localStorage.setItem('microtermix-multi-env-name', globalEnvName);
     }, [globalEnvName]);
 
     React.useEffect(() => {
-        try { localStorage.setItem('nexus-vite-preview-open', vitePreviewOpen ? '1' : '0'); } catch (_) { }
+        try { localStorage.setItem('microtermix-vite-preview-open', vitePreviewOpen ? '1' : '0'); } catch (_) { }
     }, [vitePreviewOpen]);
 
     // Releer desde localStorage cuando se aplica una config cargada
@@ -95,11 +95,11 @@ export const ServiceManager: React.FC = () => {
                 if (Array.isArray(parsed)) setSelectedProjects(parsed);
             }
         } catch (_) { }
-        const ms = localStorage.getItem('nexus-multi-script');
+        const ms = localStorage.getItem('microtermix-multi-script');
         if (ms != null) setMultiScript(ms);
-        const ge = localStorage.getItem('nexus-multi-env-name');
+        const ge = localStorage.getItem('microtermix-multi-env-name');
         if (ge != null) setGlobalEnvName(ge);
-        const vp = localStorage.getItem('nexus-vite-preview-open');
+        const vp = localStorage.getItem('microtermix-vite-preview-open');
         if (vp !== null) setVitePreviewOpen(vp === '1');
     }, [state.configAppliedTrigger, state.currentPath]);
 
@@ -178,7 +178,7 @@ export const ServiceManager: React.FC = () => {
         }
     };
 
-    // ─── Auto-save: escribe nexus-workspace.json automáticamente 1.5s después del último cambio ──
+    // ─── Auto-save: escribe microtermix.json automáticamente 1.5s después del último cambio ──
     const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     React.useEffect(() => {
         if (!state.currentPath) return;
@@ -218,7 +218,7 @@ export const ServiceManager: React.FC = () => {
                 directory: false,
                 multiple: false,
                 filters: [{ name: 'JSON', extensions: ['json'] }],
-                title: 'Seleccionar archivo de configuración (nexus-workspace.json)',
+                title: 'Seleccionar archivo de configuración (microtermix.json)',
             });
             if (filePath === null || Array.isArray(filePath)) return;
             const content = await invoke<string>('read_file_at_path', { path: filePath });
@@ -268,7 +268,7 @@ export const ServiceManager: React.FC = () => {
 
     // ─── Layout ─────────────────────────────────────────────────────────────
     return (
-        <div className="flex w-full h-full bg-nexus-dark text-slate-200 overflow-hidden">
+        <div className="flex w-full h-full bg-microtermix-dark text-slate-200 overflow-hidden">
             <Sidebar />
 
             {/* Main Content Area */}

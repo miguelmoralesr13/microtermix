@@ -57,7 +57,7 @@ El Select de base-ui usa `value` + `onValueChange` (no `onChange`):
             variant="outline"
             size="icon-sm"
             onClick={() => setBuilderOpen(true)}
-            className="text-slate-400 hover:text-nexus-neon hover:border-nexus-neon/50"
+            className="text-slate-400 hover:text-microtermix-neon hover:border-microtermix-neon/50"
           />
         }
       >
@@ -92,14 +92,14 @@ El Select de base-ui usa `value` + `onValueChange` (no `onChange`):
               size="sm"
               disabled={disabled}
               onClick={onPlay}
-              className="bg-nexus-neon/10 text-nexus-neon hover:bg-nexus-neon/20 border border-nexus-neon/30 hover:border-nexus-neon/60 gap-1.5"
+              className="bg-microtermix-neon/10 text-microtermix-neon hover:bg-microtermix-neon/20 border border-microtermix-neon/30 hover:border-microtermix-neon/60 gap-1.5"
             />
           }
         >
           <Play size={13} />
           <span>Run</span>
           {selectedCount > 0 && (
-            <span className="ml-0.5 bg-nexus-neon text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+            <span className="ml-0.5 bg-microtermix-neon text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
               {selectedCount}
             </span>
           )}
@@ -134,7 +134,7 @@ El Select de base-ui usa `value` + `onValueChange` (no `onChange`):
         <TooltipTrigger
           render={
             <Button variant="ghost" size="icon-sm" onClick={onOpenViteWrapper}
-              className="text-slate-400 hover:text-nexus-neon" />
+              className="text-slate-400 hover:text-microtermix-neon" />
           }
         >
           <FileCode size={13} />
@@ -188,7 +188,7 @@ return (
         'cursor-pointer border-b-2 transition-all duration-150 select-none',
         isActive
           ? cn(
-              'border-nexus-neon bg-slate-900',
+              'border-microtermix-neon bg-slate-900',
               isError && 'border-red-400',
               isStopped && 'border-slate-600',
             )
@@ -339,7 +339,7 @@ return (
       showCloseButton={false}
     >
       <DialogHeader className="flex-row items-center gap-2 p-4 border-b border-slate-800">
-        <TerminalSquare className="text-nexus-neon" size={18} />
+        <TerminalSquare className="text-microtermix-neon" size={18} />
         <DialogTitle className="text-slate-200">
           {isEditing ? 'Edit Command' : 'Command Builder'}
         </DialogTitle>
@@ -372,7 +372,7 @@ return (
         <Button
           onClick={handleSave}
           disabled={!canSave}
-          className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
+          className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold"
         >
           <Check size={14} />
           {isEditing ? 'Guardar Cambios' : 'Guardar & Aplicar'}
@@ -468,7 +468,7 @@ const STATUS_BAR: Record<string, string> = {
     type="checkbox"
     checked={isSelected}
     onChange={onToggleSelect}
-    className="accent-nexus-neon shrink-0 w-3.5 h-3.5 ml-2"
+    className="accent-microtermix-neon shrink-0 w-3.5 h-3.5 ml-2"
   />
 
   {/* Nombre + Badge tipo */}
@@ -508,7 +508,7 @@ const STATUS_BAR: Record<string, string> = {
       {/* Scripts popover */}
       {project.scripts && project.scripts.length > 0 && (
         <Popover open={scriptMenuOpen} onOpenChange={setScriptMenuOpen}>
-          <PopoverTrigger className="p-1 text-slate-500 hover:text-nexus-neon hover:bg-slate-800 rounded transition-colors">
+          <PopoverTrigger className="p-1 text-slate-500 hover:text-microtermix-neon hover:bg-slate-800 rounded transition-colors">
             <Play size={13} className="fill-current" />
           </PopoverTrigger>
           <PopoverContent
@@ -522,7 +522,7 @@ const STATUS_BAR: Record<string, string> = {
             {project.scripts.map(s => (
               <button
                 key={s}
-                className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-nexus-neon rounded transition-colors"
+                className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-microtermix-neon rounded transition-colors"
                 onClick={() => { onPlayScript(s); setScriptMenuOpen(false); }}
               >
                 {s}
@@ -541,7 +541,7 @@ const STATUS_BAR: Record<string, string> = {
                 <Button
                   variant="ghost" size="icon-xs"
                   onClick={(e) => { e.stopPropagation(); handleNpmInstall(); }}
-                  className="text-slate-500 hover:text-nexus-neon"
+                  className="text-slate-500 hover:text-microtermix-neon"
                 />
               }
             >
@@ -556,7 +556,7 @@ const STATUS_BAR: Record<string, string> = {
                 <Button
                   variant="ghost" size="icon-xs"
                   onClick={(e) => { e.stopPropagation(); setAddDepsOpen(true); }}
-                  className="text-slate-500 hover:text-nexus-neon"
+                  className="text-slate-500 hover:text-microtermix-neon"
                 />
               }
             >
@@ -574,7 +574,7 @@ const STATUS_BAR: Record<string, string> = {
             <Button
               variant="ghost" size="icon-xs"
               onClick={(e) => { e.stopPropagation(); setEnvManagerOpen(true); }}
-              className="text-slate-500 hover:text-nexus-neon text-[9px] w-auto px-1.5"
+              className="text-slate-500 hover:text-microtermix-neon text-[9px] w-auto px-1.5"
             />
           }
         >
@@ -602,7 +602,7 @@ const STATUS_BAR: Record<string, string> = {
       value={addDepsPackages}
       onChange={e => setAddDepsPackages(e.target.value)}
       placeholder="lodash axios react"
-      className="bg-slate-950 border-slate-700 focus:border-nexus-neon"
+      className="bg-slate-950 border-slate-700 focus:border-microtermix-neon"
       onKeyDown={e => e.key === 'Enter' && handleAddDepsInstall()}
       autoFocus
     />
@@ -610,12 +610,12 @@ const STATUS_BAR: Record<string, string> = {
     <div className="flex items-center gap-4">
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="depsType" checked={!addDepsDev}
-          onChange={() => setAddDepsDev(false)} className="accent-nexus-neon" />
+          onChange={() => setAddDepsDev(false)} className="accent-microtermix-neon" />
         <span className="text-xs text-slate-300">Dependencies</span>
       </label>
       <label className="flex items-center gap-2 cursor-pointer">
         <input type="radio" name="depsType" checked={addDepsDev}
-          onChange={() => setAddDepsDev(true)} className="accent-nexus-neon" />
+          onChange={() => setAddDepsDev(true)} className="accent-microtermix-neon" />
         <span className="text-xs text-slate-300">Dev Dependencies</span>
       </label>
     </div>
@@ -627,7 +627,7 @@ const STATUS_BAR: Record<string, string> = {
       <Button
         onClick={handleAddDepsInstall}
         disabled={!addDepsPackages.trim()}
-        className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
+        className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold"
       >
         Instalar
       </Button>
@@ -669,7 +669,7 @@ import { Button } from '@/components/ui/button';
     </Button>
   ) : (
     <Button variant="ghost" size="xs" onClick={onSelectAll}
-      className="text-nexus-neon hover:text-nexus-neon/80 hover:bg-nexus-neon/10 text-[10px]">
+      className="text-microtermix-neon hover:text-microtermix-neon/80 hover:bg-microtermix-neon/10 text-[10px]">
       Seleccionar todos
     </Button>
   )}

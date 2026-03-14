@@ -61,7 +61,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
                 value={(draft[key] as string) ?? ''}
                 onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))}
                 placeholder={placeholder}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-nexus-accent placeholder:text-slate-700"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 font-mono focus:outline-none focus:border-microtermix-accent placeholder:text-slate-700"
             />
         </div>
     );
@@ -75,7 +75,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
                 <button
                     onClick={() => { setShowPaste(p => !p); setPasteText(''); }}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs border transition-colors ${showPaste
-                        ? 'bg-nexus-neon/10 text-nexus-neon border-nexus-neon/30'
+                        ? 'bg-microtermix-neon/10 text-microtermix-neon border-microtermix-neon/30'
                         : 'text-slate-400 border-slate-700 hover:text-slate-200 hover:border-slate-500'}`}
                     title="Pegar el bloque de credenciales que entrega AWS"
                 >
@@ -86,9 +86,9 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
 
             {/* ── Paste area ── */}
             {showPaste && (
-                <div className="rounded-lg border border-nexus-neon/20 bg-nexus-neon/5 p-3 space-y-2">
+                <div className="rounded-lg border border-microtermix-neon/20 bg-microtermix-neon/5 p-3 space-y-2">
                     <p className="text-[11px] text-slate-400">
-                        Pega aquí el bloque completo que AWS te da (formato <code className="text-nexus-neon">aws_access_key_id=…</code>).
+                        Pega aquí el bloque completo que AWS te da (formato <code className="text-microtermix-neon">aws_access_key_id=…</code>).
                         Los campos se rellenarán automáticamente.
                     </p>
                     <textarea
@@ -102,13 +102,13 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
                         }}
                         placeholder={`aws_access_key_id=ASIA…\naws_secret_access_key=…\naws_session_token=…`}
                         rows={5}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-nexus-neon placeholder:text-slate-600 resize-none"
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 font-mono focus:outline-none focus:border-microtermix-neon placeholder:text-slate-600 resize-none"
                     />
                     <div className="flex gap-2">
                         <button
                             onClick={() => applyPaste(pasteText)}
                             disabled={!pasteText.trim()}
-                            className="px-3 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 disabled:opacity-40 transition-colors"
+                            className="px-3 py-1 rounded text-xs bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 hover:bg-microtermix-neon/20 disabled:opacity-40 transition-colors"
                         >
                             Aplicar
                         </button>
@@ -140,7 +140,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
                 <div className="flex gap-1 mb-3">
                     {(['windows', 'linux', 'macos'] as OsTab[]).map(os => (
                         <button key={os} onClick={() => setOsTab(os)}
-                            className={`px-2.5 py-0.5 rounded text-[11px] capitalize transition-colors ${osTab === os ? 'bg-nexus-neon/15 text-nexus-neon border border-nexus-neon/30' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}>
+                            className={`px-2.5 py-0.5 rounded text-[11px] capitalize transition-colors ${osTab === os ? 'bg-microtermix-neon/15 text-microtermix-neon border border-microtermix-neon/30' : 'text-slate-500 hover:text-slate-300 border border-transparent'}`}>
                             {os === 'macos' ? 'macOS' : os.charAt(0).toUpperCase() + os.slice(1)}
                         </button>
                     ))}
@@ -185,7 +185,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
             <div className="flex items-center gap-3 pt-2">
                 <button
                     onClick={handleSave}
-                    className="px-4 py-2 bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-lg text-xs font-bold transition-colors"
+                    className="px-4 py-2 bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 rounded-lg text-xs font-bold transition-colors"
                 >
                     Guardar
                 </button>

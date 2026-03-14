@@ -49,7 +49,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
     const [expanded, setExpanded] = useState(true);
 
     const CheckIcon = node.checkState === 'checked' ? CheckSquare : (node.checkState === 'partial' ? MinusSquare : Square);
-    const checkColor = node.checkState === 'checked' ? 'text-nexus-neon' : (node.checkState === 'partial' ? 'text-nexus-accent' : 'text-slate-500');
+    const checkColor = node.checkState === 'checked' ? 'text-microtermix-neon' : (node.checkState === 'partial' ? 'text-microtermix-accent' : 'text-slate-500');
 
     if (node.isLeaf && node.status) {
         const f = node.status;
@@ -60,9 +60,9 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
         let colorClass = 'text-slate-400';
         let StatusIcon = File;
 
-        if (isAdded) colorClass = 'text-nexus-success';
-        if (isModified) colorClass = 'text-nexus-accent';
-        if (isDeleted) colorClass = 'text-nexus-danger';
+        if (isAdded) colorClass = 'text-microtermix-success';
+        if (isModified) colorClass = 'text-microtermix-accent';
+        if (isDeleted) colorClass = 'text-microtermix-danger';
         if (f.isConflicted) {
             colorClass = 'text-orange-500';
             StatusIcon = AlertTriangle;
@@ -75,7 +75,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                 <div
                     className={cn(
                         "flex items-center justify-between group py-0.5 hover:bg-slate-800/50 transition-colors text-sm",
-                        isSelectedForRollback && "bg-nexus-danger/10"
+                        isSelectedForRollback && "bg-microtermix-danger/10"
                     )}
                     style={{ paddingLeft: `${level * 12 + 8}px`, paddingRight: '8px' }}
                 >
@@ -100,8 +100,8 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             )}
                         </Tooltip>
 
-                        <Badge 
-                            variant="outline" 
+                        <Badge
+                            variant="outline"
                             className={cn("font-mono text-[9px] px-1 py-0 h-4 border-none bg-transparent", colorClass)}
                         >
                             {f.stateCode.trim()}
@@ -122,7 +122,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             onClick={(e) => { e.stopPropagation(); onRollbackToggle(node.fullPath); }}
                             className={cn(
                                 "h-6 w-6 p-0 transition-opacity",
-                                isSelectedForRollback ? "text-nexus-danger bg-nexus-danger/20 opacity-100" : "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50"
+                                isSelectedForRollback ? "text-microtermix-danger bg-microtermix-danger/20 opacity-100" : "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-microtermix-danger hover:bg-slate-700/50"
                             )}
                             title="Select for rollback"
                         >
@@ -132,7 +132,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             variant="ghost"
                             size="icon-xs"
                             onClick={(e) => { e.stopPropagation(); onDiscardNode(node); }}
-                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50 transition-all"
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-danger hover:bg-slate-700/50 transition-all"
                             title="Discard this file"
                         >
                             <Trash2 size={12} />
@@ -165,7 +165,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                     variant="ghost"
                     size="icon-xs"
                     onClick={(e) => { e.stopPropagation(); onDiscardNode(node); }}
-                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50 transition-all shrink-0 ml-2"
+                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-danger hover:bg-slate-700/50 transition-all shrink-0 ml-2"
                     title="Discard All Changes in Folder"
                 >
                     <Trash2 size={12} />
@@ -285,7 +285,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     }, [files, totalFiles, isAnythingStaged]);
 
     const MasterCheckIcon = masterCheckState === 'checked' ? CheckSquare : (masterCheckState === 'partial' ? MinusSquare : Square);
-    const masterCheckColor = masterCheckState === 'checked' ? 'text-nexus-neon' : (masterCheckState === 'partial' ? 'text-nexus-accent' : 'text-slate-500');
+    const masterCheckColor = masterCheckState === 'checked' ? 'text-microtermix-neon' : (masterCheckState === 'partial' ? 'text-microtermix-accent' : 'text-slate-500');
 
     // Check merge / status / branch is now handled by fetchStatus inside gitStore
     // which is triggered whenever the sidebar tab mounts or refresh is requested.
@@ -388,7 +388,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
             {/* Sync Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/50 block">
                 <h3 className="text-sm font-bold text-slate-300 flex items-center">
-                    <Layers size={16} className="mr-2 text-nexus-accent" /> Source Control
+                    <Layers size={16} className="mr-2 text-microtermix-accent" /> Source Control
                 </h3>
                 <div className="flex space-x-1">
                     <Button variant="ghost" size="icon-sm" onClick={() => { invalidate(projectPath, 'status'); fetchStatus(projectPath, true); }} className={`text-slate-400 hover:text-white hover:bg-slate-800 ${loading ? 'animate-spin' : ''}`} title="Refresh">
@@ -399,7 +399,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
 
             {/* Error Banner */}
             {error && (
-                <div className="p-3 bg-nexus-danger/10 text-nexus-danger text-xs border-b border-nexus-danger/20 max-h-32 overflow-y-auto">
+                <div className="p-3 bg-microtermix-danger/10 text-microtermix-danger text-xs border-b border-microtermix-danger/20 max-h-32 overflow-y-auto">
                     {error}
                 </div>
             )}
@@ -417,7 +417,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                             size="xs"
                             onClick={handleDiscardSelected}
                             disabled={loading || selectedForRollback.size === 0}
-                            className="flex items-center gap-1.5 rounded bg-nexus-danger/20 text-nexus-danger hover:bg-nexus-danger/30 border border-nexus-danger/40 disabled:opacity-50"
+                            className="flex items-center gap-1.5 rounded bg-microtermix-danger/20 text-microtermix-danger hover:bg-microtermix-danger/30 border border-microtermix-danger/40 disabled:opacity-50"
                             title="Discard selected files (no confirmation)"
                         >
                             <RotateCcw size={12} />
@@ -478,7 +478,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                     value={commitMessage}
                     onChange={(e: any) => setCommitMessage(e.target.value)}
                     placeholder="Commit message (Ctrl+Enter)"
-                    className="w-full bg-slate-950 border-slate-800 text-sm text-slate-200 focus-visible:ring-1 focus-visible:ring-nexus-accent min-h-[80px] mb-3 resize-none"
+                    className="w-full bg-slate-950 border-slate-800 text-sm text-slate-200 focus-visible:ring-1 focus-visible:ring-microtermix-accent min-h-[80px] mb-3 resize-none"
                     onKeyDown={(e: any) => {
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                             handleCommit();
@@ -488,7 +488,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 <Button
                     onClick={handleCommit}
                     disabled={isCommitting || !isAnythingStaged || !commitMessage.trim()}
-                    className="w-full bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold mb-3 flex items-center justify-center font-sans"
+                    className="w-full bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold mb-3 flex items-center justify-center font-sans"
                 >
                     {isCommitting ? (
                         <>Committing...</>

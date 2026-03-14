@@ -10,7 +10,7 @@ import { NotesEditor } from './NotesEditor';
 import { type NoteEntry } from './NotesTreeNode';
 import { useWorkspace } from '@/context/WorkspaceContext';
 
-const STORAGE_KEY = 'nexus-notes-base-path';
+const STORAGE_KEY = 'microtermix-notes-base-path';
 const DEFAULT_SUBDIR = 'notes-md';
 const SIDEBAR_MIN = 140;
 const SIDEBAR_MAX = 500;
@@ -21,15 +21,15 @@ export const NotesPanel: React.FC = () => {
     const [basePath, setBasePath] = useState<string>(() => {
         try { return localStorage.getItem(STORAGE_KEY) || ''; } catch { return ''; }
     });
-    const [editingPath, setEditingPath]   = useState(false);
-    const [pathInput, setPathInput]       = useState('');
-    const [entries, setEntries]           = useState<NoteEntry[]>([]);
-    const [activeFile, setActiveFile]     = useState<string | null>(null);
+    const [editingPath, setEditingPath] = useState(false);
+    const [pathInput, setPathInput] = useState('');
+    const [entries, setEntries] = useState<NoteEntry[]>([]);
+    const [activeFile, setActiveFile] = useState<string | null>(null);
 
     // Sidebar resize
     const [sidebarWidth, setSidebarWidth] = useState(224); // w-56 = 224px
     const containerRef = useRef<HTMLDivElement>(null);
-    const draggingRef  = useRef(false);
+    const draggingRef = useRef(false);
 
     const onResizeStart = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -127,8 +127,8 @@ export const NotesPanel: React.FC = () => {
     }, [refresh, activeFile]);
 
     const handleRename = useCallback(async (entry: NoteEntry, newName: string) => {
-        const parent   = entry.path.substring(0, entry.path.lastIndexOf('/'));
-        const newPath  = `${parent}/${newName}`;
+        const parent = entry.path.substring(0, entry.path.lastIndexOf('/'));
+        const newPath = `${parent}/${newName}`;
         try {
             await invoke('notes_rename_entry', { oldPath: entry.path, newPath });
             if (activeFile === entry.path) setActiveFile(newPath);
@@ -155,7 +155,7 @@ export const NotesPanel: React.FC = () => {
                                 value={pathInput}
                                 onChange={e => setPathInput(e.target.value)}
                                 onKeyDown={e => {
-                                    if (e.key === 'Enter')  applyBasePath(pathInput);
+                                    if (e.key === 'Enter') applyBasePath(pathInput);
                                     if (e.key === 'Escape') setEditingPath(false);
                                 }}
                                 placeholder="/ruta/a/tu/carpeta"

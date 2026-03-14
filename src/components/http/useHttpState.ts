@@ -5,7 +5,7 @@ import { HttpRequest, HttpResponse, HttpCollectionFolder, HttpEnvironment } from
 import { parseCurl } from './CurlParser';
 import { resolveVariables } from './PostmanImporter';
 
-const LS_KEY = 'nexus_http_client';
+const LS_KEY = 'microtermix_http_client';
 
 function loadPersistedState() {
     try {
@@ -200,10 +200,10 @@ export function useHttpState() {
 
         if (targetFolderId === null || targetFolderId === 'root') {
             // Save to generic Local Scratchpad
-            const localColIndex = newCols.findIndex((c) => c.id === 'local-nexus-collection');
+            const localColIndex = newCols.findIndex((c) => c.id === 'local-microtermix-collection');
             if (localColIndex === -1) {
                 newCols.push({
-                    id: 'local-nexus-collection',
+                    id: 'local-microtermix-collection',
                     type: 'collection',
                     name: 'Local Scratchpad',
                     items: [reqToSave],
@@ -253,12 +253,12 @@ export function useHttpState() {
     const availableVariables = useMemo(() => {
         const activeEnv = environments.find(e => e.id === activeEnvId) || environments[0];
         let varsSet = new Set<string>();
-        
+
         // From environment
         if (activeEnv?.variables) {
             Object.keys(activeEnv.variables).forEach(k => varsSet.add(k));
         }
-        
+
         // From parent collection
         const findRootCol = (cols: HttpCollectionFolder[], matchId: string): HttpCollectionFolder | null => {
             if (!cols) return null;

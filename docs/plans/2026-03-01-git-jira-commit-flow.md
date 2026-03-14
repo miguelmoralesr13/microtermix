@@ -105,7 +105,7 @@ interface GitJiraCommitButtonProps {
 // ── Config storage ────────────────────────────────────────────────────────────
 
 function configKey(projectPath: string): string {
-    return `nexus-jira-git-${projectPath.replace(/[/\\:]/g, '_')}`;
+    return `microtermix-jira-git-${projectPath.replace(/[/\\:]/g, '_')}`;
 }
 
 function loadGitJiraConfig(projectPath: string): GitJiraConfig {
@@ -294,14 +294,14 @@ Continue in the same file:
                                 type="text"
                                 value={draft[field]}
                                 onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-nexus-accent font-mono"
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-microtermix-accent font-mono"
                                 placeholder={field === 'projectKey' ? 'PROJ' : 'PROJ-123'}
                             />
                         </div>
                     ))}
                     <button
                         onClick={handleSaveConfig}
-                        className="w-full py-1.5 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-lg transition-colors flex items-center justify-center gap-1"
+                        className="w-full py-1.5 text-xs font-bold bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 rounded-lg transition-colors flex items-center justify-center gap-1"
                     >
                         <Check size={11} /> Guardar
                     </button>
@@ -313,7 +313,7 @@ Continue in the same file:
                 <button
                     onClick={() => setShowPopover(v => !v)}
                     title="Configurar Jira Git"
-                    className={`p-1.5 rounded transition-colors ${isConfigComplete(config) ? 'text-nexus-accent hover:bg-nexus-accent/10' : 'text-slate-600 hover:text-slate-400'}`}
+                    className={`p-1.5 rounded transition-colors ${isConfigComplete(config) ? 'text-microtermix-accent hover:bg-microtermix-accent/10' : 'text-slate-600 hover:text-slate-400'}`}
                 >
                     <Settings size={14} />
                 </button>
@@ -323,7 +323,7 @@ Continue in the same file:
                     <button
                         onClick={handleCommitAndPush}
                         disabled={!canCommit}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-nexus-neon text-xs font-bold rounded border border-nexus-neon/20 hover:border-nexus-neon/40 transition-all"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-microtermix-neon text-xs font-bold rounded border border-microtermix-neon/20 hover:border-microtermix-neon/40 transition-all"
                     >
                         {isRunning
                             ? <><RefreshCw size={12} className="animate-spin" />{stepLabel(flowStep)}</>
@@ -335,7 +335,7 @@ Continue in the same file:
 
             {/* Error message */}
             {flowStep === 'error' && errorMsg && (
-                <p className="text-[10px] text-nexus-danger mt-1 leading-snug">{errorMsg}</p>
+                <p className="text-[10px] text-microtermix-danger mt-1 leading-snug">{errorMsg}</p>
             )}
 
             {/* Tempo modal */}
@@ -406,7 +406,7 @@ Find the commit button block (around line 497–504):
                 <button
                     onClick={handleCommit}
                     disabled={isCommitting || !isAnythingStaged || !commitMessage.trim()}
-                    className="w-full flex items-center justify-center py-2 bg-nexus-accent hover:bg-opacity-80 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-bold rounded transition-all"
+                    className="w-full flex items-center justify-center py-2 bg-microtermix-accent hover:bg-opacity-80 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-bold rounded transition-all"
                 >
                     <GitCommit size={16} className="mr-2" />
                     {isCommitting ? 'Committing...' : 'Commit'}

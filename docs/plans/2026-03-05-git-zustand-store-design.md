@@ -151,7 +151,7 @@ await Promise.all([
 
 ## Persistence
 
-- Zustand `persist` middleware, key: `nexus-git-store`, storage: `localStorage`
+- Zustand `persist` middleware, key: `microtermix-git-store`, storage: `localStorage`
 - `loading` fields are excluded from persistence (always start as `false`)
 - On app open: cached data renders immediately → `fetchAll` runs in background → data updates in place
 - A subtle "Actualizando..." badge shows while any `loading.*` is `true`

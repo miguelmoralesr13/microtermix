@@ -65,7 +65,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-nexus-neon"
+                            className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 outline-none focus:border-microtermix-neon"
                             placeholder="My Awesome Request"
                             autoFocus
                         />
@@ -78,7 +78,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                             <select
                                 value={selectedFolderId || 'root'}
                                 onChange={(e) => setSelectedFolderId(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-9 pr-3 py-2 text-sm text-slate-200 outline-none focus:border-nexus-neon appearance-none cursor-pointer"
+                                className="w-full bg-slate-950 border border-slate-700 rounded pl-9 pr-3 py-2 text-sm text-slate-200 outline-none focus:border-microtermix-neon appearance-none cursor-pointer"
                             >
                                 <option value="root">Root / Local Scratchpad</option>
                                 {renderFolderOptions()}
@@ -97,7 +97,7 @@ export const SaveDialog: React.FC<SaveDialogProps> = ({
                     <button
                         onClick={handleSubmit}
                         disabled={!name.trim()}
-                        className="px-4 py-2 rounded text-sm bg-nexus-neon text-slate-900 font-bold hover:bg-sky-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 rounded text-sm bg-microtermix-neon text-slate-900 font-bold hover:bg-sky-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Save
                     </button>

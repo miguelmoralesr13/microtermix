@@ -89,7 +89,7 @@ export function DiscardSubtasksModal({ target, onConfirm, onClose }: {
                     <AlertCircle size={18} className="text-yellow-400 shrink-0" />
                     <div>
                         <h3 className="text-sm font-bold text-slate-100 leading-snug">Subtareas Abiertas Detectadas</h3>
-                        <p className="text-[10px] text-slate-400">La historia pasará a <span className="font-bold text-nexus-neon">{transition.toName}</span></p>
+                        <p className="text-[10px] text-slate-400">La historia pasará a <span className="font-bold text-microtermix-neon">{transition.toName}</span></p>
                     </div>
                 </div>
 
@@ -106,8 +106,8 @@ export function DiscardSubtasksModal({ target, onConfirm, onClose }: {
                             return (
                                 <div key={task.key} className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800">
                                     <div className="flex items-center gap-2 overflow-hidden">
-                                        {isProcessed ? <CheckCircle size={12} className="text-nexus-success shrink-0" /> :
-                                            isCurrent ? <RefreshCw size={12} className="text-nexus-neon animate-spin shrink-0" /> :
+                                        {isProcessed ? <CheckCircle size={12} className="text-microtermix-success shrink-0" /> :
+                                            isCurrent ? <RefreshCw size={12} className="text-microtermix-neon animate-spin shrink-0" /> :
                                                 <Layers size={12} className="text-slate-500 shrink-0" />}
                                         <span className="text-[11px] font-mono text-slate-400 shrink-0 bg-slate-950 px-1 rounded">{task.key}</span>
                                         <span className="text-xs text-slate-300 truncate">{task.fields.summary}</span>
@@ -131,7 +131,7 @@ export function DiscardSubtasksModal({ target, onConfirm, onClose }: {
                                 <span>{progress.completed} / {progress.total}</span>
                             </div>
                             <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-nexus-neon transition-all duration-300" style={{ width: `${(progress.completed / progress.total) * 100}%` }} />
+                                <div className="h-full bg-microtermix-neon transition-all duration-300" style={{ width: `${(progress.completed / progress.total) * 100}%` }} />
                             </div>
                         </div>
                     )}
@@ -144,7 +144,7 @@ export function DiscardSubtasksModal({ target, onConfirm, onClose }: {
                     </button>
                     {!processing ? (
                         <button type="button" onClick={() => processTasks(tasksToProcess)} disabled={tasksToProcess.length === 0}
-                            className="flex-1 px-3 py-2 rounded-lg text-xs font-bold border bg-nexus-accent/20 border-nexus-accent/30 text-nexus-accent hover:bg-nexus-accent/30 transition-colors disabled:opacity-50">
+                            className="flex-1 px-3 py-2 rounded-lg text-xs font-bold border bg-microtermix-accent/20 border-microtermix-accent/30 text-microtermix-accent hover:bg-microtermix-accent/30 transition-colors disabled:opacity-50">
                             Cerrar Tasks y Continuar
                         </button>
                     ) : (

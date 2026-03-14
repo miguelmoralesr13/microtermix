@@ -74,13 +74,13 @@ export const HttpPanel: React.FC = () => {
     // Render
     // -----------------------------------------------------------------------
     return (
-        <div className="flex flex-col h-full bg-nexus-dark text-slate-300">
+        <div className="flex flex-col h-full bg-microtermix-dark text-slate-300">
 
             {/* ── Top Toolbar ── */}
             <div className="flex-none p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <Server size={20} className="text-nexus-accent" />
-                    <h2 className="text-lg font-semibold text-white tracking-wide">Nexus HTTP Client</h2>
+                    <Server size={20} className="text-microtermix-accent" />
+                    <h2 className="text-lg font-semibold text-white tracking-wide">Microtermix HTTP Client</h2>
                 </div>
                 <div className="flex gap-2 items-center">
                     <button
@@ -108,7 +108,7 @@ export const HttpPanel: React.FC = () => {
                     >
                         <Download size={14} /> Import Postman
                     </button>
-                    
+
                     <div className="w-px h-6 bg-slate-700 mx-1 self-center" />
 
                     {/* Environment Selector */}
@@ -116,7 +116,7 @@ export const HttpPanel: React.FC = () => {
                         <select
                             value={activeEnvId || ''}
                             onChange={(e) => setActiveEnvId(e.target.value)}
-                            className="bg-slate-800/50 border border-slate-700 text-xs font-medium text-slate-300 rounded px-2 py-1.5 outline-none focus:border-nexus-neon transition-colors cursor-pointer min-w-[120px]"
+                            className="bg-slate-800/50 border border-slate-700 text-xs font-medium text-slate-300 rounded px-2 py-1.5 outline-none focus:border-microtermix-neon transition-colors cursor-pointer min-w-[120px]"
                         >
                             <option value="">No Environment</option>
                             {environments.map(env => (
@@ -215,7 +215,7 @@ export const HttpPanel: React.FC = () => {
                         </div>
                         <div className="p-4">
                             <textarea
-                                className="w-full h-48 bg-slate-950 border border-slate-700 rounded p-4 font-mono text-sm text-slate-200 outline-none focus:border-nexus-neon resize-none focus:shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all"
+                                className="w-full h-48 bg-slate-950 border border-slate-700 rounded p-4 font-mono text-sm text-slate-200 outline-none focus:border-microtermix-neon resize-none focus:shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all"
                                 placeholder={`curl -X POST https://api.example.com -H 'Content-Type: application/json' -d '{"key":"value"}'`}
                                 value={curlInput}
                                 onChange={(e) => setCurlInput(e.target.value)}
@@ -230,7 +230,7 @@ export const HttpPanel: React.FC = () => {
                             </button>
                             <button
                                 onClick={handleImportCurl}
-                                className="px-4 py-2 rounded text-sm bg-nexus-neon text-slate-900 font-bold hover:bg-sky-400 transition-colors"
+                                className="px-4 py-2 rounded text-sm bg-microtermix-neon text-slate-900 font-bold hover:bg-sky-400 transition-colors"
                             >
                                 Import Command
                             </button>

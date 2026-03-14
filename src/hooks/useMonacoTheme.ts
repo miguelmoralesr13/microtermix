@@ -3,8 +3,8 @@ import { themesReady } from '@/lib/monacoThemes';
 export { MONACO_THEMES } from '@/lib/monacoThemes';
 export type { MonacoThemeOption } from '@/lib/monacoThemes';
 
-const STORAGE_KEY = 'nexus-monaco-theme';
-const EVENT_NAME  = 'nexus-monaco-theme-change';
+const STORAGE_KEY = 'microtermix-monaco-theme';
+const EVENT_NAME = 'microtermix-monaco-theme-change';
 
 function readTheme(): string {
     try { return localStorage.getItem(STORAGE_KEY) ?? 'vs-dark'; } catch { return 'vs-dark'; }

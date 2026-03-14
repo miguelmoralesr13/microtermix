@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { GitBranch, Trello, Server, Activity, Globe, FolderOpen,  FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2, ChevronUp, ChevronDown, Play, Palette } from 'lucide-react';
+import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2, ChevronUp, ChevronDown, Play, Palette } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();
@@ -29,7 +29,7 @@ export const Sidebar: React.FC = () => {
             <div
                 key={viewName}
                 onClick={() => setActiveView(viewName)}
-                className={`p-2 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
+                className={`p-2 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-microtermix-neon/10 text-microtermix-neon' : 'text-slate-500 hover:text-slate-300'}`}
                 title={title}
             >
                 <Icon size={20} />
@@ -41,11 +41,11 @@ export const Sidebar: React.FC = () => {
         <div className="w-12 h-full bg-slate-950 border-r border-slate-800 shrink-0 relative flex flex-col z-20">
             {/* Indicador Superior Animado */}
             <div className={`absolute top-0 left-0 right-0 h-6 bg-gradient-to-b from-slate-950 via-slate-950/90 to-transparent z-10 pointer-events-none flex justify-center pt-1 transition-opacity duration-300 ${canScrollUp ? 'opacity-100' : 'opacity-0'}`}>
-                <ChevronUp size={12} className="text-nexus-neon/70 animate-bounce" />
+                <ChevronUp size={12} className="text-microtermix-neon/70 animate-bounce" />
             </div>
 
             {/* Contenedor con Scrollbar Oculta */}
-            <div 
+            <div
                 ref={scrollRef}
                 onScroll={checkScroll}
                 className="w-full h-full overflow-y-auto flex flex-col items-center py-4 gap-1 scrollbar-none"
@@ -71,7 +71,7 @@ export const Sidebar: React.FC = () => {
 
             {/* Indicador Inferior Animado */}
             <div className={`absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent z-10 pointer-events-none flex justify-center items-end pb-1 transition-opacity duration-300 ${canScrollDown ? 'opacity-100' : 'opacity-0'}`}>
-                <ChevronDown size={12} className="text-nexus-neon/70 animate-bounce" />
+                <ChevronDown size={12} className="text-microtermix-neon/70 animate-bounce" />
             </div>
         </div>
     );

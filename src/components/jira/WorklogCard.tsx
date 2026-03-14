@@ -21,7 +21,7 @@ export const WorklogCard: React.FC<WorklogCardProps> = ({ worklog, onEdit, onDel
     )}>
       <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
         <Clock size={12} className="text-slate-500" />
-        <span className="bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/20 font-mono text-[11px] px-1.5 py-0.5 rounded">
+        <span className="bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/20 font-mono text-[11px] px-1.5 py-0.5 rounded">
           {formatDuration(worklog.timeSpentSeconds)}
         </span>
       </div>
@@ -42,7 +42,7 @@ export const WorklogCard: React.FC<WorklogCardProps> = ({ worklog, onEdit, onDel
       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         <button
           onClick={() => onEdit(worklog)}
-          className="p-1 rounded text-slate-500 hover:text-nexus-accent hover:bg-slate-700 transition-colors"
+          className="p-1 rounded text-slate-500 hover:text-microtermix-accent hover:bg-slate-700 transition-colors"
           title="Editar"
         >
           <Pencil size={12} />

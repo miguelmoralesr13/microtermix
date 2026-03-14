@@ -132,14 +132,14 @@ let _listeners: JenkinsLogListener[] = [];
 let _seq = 0;
 
 export const jenkinsApiLog = {
-    on(fn: JenkinsLogListener)  { _listeners.push(fn); },
+    on(fn: JenkinsLogListener) { _listeners.push(fn); },
     off(fn: JenkinsLogListener) { _listeners = _listeners.filter(l => l !== fn); },
     emit(e: JenkinsApiLogEntry) { _listeners.forEach(l => l(e)); },
 };
 
 // ── localStorage ──────────────────────────────────────────────────────────────
 
-const CFG_KEY = 'nexus-jenkins-cfg';
+const CFG_KEY = 'microtermix-jenkins-cfg';
 
 export function loadJenkinsConfig(): JenkinsConfig {
     try {
@@ -336,7 +336,7 @@ export async function jenkinsGetProgressiveLog(
 
 // ── Favourites ────────────────────────────────────────────────────────────────
 
-const FAV_KEY = 'nexus-jenkins-favs';
+const FAV_KEY = 'microtermix-jenkins-favs';
 
 /** Subset of job data stored in favorites (enough for display). */
 export interface JenkinsFavorite {

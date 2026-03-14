@@ -36,7 +36,7 @@ export function NeedConfig({ onGo }: { onGo: () => void }) {
         <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500 p-12">
             <AlertCircle size={36} />
             <p className="text-sm text-center">Primero configura tus credenciales AWS.</p>
-            <button onClick={onGo} className="text-xs text-nexus-accent hover:underline">Ir a Configuración →</button>
+            <button onClick={onGo} className="text-xs text-microtermix-accent hover:underline">Ir a Configuración →</button>
         </div>
     );
 }

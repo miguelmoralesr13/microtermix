@@ -99,29 +99,29 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
             if (isRebase) {
                 // Ensure everything is added
                 await invoke('git_execute', { projectPath, args: ['add', '.'] });
-                
+
                 if (commitMessage.trim()) {
                     // To change the message during rebase continue, we use the same editor trick as reword
                     // but we apply it to rebase --continue.
-                    const msgPath = `${projectPath}/.nexus_rebase_msg.txt`;
-                    await invoke('write_file_content', { base: projectPath, file: '.nexus_rebase_msg.txt', content: commitMessage });
-                    
+                    const msgPath = `${projectPath}/.microtermix_rebase_msg.txt`;
+                    await invoke('write_file_content', { base: projectPath, file: '.microtermix_rebase_msg.txt', content: commitMessage });
+
                     const isWindows = navigator.userAgent.includes('Windows');
-                    const editorScript = isWindows 
+                    const editorScript = isWindows
                         ? `@echo off\r\npowershell -Command "Set-Content -Path '%1' -Value (Get-Content -Raw '${msgPath.replace(/\\/g, '/')}')"\r\n`
                         : `#!/bin/sh\ncp '${msgPath}' "$1"\n`;
-                    
-                    const editorName = isWindows ? '.nexus_rebase_editor.cmd' : '.nexus_rebase_editor.sh';
+
+                    const editorName = isWindows ? '.microtermix_rebase_editor.cmd' : '.microtermix_rebase_editor.sh';
                     await invoke('write_file_content', { base: projectPath, file: editorName, content: editorScript });
-                    
-                    const res: any = await invoke('git_execute', { 
-                        projectPath, 
-                        args: ['-c', `core.editor=${projectPath}/${editorName}`, 'rebase', '--continue'] 
+
+                    const res: any = await invoke('git_execute', {
+                        projectPath,
+                        args: ['-c', `core.editor=${projectPath}/${editorName}`, 'rebase', '--continue']
                     });
-                    
+
                     // Cleanup (best effort)
-                    await invoke('git_execute', { projectPath, args: ['clean', '-f', '.nexus_rebase_msg.txt', editorName] }).catch(() => {});
-                    
+                    await invoke('git_execute', { projectPath, args: ['clean', '-f', '.microtermix_rebase_msg.txt', editorName] }).catch(() => { });
+
                     if (!res.success) throw new Error(res.stderr || 'Error al continuar el rebase con nuevo mensaje');
                 } else {
                     const res: any = await invoke('git_execute', { projectPath, args: ['-c', 'core.editor=true', 'rebase', '--continue'] });
@@ -129,7 +129,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                 }
             } else {
                 await invoke('git_execute', { projectPath, args: ['add', '.'] });
-                const args = commitMessage.trim() 
+                const args = commitMessage.trim()
                     ? ['commit', '-m', commitMessage]
                     : ['commit', '--no-edit'];
                 const res: any = await invoke('git_execute', { projectPath, args });
@@ -218,11 +218,10 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                                     <button
                                         key={f}
                                         onClick={() => setSelectedFile(f)}
-                                        className={`w-full text-left px-3 py-2 flex items-start gap-2 transition-colors ${
-                                            isActive
-                                                ? 'bg-slate-800 border-l-2 border-nexus-accent'
+                                        className={`w-full text-left px-3 py-2 flex items-start gap-2 transition-colors ${isActive
+                                                ? 'bg-slate-800 border-l-2 border-microtermix-accent'
                                                 : 'hover:bg-slate-800/50 border-l-2 border-transparent'
-                                        }`}
+                                            }`}
                                     >
                                         <span className={`shrink-0 mt-0.5 ${isResolved ? 'text-emerald-400' : 'text-orange-400'}`}>
                                             {isResolved ? <Check size={12} /> : <AlertTriangle size={12} />}
@@ -246,7 +245,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                                 <Label className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">
                                     Mensaje del commit {isRebase ? '(opcional)' : ''}
                                 </Label>
-                                <Textarea 
+                                <Textarea
                                     value={commitMessage}
                                     onChange={(e) => setCommitMessage(e.target.value)}
                                     placeholder={isRebase ? "Mismo mensaje (deja vacío)" : "Describe la resolución..."}

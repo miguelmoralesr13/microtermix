@@ -41,7 +41,7 @@ export const ResizableDivider: React.FC<ResizableDividerProps> = ({ onResize, di
             title={isVertical ? 'Drag to resize height' : 'Drag to resize width'}
         >
             <div
-                className={`bg-slate-700 group-hover:bg-nexus-neon transition-colors ${isDragging ? 'bg-nexus-neon' : ''} ${isVertical ? 'w-full h-0.5 rounded-full' : 'h-8 w-0.5 rounded-full'}`}
+                className={`bg-slate-700 group-hover:bg-microtermix-neon transition-colors ${isDragging ? 'bg-microtermix-neon' : ''} ${isVertical ? 'w-full h-0.5 rounded-full' : 'h-8 w-0.5 rounded-full'}`}
             />
         </div>
     );

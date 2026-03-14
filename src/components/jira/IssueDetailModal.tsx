@@ -49,7 +49,7 @@ export function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose
                     <div className="flex-1 min-w-0 flex flex-col items-start gap-1">
                         <div className="flex items-center gap-2 flex-wrap text-left">
                             <a href={`${cfg.baseUrl}/browse/${issue.key}`} target="_blank" rel="noopener noreferrer"
-                                className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1">
+                                className="text-xs font-mono text-microtermix-neon hover:underline flex items-center gap-1">
                                 {issue.key} <ExternalLink size={11} />
                             </a>
                             <StatusBadge status={fields.status} />
@@ -90,7 +90,7 @@ export function IssueDetailModal({ issue, onClose }: { issue: JiraIssue; onClose
                                         const isMedia = att.mimeType.startsWith('image/') || att.mimeType.startsWith('video/');
                                         return (
                                             <div key={att.id} onClick={() => isMedia && setViewingAttachment(att)}
-                                                className={`group relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 flex flex-col ${isMedia ? 'cursor-pointer hover:border-nexus-neon/50' : ''}`}>
+                                                className={`group relative border border-slate-800 rounded-lg overflow-hidden bg-slate-950 flex flex-col ${isMedia ? 'cursor-pointer hover:border-microtermix-neon/50' : ''}`}>
                                                 <div className="h-24 bg-slate-900 border-b border-slate-800 flex flex-col items-center justify-center p-2">
                                                     {att.thumbnail ? (
                                                         <AuthenticatedMedia url={att.thumbnail} mimeType="image/png" autoLoad={true} className="max-w-full max-h-full object-contain" />

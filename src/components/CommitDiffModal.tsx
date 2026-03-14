@@ -128,7 +128,7 @@ function ReadOnlyDiff({ hunks }: { hunks: Hunk[] }) {
                             <span className="text-slate-500 shrink-0">
                                 {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
                             </span>
-                            <span className="text-nexus-accent font-semibold">{hunk.content}</span>
+                            <span className="text-microtermix-accent font-semibold">{hunk.content}</span>
                         </div>
 
                         {!isCollapsed && hunk.changes.map((ch, cIdx) => {
@@ -286,7 +286,7 @@ export const CommitDiffModal: React.FC<CommitDiffModalProps> = ({
 
                 {/* ── Header ── */}
                 <div className="flex items-start gap-3 px-5 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0">
-                    <GitCommit size={18} className="text-nexus-neon mt-0.5 shrink-0" />
+                    <GitCommit size={18} className="text-microtermix-neon mt-0.5 shrink-0" />
                     <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-slate-100 line-clamp-2 mb-1">{commitMessage}</div>
                         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
@@ -304,7 +304,7 @@ export const CommitDiffModal: React.FC<CommitDiffModalProps> = ({
                             )}
                             <span className="flex items-center gap-1 font-mono">
                                 <Hash size={11} />
-                                <span className="text-nexus-neon">{commitHash.slice(0, 12)}</span>
+                                <span className="text-microtermix-neon">{commitHash.slice(0, 12)}</span>
                             </span>
                             <span className="text-slate-600">{changedFiles.length} archivo{changedFiles.length !== 1 ? 's' : ''}</span>
                         </div>
@@ -331,7 +331,7 @@ export const CommitDiffModal: React.FC<CommitDiffModalProps> = ({
                                 <RefreshCw size={16} className="animate-spin" />
                             </div>
                         ) : error ? (
-                            <div className="text-nexus-danger text-xs p-3 italic">{error}</div>
+                            <div className="text-microtermix-danger text-xs p-3 italic">{error}</div>
                         ) : (
                             <div className="flex-1 overflow-y-auto scrollbar-hide py-1">
                                 {changedFiles.map((cf, i) => {
@@ -342,7 +342,7 @@ export const CommitDiffModal: React.FC<CommitDiffModalProps> = ({
                                             onClick={() => setSelectedFile(cf)}
                                             className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs transition-colors group
                                                 ${isSelected
-                                                    ? 'bg-nexus-accent/15 border-r-2 border-nexus-accent text-slate-200'
+                                                    ? 'bg-microtermix-accent/15 border-r-2 border-microtermix-accent text-slate-200'
                                                     : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                                                 }`}
                                         >

@@ -64,19 +64,19 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
         }
     };
 
-    const selectCls = "w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon transition-colors";
+    const selectCls = "w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon transition-colors";
 
     return (
         <form onSubmit={handleSubmit} className="max-w-2xl mx-auto py-8 px-6 space-y-6 bg-slate-900/30 rounded-xl border border-slate-800 shadow-sm mt-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
-                <div className="p-1.5 bg-nexus-accent/10 rounded-lg">
-                    <Plus size={18} className="text-nexus-accent" />
+                <div className="p-1.5 bg-microtermix-accent/10 rounded-lg">
+                    <Plus size={18} className="text-microtermix-accent" />
                 </div>
                 <h2 className="text-lg font-bold text-slate-100">Crear Nueva Tarea</h2>
             </div>
 
             {error && (
-                <div className="p-3 bg-nexus-danger/10 border border-nexus-danger/30 rounded-lg text-nexus-danger text-xs flex items-start gap-2">
+                <div className="p-3 bg-microtermix-danger/10 border border-microtermix-danger/30 rounded-lg text-microtermix-danger text-xs flex items-start gap-2">
                     <AlertCircle size={14} className="shrink-0 mt-0.5" />
                     <span>{error}</span>
                 </div>
@@ -85,10 +85,10 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
             <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                     <Label htmlFor="project-select" className="text-slate-400">Proyecto</Label>
-                    <select 
+                    <select
                         id="project-select"
-                        value={projectKey} 
-                        onChange={e => setProjectKey(e.target.value)} 
+                        value={projectKey}
+                        onChange={e => setProjectKey(e.target.value)}
                         className={selectCls}
                     >
                         {projects.length > 0
@@ -99,10 +99,10 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
                 </div>
                 <div className="space-y-2">
                     <Label htmlFor="type-select" className="text-slate-400">Tipo de Issue</Label>
-                    <select 
+                    <select
                         id="type-select"
-                        value={issueType} 
-                        onChange={e => setIssueType(e.target.value)} 
+                        value={issueType}
+                        onChange={e => setIssueType(e.target.value)}
                         className={selectCls}
                     >
                         {issueTypes.length > 0
@@ -115,24 +115,24 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
 
 
             <div className="space-y-2">
-                <Label className="text-slate-400">Resumen <span className="text-nexus-danger">*</span></Label>
-                <Input 
-                    value={summary} 
-                    onChange={e => setSummary(e.target.value)} 
-                    required 
-                    placeholder="Escribe un resumen descriptivo..." 
-                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-nexus-neon h-10"
+                <Label className="text-slate-400">Resumen <span className="text-microtermix-danger">*</span></Label>
+                <Input
+                    value={summary}
+                    onChange={e => setSummary(e.target.value)}
+                    required
+                    placeholder="Escribe un resumen descriptivo..."
+                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-microtermix-neon h-10"
                 />
             </div>
 
             <div className="space-y-2">
                 <Label className="text-slate-400">Descripción</Label>
-                <Textarea 
-                    value={description} 
-                    onChange={e => setDescription(e.target.value)} 
+                <Textarea
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
                     rows={5}
-                    placeholder="Proporciona detalles adicionales sobre la tarea..." 
-                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-nexus-neon resize-none min-h-[120px]"
+                    placeholder="Proporciona detalles adicionales sobre la tarea..."
+                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-microtermix-neon resize-none min-h-[120px]"
                 />
             </div>
 
@@ -155,11 +155,11 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
 
             <div className="space-y-2">
                 <Label className="text-slate-400">Labels</Label>
-                <Input 
-                    value={labels} 
-                    onChange={e => setLabels(e.target.value)} 
-                    placeholder="Ej: frontend, bug, ui (separados por coma)" 
-                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-nexus-neon h-10 font-mono"
+                <Input
+                    value={labels}
+                    onChange={e => setLabels(e.target.value)}
+                    placeholder="Ej: frontend, bug, ui (separados por coma)"
+                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-microtermix-neon h-10 font-mono"
                 />
             </div>
 
@@ -170,10 +170,10 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
                 </div>
             )}
 
-            <Button 
-                type="submit" 
+            <Button
+                type="submit"
                 disabled={submitting || !summary.trim()}
-                className="w-full bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold h-11 text-base shadow-lg shadow-nexus-accent/10"
+                className="w-full bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold h-11 text-base shadow-lg shadow-microtermix-accent/10"
             >
                 {submitting ? (
                     <>

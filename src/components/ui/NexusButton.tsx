@@ -20,19 +20,19 @@ export const Button: React.FC<ButtonProps> = ({
     let variantClasses = '';
     switch (variant) {
         case 'primary':
-            variantClasses = 'bg-nexus-neon/10 border border-nexus-neon/30 text-nexus-neon hover:bg-nexus-neon hover:text-white hover:border-nexus-neon';
+            variantClasses = 'bg-microtermix-neon/10 border border-microtermix-neon/30 text-microtermix-neon hover:bg-microtermix-neon hover:text-white hover:border-microtermix-neon';
             break;
         case 'success':
-            variantClasses = 'bg-nexus-success text-slate-900 hover:bg-opacity-80';
+            variantClasses = 'bg-microtermix-success text-slate-900 hover:bg-opacity-80';
             break;
         case 'danger':
-            variantClasses = 'bg-nexus-danger/20 border border-nexus-danger/50 text-nexus-danger hover:bg-nexus-danger hover:text-white';
+            variantClasses = 'bg-microtermix-danger/20 border border-microtermix-danger/50 text-microtermix-danger hover:bg-microtermix-danger hover:text-white';
             break;
         case 'outline':
-            variantClasses = 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-nexus-neon';
+            variantClasses = 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 hover:text-microtermix-neon';
             break;
         case 'ghost':
-            variantClasses = 'text-slate-500 hover:text-nexus-neon';
+            variantClasses = 'text-slate-500 hover:text-microtermix-neon';
             break;
     }
 

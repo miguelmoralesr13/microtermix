@@ -9,7 +9,7 @@ npm run tauri:portable
 - Compila el frontend y la app Tauri **sin** crear instalador (.msi/.exe de NSIS).
 - El .exe resultante tiene la UI embebida; solo requiere que el PC tenga **WebView2** (viene en Windows 10/11).
 - Tras el build, se copia el ejecutable a la carpeta **`portable/`** en la raíz del proyecto:
-  - `portable/devflow-nexus.exe`
+  - `portable/devflow-microtermix.exe`
 
 Puedes llevar solo ese archivo (o la carpeta `portable/`) a otro equipo y ejecutarlo ahí.
 

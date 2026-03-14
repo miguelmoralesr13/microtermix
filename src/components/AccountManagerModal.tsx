@@ -219,7 +219,7 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
                                 <Button
                                     variant="ghost"
                                     onClick={startAdd}
-                                    className="flex items-center gap-1.5 text-xs text-nexus-neon hover:text-nexus-neon hover:bg-nexus-neon/10 transition-colors h-8 px-2"
+                                    className="flex items-center gap-1.5 text-xs text-microtermix-neon hover:text-microtermix-neon hover:bg-microtermix-neon/10 transition-colors h-8 px-2"
                                 >
                                     <Plus size={13} /> Añadir cuenta
                                 </Button>
@@ -248,7 +248,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
     const canSave = form.alias.trim().length > 0 && form.token.trim().length > 0;
 
     return (
-        <div className="rounded-lg border border-nexus-accent/40 bg-slate-800/60 p-4 space-y-4">
+        <div className="rounded-lg border border-microtermix-accent/40 bg-slate-800/60 p-4 space-y-4">
             {/* Alias */}
             <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1.5">Alias</label>
@@ -270,11 +270,10 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                             key={p}
                             type="button"
                             onClick={() => onProviderChange(p)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-all ${
-                                form.provider === p
-                                    ? 'border-nexus-accent bg-nexus-accent/10 text-white'
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border transition-all ${form.provider === p
+                                    ? 'border-microtermix-accent bg-microtermix-accent/10 text-white'
                                     : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500'
-                            }`}
+                                }`}
                         >
                             {p === 'github' ? <Github size={12} /> : <Gitlab size={12} />}
                             {p === 'github' ? 'GitHub' : 'GitLab'}
@@ -343,7 +342,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ form, verifyState, onChange, 
                     type="button"
                     onClick={onSave}
                     disabled={!canSave}
-                    className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
+                    className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold"
                 >
                     Guardar
                 </Button>

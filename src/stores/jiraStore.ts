@@ -8,16 +8,16 @@ import type { BoardFilter } from '../components/jiraApi';
 // jiraApi.ts reads from these keys synchronously inside jiraFetch().
 // We keep them in sync so all existing API functions work without changes.
 function syncLegacyKeys(accounts: JiraAccount[], activeAccountId: string | null) {
-    localStorage.setItem('nexus-jira-accounts', JSON.stringify(accounts));
+    localStorage.setItem('microtermix-jira-accounts', JSON.stringify(accounts));
     if (activeAccountId) {
-        localStorage.setItem('nexus-jira-active', activeAccountId);
+        localStorage.setItem('microtermix-jira-active', activeAccountId);
     } else {
-        localStorage.removeItem('nexus-jira-active');
+        localStorage.removeItem('microtermix-jira-active');
     }
     // Also sync the flat config key that some components still read directly
     const active = accounts.find(a => a.id === activeAccountId) ?? accounts[0];
     if (active?.config) {
-        localStorage.setItem('nexus-jira-config', JSON.stringify(active.config));
+        localStorage.setItem('microtermix-jira-config', JSON.stringify(active.config));
     }
 }
 
@@ -74,9 +74,9 @@ export interface JiraStoreState {
 
 function migrateFromLegacy(): Pick<JiraStoreState, 'accounts' | 'activeAccountId' | 'boardFilter' | 'boardProjectKey' | 'storiesSelection' | 'pinnedEpics' | 'pinnedStories'> | null {
     try {
-        const accountsRaw = localStorage.getItem('nexus-jira-accounts');
-        const activeRaw = localStorage.getItem('nexus-jira-active');
-        const oldCfgRaw = localStorage.getItem('nexus-jira-config');
+        const accountsRaw = localStorage.getItem('microtermix-jira-accounts');
+        const activeRaw = localStorage.getItem('microtermix-jira-active');
+        const oldCfgRaw = localStorage.getItem('microtermix-jira-config');
 
         let accounts: JiraAccount[] = [];
         let activeAccountId: string | null = null;
@@ -93,18 +93,18 @@ function migrateFromLegacy(): Pick<JiraStoreState, 'accounts' | 'activeAccountId
             }
         }
 
-        const boardFilterRaw = localStorage.getItem('nexus_jira_board_filter');
-        const boardProjectKey = localStorage.getItem('nexus_jira_board_proj') ?? '';
+        const boardFilterRaw = localStorage.getItem('microtermix_jira_board_filter');
+        const boardProjectKey = localStorage.getItem('microtermix_jira_board_proj') ?? '';
         const boardFilter: BoardFilter = boardFilterRaw ? JSON.parse(boardFilterRaw) : { assignees: ['me'] };
 
         // Migrate epic/story keys (not full objects — they'll be re-fetched)
-        const selEpicRaw = localStorage.getItem('nexus-jira-sel-epic');
-        const selStoryRaw = localStorage.getItem('nexus-jira-sel-story');
+        const selEpicRaw = localStorage.getItem('microtermix-jira-sel-epic');
+        const selStoryRaw = localStorage.getItem('microtermix-jira-sel-story');
         const selEpic: JiraIssue | null = selEpicRaw ? JSON.parse(selEpicRaw) : null;
         const selStory: JiraIssue | null = selStoryRaw ? JSON.parse(selStoryRaw) : null;
 
-        const pinnedEpicsRaw = localStorage.getItem('nexus-jira-pinned-epics');
-        const pinnedStoriesRaw = localStorage.getItem('nexus-jira-pinned-stories');
+        const pinnedEpicsRaw = localStorage.getItem('microtermix-jira-pinned-epics');
+        const pinnedStoriesRaw = localStorage.getItem('microtermix-jira-pinned-stories');
 
         return {
             accounts,
@@ -253,10 +253,10 @@ export const useJiraStore = create<JiraStoreState>()(
                 setPinnedStories: (keys) => set({ pinnedStories: keys }),
             }),
             {
-                name: 'nexus-jira-store',
+                name: 'microtermix-jira-store',
                 // Persist everything except the full issue objects in selection
                 // (those are re-fetched; only keys are needed for persistence)
-                // accounts and activeAccountId are persisted in nexus-workspace.json, not here
+                // accounts and activeAccountId are persisted in microtermix.json, not here
                 partialize: (s) => ({
                     boardFilter: s.boardFilter,
                     boardProjectKey: s.boardProjectKey,

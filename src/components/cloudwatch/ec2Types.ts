@@ -43,7 +43,7 @@ export interface LogLine {
     isError: boolean;
 }
 
-export const SSH_KEY = 'nexus-ec2-ssh';
+export const SSH_KEY = 'microtermix-ec2-ssh';
 
 export function loadSshDefaults(): SshDefaults {
     try {

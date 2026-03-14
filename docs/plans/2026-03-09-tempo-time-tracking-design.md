@@ -6,7 +6,7 @@
 
 Add a "Time" tab to the existing JiraPanel that integrates the Tempo Cloud API v4 (`api.tempo.io/4`). Users can view their worklogs by week/month, log time, edit and delete entries, and see totals per issue — all without leaving Microtermix.
 
-shadcn/ui is introduced as the component library (style: new-york, no CSS variables, preserves nexus-* tokens). Toast notifications via sonner.
+shadcn/ui is introduced as the component library (style: new-york, no CSS variables, preserves microtermix-* tokens). Toast notifications via sonner.
 
 ---
 
@@ -118,7 +118,7 @@ Persisted: `period` only. Worklogs always re-fetched on mount.
 npx shadcn@latest init
 # style: new-york
 # base color: neutral
-# CSS variables: NO  (preserves nexus-* token system)
+# CSS variables: NO  (preserves microtermix-* token system)
 ```
 
 Components added to `src/components/ui/` (coexist with existing custom components).

@@ -104,16 +104,16 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
             <div className="max-w-2xl w-full">
                 <div className="mb-8 overflow-hidden text-center block">
                     <h2 className="text-2xl font-bold text-white flex items-center justify-center mb-2">
-                        <GitBranch className="text-nexus-neon mr-3" size={28} />
+                        <GitBranch className="text-microtermix-neon mr-3" size={28} />
                         Repository Setup
                     </h2>
                     <p className="text-slate-400 text-sm">Convert this folder into a Git repository and jumpstart your version control workflow.</p>
                 </div>
 
                 {error && (
-                    <div className="mb-6 p-4 bg-nexus-danger/10 border border-nexus-danger/20 rounded-lg flex items-start">
-                        <AlertTriangle className="text-nexus-danger shrink-0 mr-3 mt-0.5" size={18} />
-                        <div className="text-sm text-nexus-danger whitespace-pre-wrap">{error}</div>
+                    <div className="mb-6 p-4 bg-microtermix-danger/10 border border-microtermix-danger/20 rounded-lg flex items-start">
+                        <AlertTriangle className="text-microtermix-danger shrink-0 mr-3 mt-0.5" size={18} />
+                        <div className="text-sm text-microtermix-danger whitespace-pre-wrap">{error}</div>
                     </div>
                 )}
 
@@ -125,7 +125,7 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                         <Button
                             onClick={handleInit}
                             disabled={loading || step !== 1}
-                            className="bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold h-11 px-8 rounded shadow-lg transition-all"
+                            className="bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold h-11 px-8 rounded shadow-lg transition-all"
                         >
                             <GitCommit className="mr-2" size={18} />
                             {loading && step === 1 ? 'Initializing...' : 'Initialize Repository'}
@@ -223,7 +223,7 @@ export const GitInitPanel: React.FC<GitInitPanelProps> = ({ projectPath, initial
                             <Button
                                 onClick={handleFinish}
                                 disabled={loading || !commitMessage.trim()}
-                                className="w-full bg-nexus-neon hover:bg-nexus-neon/80 text-black font-bold h-12 rounded shadow-lg transition-all mt-4"
+                                className="w-full bg-microtermix-neon hover:bg-microtermix-neon/80 text-black font-bold h-12 rounded shadow-lg transition-all mt-4"
                             >
                                 {loading ? (
                                     'Processing...'

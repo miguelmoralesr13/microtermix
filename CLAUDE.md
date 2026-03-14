@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Microtermix** (package: `microtermix`, binary: `devflow-nexus`) is a desktop developer workspace manager built with **Tauri v2 + React 19 + TypeScript + TailwindCSS v4**. It lets developers manage multiple sub-projects in a monorepo-style workspace: run scripts, view terminal output, manage environments, perform git operations, run a reverse proxy, and more — all from one native desktop app.
+**Microtermix** (package: `microtermix`, binary: `devflow-microtermix`) is a desktop developer workspace manager built with **Tauri v2 + React 19 + TypeScript + TailwindCSS v4**. It lets developers manage multiple sub-projects in a monorepo-style workspace: run scripts, view terminal output, manage environments, perform git operations, run a reverse proxy, and more — all from one native desktop app.
 
 ## Commands
 
@@ -18,7 +18,7 @@ npm run dev
 # TypeScript check + Vite production build
 npm run build
 
-# Windows portable .exe → portable/devflow-nexus.exe
+# Windows portable .exe → portable/devflow-microtermix.exe
 npm run tauri:portable
 
 # Linux AppImage (must run on Linux)
@@ -95,9 +95,9 @@ App.tsx
 
 **Service ID format:** `"${projectPath}::${script} "` (note the trailing space). This is the key in `activeProcesses` and what Rust uses to identify running processes.
 
-**Workspace config:** Saved as `nexus-workspace.json` in the workspace root. Projects are stored by **folder name only** (not full path) to be machine-portable. The `NexusWorkspaceConfig` type in `src/types/workspaceConfig.ts` defines the schema. Config is auto-saved 1.5s after any state change.
+**Workspace config:** Saved as `microtermix.json` in the workspace root. Projects are stored by **folder name only** (not full path) to be machine-portable. The `MicrotermixConfig` type in `src/types/workspaceConfig.ts` defines the schema. Config is auto-saved 1.5s after any state change.
 
-**Per-project localStorage keys:** `nexus-envs-${pathKey}` and `nexus-vite-wrapper-${pathKey}` where `pathKey` replaces `/ \ :` with `_`. These are synced to/from `nexus-workspace.json` on load/save.
+**Per-project localStorage keys:** `microtermix-envs-${pathKey}` and `microtermix-vite-wrapper-${pathKey}` where `pathKey` replaces `/ \ :` with `_`. These are synced to/from `microtermix.json` on load/save.
 
 **`{{ENVS}}` placeholder:** Scripts may contain `{{ENVS}}` which is stripped before execution; the resolved env vars are passed to Rust as `envVarsJson` and injected into the child process environment.
 
@@ -165,7 +165,7 @@ src/
 
 ### Styling
 
-TailwindCSS v4 is used via the `@tailwindcss/vite` plugin (no `tailwind.config.js`). Custom design tokens (`nexus-neon`, `nexus-accent`, `nexus-dark`, etc.) are defined in `src/App.css` inside the `@theme` block. The dark theme base color is `#020617`.
+TailwindCSS v4 is used via the `@tailwindcss/vite` plugin (no `tailwind.config.js`). Custom design tokens (`microtermix-neon`, `microtermix-accent`, `microtermix-dark`, etc.) are defined in `src/App.css` inside the `@theme` block. The dark theme base color is `#020617`.
 
 **shadcn/ui** is installed (style: new-york). Components live in `src/components/ui/`. Use `cn()` from `src/lib/utils.ts` for class merging. Toast notifications via `sonner` — `<Toaster>` is mounted in `App.tsx`.
 

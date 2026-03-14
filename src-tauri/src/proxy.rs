@@ -427,12 +427,12 @@ pub fn generate_vite_wrapper(
         }
     }
 
-    let wrapper_name = format!(".nexus-vite-wrapper.{}", ext);
+    let wrapper_name = format!(".microtermix-vite-wrapper.{}", ext);
     let wrapper_path = project_path.join(&wrapper_name);
     // Comentario al inicio para que se vea qué remotes se inyectaron
     let header = if ext == "ts" || ext == "js" || ext == "mjs" {
         format!(
-            "// Nexus: wrapper generado desde {} — remotes reemplazados: {}\n",
+            "// Microtermix: wrapper generado desde {} — remotes reemplazados: {}\n",
             config_path
                 .file_name()
                 .unwrap_or_default()

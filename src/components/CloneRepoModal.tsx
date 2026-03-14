@@ -198,7 +198,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
                     <div className="flex items-center gap-2">
-                        <Download size={16} className="text-nexus-neon" />
+                        <Download size={16} className="text-microtermix-neon" />
                         <h2 className="text-base font-bold text-white">Clonar Repositorio</h2>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
@@ -213,7 +213,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                         <select
                             value={selectedAccountId}
                             onChange={e => setSelectedAccountId(e.target.value)}
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon"
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon"
                         >
                             {accounts.map(a => (
                                 <option key={a.id} value={a.id}>
@@ -241,7 +241,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                                 onChange={e => setSearch(e.target.value)}
                                 onKeyDown={handleSearchKeyDown}
                                 placeholder="Buscar repositorios... (Enter para buscar)"
-                                className="w-full bg-slate-950 border border-slate-700 rounded pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon"
+                                className="w-full bg-slate-950 border border-slate-700 rounded pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon"
                             />
                         </div>
                         <button
@@ -261,7 +261,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                             value={cloneTargetName}
                             onChange={e => setCloneTargetName(e.target.value)}
                             placeholder="nombre-carpeta (opcional, por defecto: nombre del repo)"
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                         />
                     </div>
                     {state.currentPath && (
@@ -452,7 +452,7 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, isFav, isCloning, isCloned, o
                 <button
                     onClick={onClone}
                     disabled={isCloning}
-                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors disabled:opacity-50 ${isCloned ? 'bg-green-900/20 border-green-700/40 text-green-400 hover:bg-green-900/30' : 'bg-nexus-neon/10 hover:bg-nexus-neon/20 border-nexus-neon/30 text-nexus-neon'}`}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors disabled:opacity-50 ${isCloned ? 'bg-green-900/20 border-green-700/40 text-green-400 hover:bg-green-900/30' : 'bg-microtermix-neon/10 hover:bg-microtermix-neon/20 border-microtermix-neon/30 text-microtermix-neon'}`}
                     title={isCloned ? 'Clonar de nuevo' : 'Clonar'}
                 >
                     {isCloning ? <RefreshCw size={11} className="animate-spin" /> : <Download size={11} />}

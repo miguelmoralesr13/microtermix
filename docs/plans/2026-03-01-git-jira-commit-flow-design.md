@@ -9,7 +9,7 @@ Add a "Commit & Push" button to the Git staging panel that automates the full Ji
 
 ## Configuration
 
-**Storage:** `localStorage` key `nexus-jira-git-${pathKey}` per project (same pattern as `nexus-envs-${pathKey}`).
+**Storage:** `localStorage` key `microtermix-jira-git-${pathKey}` per project (same pattern as `microtermix-envs-${pathKey}`).
 
 ```ts
 interface GitJiraConfig {

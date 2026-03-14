@@ -82,7 +82,7 @@ const DraggableBranchItem = ({
                             variant="ghost"
                             size="icon-xs"
                             onClick={(e) => { e.stopPropagation(); setShowMergeModal(branchName); }}
-                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-accent hover:bg-slate-700/50 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-accent hover:bg-slate-700/50 transition-opacity"
                         >
                             <GitMerge size={12} />
                         </Button>
@@ -97,7 +97,7 @@ const DraggableBranchItem = ({
                                 variant="ghost"
                                 size="icon-xs"
                                 onClick={(e) => { e.stopPropagation(); onViewCode(branchName); }}
-                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-neon hover:bg-slate-700/50 transition-opacity"
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-neon hover:bg-slate-700/50 transition-opacity"
                             >
                                 <Eye size={12} />
                             </Button>
@@ -112,7 +112,7 @@ const DraggableBranchItem = ({
                             variant="ghost"
                             size="icon-xs"
                             onClick={(e) => { e.stopPropagation(); handleCheckout(branchName, !!isRemote); }}
-                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-neon hover:bg-slate-700/50 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-neon hover:bg-slate-700/50 transition-opacity"
                         >
                             <Play size={12} />
                         </Button>
@@ -127,7 +127,7 @@ const DraggableBranchItem = ({
                                 variant="ghost"
                                 size="icon-xs"
                                 onClick={(e) => { e.stopPropagation(); handleDeleteLocalBranch(branchName); }}
-                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50 transition-opacity"
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-danger hover:bg-slate-700/50 transition-opacity"
                             >
                                 <Trash2 size={12} />
                             </Button>
@@ -159,20 +159,20 @@ const ActiveBranchDropZone = ({
             ref={setNodeRef}
             className={`flex items-center justify-between px-4 py-1.5 text-xs group transition-all
                 ${isHighlighted
-                    ? 'text-nexus-neon bg-green-900/40 border border-green-500/60 ring-1 ring-inset ring-green-500/30'
+                    ? 'text-microtermix-neon bg-green-900/40 border border-green-500/60 ring-1 ring-inset ring-green-500/30'
                     : isDropReady
-                        ? 'text-nexus-neon bg-slate-800/50 border border-dashed border-nexus-neon/40'
-                        : 'text-nexus-neon bg-slate-800/50'
+                        ? 'text-microtermix-neon bg-slate-800/50 border border-dashed border-microtermix-neon/40'
+                        : 'text-microtermix-neon bg-slate-800/50'
                 }`}
         >
             <div className="flex items-center overflow-hidden min-w-0 flex-1">
-                <GitBranch size={12} className="mr-2 text-nexus-neon shrink-0" />
+                <GitBranch size={12} className="mr-2 text-microtermix-neon shrink-0" />
                 <span className="truncate font-semibold">
                     {isHighlighted ? `⬇ Mergear aquí → ${branchName}` : branchName}
                 </span>
             </div>
             {isDraggingAny && (
-                <span className="text-[9px] text-nexus-neon/60 ml-1 shrink-0 font-bold uppercase tracking-wider">
+                <span className="text-[9px] text-microtermix-neon/60 ml-1 shrink-0 font-bold uppercase tracking-wider">
                     {isHighlighted ? '¡Suelta!' : 'Drop target'}
                 </span>
             )}
@@ -244,7 +244,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
     const handleStashSave = async () => {
         try {
-            await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Stashed via Nexus'] });
+            await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Stashed via Microtermix'] });
             onRefreshRequest?.();
         } catch { /* no-op */ }
     };
@@ -297,7 +297,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         setIsPulling(true);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['pull'] });
-            
+
             // Esperar un breve instante para que el filesystem se asiente antes de refrescar
             await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -428,11 +428,11 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                     <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-300">Workspace</span>
                         <div className="flex space-x-1">
-                            <Button variant="ghost" size="icon-sm" onClick={handleStashSave} className="text-slate-400 hover:text-nexus-accent hover:bg-slate-800" title="Stash Changes">
+                            <Button variant="ghost" size="icon-sm" onClick={handleStashSave} className="text-slate-400 hover:text-microtermix-accent hover:bg-slate-800" title="Stash Changes">
                                 <Download size={14} />
                             </Button>
                             {stashes.length > 0 && (
-                                <Button variant="ghost" size="icon-sm" onClick={() => handleStashPop(stashes[0])} className="text-slate-400 hover:text-nexus-success hover:bg-slate-800" title="Pop Latest Stash">
+                                <Button variant="ghost" size="icon-sm" onClick={() => handleStashPop(stashes[0])} className="text-slate-400 hover:text-microtermix-success hover:bg-slate-800" title="Pop Latest Stash">
                                     <UploadCloud size={14} />
                                 </Button>
                             )}
@@ -445,7 +445,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                     isPulling ? 'opacity-70' : '',
                                     aheadBehind?.behind && !isPulling
                                         ? 'text-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-500/50 shadow-[0_0_8px_rgba(34,211,238,0.45)] animate-pulse hover:bg-cyan-500/20'
-                                        : 'text-slate-400 hover:text-nexus-success hover:bg-slate-800',
+                                        : 'text-slate-400 hover:text-microtermix-success hover:bg-slate-800',
                                 ].join(' ')}
                                 title={aheadBehind?.behind ? `Pull — ${aheadBehind.behind} commit${aheadBehind.behind > 1 ? 's' : ''} behind` : 'Pull'}
                             >
@@ -463,7 +463,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                     'relative cursor-pointer',
                                     aheadBehind?.ahead
                                         ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.45)] animate-pulse hover:bg-amber-500/20'
-                                        : 'text-slate-400 hover:text-nexus-accent hover:bg-slate-800',
+                                        : 'text-slate-400 hover:text-microtermix-accent hover:bg-slate-800',
                                 ].join(' ')}
                                 title={aheadBehind?.ahead ? `Push — ${aheadBehind.ahead} commit${aheadBehind.ahead > 1 ? 's' : ''} ahead` : 'Push (Preview commits)'}
                             >
@@ -487,7 +487,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                 variant={branchFilter === f ? 'secondary' : 'ghost'}
                                 size="xs"
                                 onClick={() => setUi({ branchFilter: f })}
-                                className={`flex-1 rounded capitalize transition-colors ${branchFilter === f ? 'bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/90 hover:text-nexus-darker' : 'text-slate-400 hover:text-slate-200 hover:bg-transparent'}`}
+                                className={`flex-1 rounded capitalize transition-colors ${branchFilter === f ? 'bg-microtermix-neon text-microtermix-darker hover:bg-microtermix-neon/90 hover:text-microtermix-darker' : 'text-slate-400 hover:text-slate-200 hover:bg-transparent'}`}
                             >
                                 {f === 'all' ? 'All' : f === 'local' ? 'Local' : 'Remote'}
                             </Button>
@@ -501,7 +501,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                             value={branchSearch}
                             onChange={(e) => setBranchSearch(e.target.value)}
                             placeholder="Search branches..."
-                            className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-2 text-xs text-slate-200 placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-nexus-neon transition-colors"
+                            className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-2 text-xs text-slate-200 placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-microtermix-neon transition-colors"
                         />
                     </div>
                 </div>
@@ -597,7 +597,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                                         variant="ghost"
                                                         size="icon-xs"
                                                         onClick={(e) => { e.stopPropagation(); handleStashPop(stash); }}
-                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-nexus-accent rounded"
+                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-accent rounded"
                                                     >
                                                         <PackageOpen size={12} />
                                                     </Button>
@@ -611,7 +611,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                                         variant="ghost"
                                                         size="icon-xs"
                                                         onClick={(e) => { e.stopPropagation(); handleStashDrop(stash); }}
-                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-nexus-danger rounded"
+                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-danger rounded"
                                                     >
                                                         <Trash2 size={12} />
                                                     </Button>
@@ -639,7 +639,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             {/* Ghost label while dragging */}
             <DragOverlay dropAnimation={null}>
                 {isDraggingAny && activeDragLabel ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-nexus-neon/50 rounded-lg shadow-xl text-xs text-nexus-neon font-mono select-none">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-microtermix-neon/50 rounded-lg shadow-xl text-xs text-microtermix-neon font-mono select-none">
                         <GitBranch size={11} />
                         {activeDragLabel}
                     </div>

@@ -43,7 +43,7 @@ interface GitJiraCommitButtonProps {
 // ── Config storage ────────────────────────────────────────────────────────────
 
 function configKey(projectPath: string): string {
-    return `nexus-jira-git-${projectPath.replace(/[/\\:]/g, '_')}`;
+    return `microtermix-jira-git-${projectPath.replace(/[/\\:]/g, '_')}`;
 }
 
 function loadGitJiraConfig(projectPath: string): GitJiraConfig {
@@ -107,14 +107,14 @@ function SelectField({
                 onValueChange={(val: string | null) => onChange(val || '')}
                 disabled={disabled || loading}
             >
-                <SelectTrigger className="w-full h-8 bg-slate-950 border-slate-700 text-xs text-slate-100 placeholder:text-slate-500 focus:ring-nexus-accent [&>span]:truncate text-left">
+                <SelectTrigger className="w-full h-8 bg-slate-950 border-slate-700 text-xs text-slate-100 placeholder:text-slate-500 focus:ring-microtermix-accent [&>span]:truncate text-left">
                     <SelectValue placeholder={loading ? 'Cargando…' : placeholder} />
                 </SelectTrigger>
                 <SelectContent className="max-h-72 min-w-[340px] w-[--anchor-width]">
                     {showFilter && options.length > 5 && (
                         <div className="p-1 pb-2 sticky top-0 bg-popover z-10 border-b border-slate-800">
                             <input 
-                                className="w-full bg-slate-950 border border-slate-700 text-xs text-slate-200 px-2 py-1.5 rounded focus:outline-none focus:border-nexus-accent font-sans" 
+                                className="w-full bg-slate-950 border border-slate-700 text-xs text-slate-200 px-2 py-1.5 rounded focus:outline-none focus:border-microtermix-accent font-sans" 
                                 placeholder="Filtrar..."
                                 value={filter}
                                 onChange={e => setFilter(e.target.value)}
@@ -320,7 +320,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                 <Popover open={showPopover} onOpenChange={setShowPopover}>
                     <PopoverTrigger
                         title="Configurar Jira Git"
-                        className={`flex items-center justify-center w-7 h-7 rounded transition-colors ${isConfigComplete(config) ? 'text-nexus-accent hover:bg-nexus-accent/10' : 'text-slate-600 hover:text-slate-400'}`}
+                        className={`flex items-center justify-center w-7 h-7 rounded transition-colors ${isConfigComplete(config) ? 'text-microtermix-accent hover:bg-microtermix-accent/10' : 'text-slate-600 hover:text-slate-400'}`}
                     >
                         <Settings size={14} />
                     </PopoverTrigger>
@@ -344,7 +344,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                                 <span className="text-[10px] font-bold text-slate-300 uppercase">Crear nueva sub-tarea</span>
                                 <button
                                     onClick={() => setDraft(d => ({ ...d, createTask: !d.createTask }))}
-                                    className={`w-8 h-4 rounded-full relative transition-colors ${draft.createTask ? 'bg-nexus-neon' : 'bg-slate-700'}`}
+                                    className={`w-8 h-4 rounded-full relative transition-colors ${draft.createTask ? 'bg-microtermix-neon' : 'bg-slate-700'}`}
                                 >
                                     <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${draft.createTask ? 'left-[18px]' : 'left-0.5'}`} />
                                 </button>
@@ -392,7 +392,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                             <Button
                                 onClick={handleSaveConfig}
                                 disabled={!isConfigComplete(draft)}
-                                className="w-full h-8 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-lg"
+                                className="w-full h-8 text-xs font-bold bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 rounded-lg"
                             >
                                 <Check size={11} className="mr-1" /> Guardar
                             </Button>
@@ -404,7 +404,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                     <Button
                         onClick={handleCommitAndPush}
                         disabled={!canCommit}
-                        className="flex-1 h-8 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 text-nexus-neon text-xs font-bold rounded border border-nexus-neon/20 hover:border-nexus-neon/40 transition-all font-sans"
+                        className="flex-1 h-8 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800 text-microtermix-neon text-xs font-bold rounded border border-microtermix-neon/20 hover:border-microtermix-neon/40 transition-all font-sans"
                     >
                         {isRunning
                             ? <><RefreshCw size={12} className="animate-spin mr-1.5" />{stepLabel(flowStep)}</>
@@ -416,7 +416,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
 
 
             {flowStep === 'error' && errorMsg && (
-                <p className="text-[10px] text-nexus-danger mt-1 leading-snug">{errorMsg}</p>
+                <p className="text-[10px] text-microtermix-danger mt-1 leading-snug">{errorMsg}</p>
             )}
 
             {flowStep === 'tempo' && createdTask && (

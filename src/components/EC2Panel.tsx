@@ -51,8 +51,8 @@ interface ActiveTunnel {
 
 // ── localStorage ───────────────────────────────────────────────────────────────
 
-const CFG_KEY = 'nexus-ec2-cfg';
-const SSH_KEY = 'nexus-ec2-ssh';
+const CFG_KEY = 'microtermix-ec2-cfg';
+const SSH_KEY = 'microtermix-ec2-ssh';
 
 interface SshDefaults {
     username: string;
@@ -144,7 +144,7 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
                 onClick={e => e.stopPropagation()}
             >
                 <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-800">
-                    <Database size={16} className="text-nexus-neon" />
+                    <Database size={16} className="text-microtermix-neon" />
                     <h3 className="text-sm font-semibold text-slate-200">SSM Port Forwarding</h3>
                     <span className="ml-2 text-xs text-slate-500 font-mono truncate">{displayName}</span>
                     <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-300">
@@ -166,7 +166,7 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
                             value={remoteHost}
                             onChange={e => setRemoteHost(e.target.value)}
                             placeholder="my-db.xxxx.us-east-1.rds.amazonaws.com"
-                            className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-nexus-neon placeholder-slate-600"
+                            className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-microtermix-neon placeholder-slate-600"
                         />
                     </div>
 
@@ -179,7 +179,7 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
                                 max={65535}
                                 value={remotePort}
                                 onChange={e => setRemotePort(parseInt(e.target.value) || 5432)}
-                                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon"
                             />
                         </div>
                         <div className="flex flex-col gap-1 flex-1">
@@ -190,7 +190,7 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
                                 max={65535}
                                 value={localPort}
                                 onChange={e => setLocalPort(parseInt(e.target.value) || 15432)}
-                                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon"
                             />
                         </div>
                     </div>
@@ -215,7 +215,7 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
                         <button
                             type="submit"
                             disabled={starting || !remoteHost.trim()}
-                            className="px-4 py-1.5 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 rounded text-sm hover:bg-nexus-neon/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            className="px-4 py-1.5 bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 rounded text-sm hover:bg-microtermix-neon/20 transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             {starting && <Loader size={13} className="animate-spin" />}
                             Iniciar túnel
@@ -239,7 +239,7 @@ function ActiveTunnelsPanel({ tunnels, onStop }: ActiveTunnelsPanelProps) {
     return (
         <div className="mx-4 mb-3 border border-slate-700 rounded-lg overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border-b border-slate-700">
-                <Link2 size={13} className="text-nexus-neon" />
+                <Link2 size={13} className="text-microtermix-neon" />
                 <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Túneles activos</span>
             </div>
             <div className="flex flex-col divide-y divide-slate-800">
@@ -303,7 +303,7 @@ function SettingsTab({ creds, setCreds, ssh, setSsh, onSave, onTest, testing, te
                 value={value}
                 onChange={e => onChange(e.target.value)}
                 placeholder={opts?.placeholder ?? ''}
-                className={`bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon placeholder-slate-600 ${opts?.mono ? 'font-mono' : ''}`}
+                className={`bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon placeholder-slate-600 ${opts?.mono ? 'font-mono' : ''}`}
             />
         </div>
     );
@@ -324,7 +324,7 @@ function SettingsTab({ creds, setCreds, ssh, setSsh, onSave, onTest, testing, te
                             value={creds.secret_access_key}
                             onChange={e => setCreds({ ...creds, secret_access_key: e.target.value })}
                             placeholder="••••••••"
-                            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-nexus-neon placeholder-slate-600"
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-microtermix-neon placeholder-slate-600"
                         />
                         <button
                             onClick={() => setShowSecret(s => !s)}
@@ -343,7 +343,7 @@ function SettingsTab({ creds, setCreds, ssh, setSsh, onSave, onTest, testing, te
                             value={creds.session_token ?? ''}
                             onChange={e => setCreds({ ...creds, session_token: e.target.value || undefined })}
                             placeholder="For temporary credentials (STS)"
-                            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-nexus-neon placeholder-slate-600"
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 font-mono focus:outline-none focus:border-microtermix-neon placeholder-slate-600"
                         />
                         <button
                             onClick={() => setShowToken(s => !s)}
@@ -365,7 +365,7 @@ function SettingsTab({ creds, setCreds, ssh, setSsh, onSave, onTest, testing, te
                         type="number"
                         value={ssh.port}
                         onChange={e => setSsh({ ...ssh, port: parseInt(e.target.value) || 22 })}
-                        className="w-24 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                        className="w-24 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon"
                     />
                 </div>
             </div>
@@ -373,7 +373,7 @@ function SettingsTab({ creds, setCreds, ssh, setSsh, onSave, onTest, testing, te
             <div className="flex gap-3 items-center">
                 <button
                     onClick={onSave}
-                    className="px-4 py-1.5 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 rounded text-sm hover:bg-nexus-neon/20 transition-colors"
+                    className="px-4 py-1.5 bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 rounded text-sm hover:bg-microtermix-neon/20 transition-colors"
                 >
                     Save
                 </button>
@@ -526,7 +526,7 @@ function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: I
                                     <button
                                         onClick={handleConnect}
                                         disabled={!canConnect}
-                                        className="px-2.5 py-1 rounded text-xs bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 hover:bg-nexus-neon/20 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                        className="px-2.5 py-1 rounded text-xs bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 hover:bg-microtermix-neon/20 transition-colors disabled:opacity-40 flex items-center gap-1.5"
                                         title={canConnect ? buildSshCommand() : 'No public/private IP available'}
                                     >
                                         <Terminal size={12} />
@@ -693,7 +693,7 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
         try {
             const cmd = action === 'start' ? 'ec2_start_instance'
                 : action === 'stop' ? 'ec2_stop_instance'
-                : 'ec2_reboot_instance';
+                    : 'ec2_reboot_instance';
             await invoke(cmd, { credentials: creds, instanceId: id });
             // Short delay then refresh to pick up state transition
             await new Promise(r => setTimeout(r, 1500));
@@ -734,7 +734,7 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
                         <button
                             key={f}
                             onClick={() => setStateFilter(f)}
-                            className={`px-3 py-1 rounded text-xs capitalize transition-colors ${stateFilter === f ? 'bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30' : 'text-slate-500 hover:text-slate-300'}`}
+                            className={`px-3 py-1 rounded text-xs capitalize transition-colors ${stateFilter === f ? 'bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30' : 'text-slate-500 hover:text-slate-300'}`}
                         >
                             {f} <span className="opacity-60">({counts[f]})</span>
                         </button>
@@ -860,7 +860,7 @@ export function EC2Panel() {
         <div className="flex flex-col h-full bg-slate-950 text-slate-100">
             {/* Header */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
-                <Monitor size={18} className="text-nexus-neon" />
+                <Monitor size={18} className="text-microtermix-neon" />
                 <h2 className="text-sm font-semibold text-slate-200">AWS EC2</h2>
 
                 <div className="flex gap-1 ml-4">
@@ -868,7 +868,7 @@ export function EC2Panel() {
                         <button
                             key={t}
                             onClick={() => setTab(t)}
-                            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs capitalize transition-colors ${tab === t ? 'bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30' : 'text-slate-500 hover:text-slate-300'}`}
+                            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs capitalize transition-colors ${tab === t ? 'bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30' : 'text-slate-500 hover:text-slate-300'}`}
                         >
                             {t === 'settings' && <Settings size={12} />}
                             {t === 'instances' && <Monitor size={12} />}

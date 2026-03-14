@@ -4,7 +4,7 @@
 
 **Goal:** Add a "Time" tab to JiraPanel with full Tempo Cloud API v4 integration: view worklogs by week/month, log time, edit/delete entries, issue enrichment via Jira API.
 
-**Architecture:** New `src/services/tempoApi.ts` + `src/stores/tempoStore.ts` + 5 components in `src/components/jira/`. JiraPanel.tsx only gets minimal changes (new tab entry). shadcn/ui + sonner installed and layered on top of existing nexus-* token system.
+**Architecture:** New `src/services/tempoApi.ts` + `src/stores/tempoStore.ts` + 5 components in `src/components/jira/`. JiraPanel.tsx only gets minimal changes (new tab entry). shadcn/ui + sonner installed and layered on top of existing microtermix-* token system.
 
 **Tech Stack:** Tauri v2, React 19, TypeScript, TailwindCSS v4 (`@tailwindcss/vite`), shadcn/ui (new-york, no CSS vars), Zustand v5, Tempo Cloud API v4, Jira REST API v3.
 
@@ -498,7 +498,7 @@ export const useTempoStore = create<TempoStoreState>()(
         }),
       }),
       {
-        name: 'nexus-tempo-store',
+        name: 'microtermix-tempo-store',
         partialize: (s) => ({ period: s.period }), // only persist period selection
       },
     ),
@@ -580,7 +580,7 @@ export const PeriodSelector: React.FC<PeriodSelectorProps> = ({ period, onChange
             className={cn(
               'px-2.5 py-1 rounded capitalize transition-colors',
               period.type === t
-                ? 'bg-nexus-neon text-slate-900'
+                ? 'bg-microtermix-neon text-slate-900'
                 : 'text-slate-400 hover:text-slate-200',
             )}
           >
@@ -687,7 +687,7 @@ export const WorklogCard: React.FC<WorklogCardProps> = ({
         <Clock size={12} className="text-slate-500" />
         <Badge
           variant="secondary"
-          className="bg-nexus-neon/10 text-nexus-neon border-nexus-neon/20 font-mono text-[11px] px-1.5"
+          className="bg-microtermix-neon/10 text-microtermix-neon border-microtermix-neon/20 font-mono text-[11px] px-1.5"
         >
           {formatDuration(worklog.timeSpentSeconds)}
         </Badge>
@@ -723,7 +723,7 @@ export const WorklogCard: React.FC<WorklogCardProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 text-slate-500 hover:text-nexus-accent"
+                className="h-6 w-6 text-slate-500 hover:text-microtermix-accent"
                 onClick={() => onEdit(worklog)}
               >
                 <Pencil size={12} />
@@ -932,7 +932,7 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
               onChange={e => setIssueInput(e.target.value)}
               placeholder="PROJ-123"
               disabled={isEditing}
-              className="bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-nexus-neon disabled:opacity-60"
+              className="bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-microtermix-neon disabled:opacity-60"
             />
           </div>
 
@@ -967,14 +967,14 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
           {/* Time */}
           <div className="space-y-1.5">
             <Label className="text-xs text-slate-400">
-              Tiempo{parsedSeconds ? <span className="text-nexus-neon ml-1">→ {formatDuration(parsedSeconds)}</span> : null}
+              Tiempo{parsedSeconds ? <span className="text-microtermix-neon ml-1">→ {formatDuration(parsedSeconds)}</span> : null}
             </Label>
             <Input
               value={timeInput}
               onChange={e => { setTimeInput(e.target.value); setTimeError(''); }}
               placeholder="1h 30m · 1.5h · 90m"
               className={cn(
-                'bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-nexus-neon',
+                'bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-microtermix-neon',
                 timeError && 'border-red-500',
               )}
             />
@@ -989,7 +989,7 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
               onChange={e => setDescription(e.target.value)}
               placeholder="¿En qué trabajaste?"
               rows={3}
-              className="bg-slate-800 border-slate-700 text-white text-sm resize-none focus:border-nexus-neon"
+              className="bg-slate-800 border-slate-700 text-white text-sm resize-none focus:border-microtermix-neon"
             />
           </div>
         </div>
@@ -1005,7 +1005,7 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
           <Button
             onClick={handleSave}
             disabled={saving || !issueInput.trim() || !timeInput.trim()}
-            className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-semibold disabled:opacity-40"
+            className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-semibold disabled:opacity-40"
           >
             {saving ? <Loader2 size={14} className="animate-spin mr-1.5" /> : null}
             {isEditing ? 'Guardar cambios' : 'Registrar'}
@@ -1127,7 +1127,7 @@ export const WorklogList: React.FC<WorklogListProps> = ({ worklogs, onEdit, onDe
       <Separator className="bg-slate-800" />
       <div className="flex justify-between items-center px-1 pb-2">
         <span className="text-xs text-slate-500">Total del período</span>
-        <span className="text-sm font-bold font-mono text-nexus-neon">
+        <span className="text-sm font-bold font-mono text-microtermix-neon">
           {formatDuration(totalSeconds)}
         </span>
       </div>
@@ -1264,7 +1264,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId }) => {
         <AlertCircle size={24} />
         <p className="text-sm">Tempo token no configurado.</p>
         <p className="text-xs text-slate-600">
-          Ve a <span className="text-nexus-neon">Configuración</span> y completa el campo "Tempo Token".
+          Ve a <span className="text-microtermix-neon">Configuración</span> y completa el campo "Tempo Token".
         </p>
       </div>
     );
@@ -1289,7 +1289,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId }) => {
 
           <div className="flex items-center gap-2">
             {totalPeriod > 0 && (
-              <Badge variant="outline" className="border-nexus-neon/30 text-nexus-neon font-mono text-[11px]">
+              <Badge variant="outline" className="border-microtermix-neon/30 text-microtermix-neon font-mono text-[11px]">
                 {formatDuration(totalPeriod)} total
               </Badge>
             )}
@@ -1304,7 +1304,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId }) => {
             </Button>
             <Button
               size="sm"
-              className="h-7 bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 text-xs font-semibold px-3 gap-1"
+              className="h-7 bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 text-xs font-semibold px-3 gap-1"
               onClick={() => handleLogTime()}
             >
               <Plus size={12} /> Registrar
@@ -1346,7 +1346,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId }) => {
                 onChange={e => setIssueSearchInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleIssueSearch()}
                 placeholder="PROJ-123"
-                className="bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-nexus-neon h-8"
+                className="bg-slate-800 border-slate-700 text-white font-mono text-sm focus:border-microtermix-neon h-8"
               />
               <Button
                 size="sm"
@@ -1359,7 +1359,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId }) => {
               {activeIssueId && (
                 <Button
                   size="sm"
-                  className="h-8 bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 text-xs font-semibold gap-1"
+                  className="h-8 bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 text-xs font-semibold gap-1"
                   onClick={() => handleLogTime(issueSearchInput.trim().toUpperCase())}
                 >
                   <Plus size={12} /> Log

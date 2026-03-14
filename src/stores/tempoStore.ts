@@ -171,7 +171,7 @@ export const useTempoStore = create<TempoStoreState>()(
         }),
       }),
       {
-        name: 'nexus-tempo-store',
+        name: 'microtermix-tempo-store',
         partialize: (s) => ({ period: s.period }),
       },
     ),

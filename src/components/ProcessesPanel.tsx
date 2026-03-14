@@ -84,15 +84,15 @@ export const ProcessesPanel: React.FC = () => {
             {/* Header */}
             <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-nexus-neon/10 rounded-lg">
-                        <Activity size={18} className="text-nexus-neon" />
+                    <div className="p-1.5 bg-microtermix-neon/10 rounded-lg">
+                        <Activity size={18} className="text-microtermix-neon" />
                     </div>
                     <div>
                         <h2 className="text-sm font-bold text-slate-100">Procesos en Escucha</h2>
                         <p className="text-[10px] text-slate-500 font-mono uppercase tracking-wider">Análisis de red en tiempo real</p>
                     </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3">
                     <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 mr-2">
                         <Button
@@ -105,21 +105,21 @@ export const ProcessesPanel: React.FC = () => {
                         <Button
                             variant="ghost" size="xs"
                             onClick={() => setTechFilter('node')}
-                            className={cn("h-7 px-2.5 text-[10px] font-bold uppercase tracking-tight", techFilter === 'node' ? "bg-slate-800 text-nexus-neon" : "text-slate-500")}
+                            className={cn("h-7 px-2.5 text-[10px] font-bold uppercase tracking-tight", techFilter === 'node' ? "bg-slate-800 text-microtermix-neon" : "text-slate-500")}
                         >
                             Node.js
                         </Button>
                         <Button
                             variant="ghost" size="xs"
                             onClick={() => setTechFilter('java')}
-                            className={cn("h-7 px-2.5 text-[10px] font-bold uppercase tracking-tight", techFilter === 'java' ? "bg-slate-800 text-nexus-neon" : "text-slate-500")}
+                            className={cn("h-7 px-2.5 text-[10px] font-bold uppercase tracking-tight", techFilter === 'java' ? "bg-slate-800 text-microtermix-neon" : "text-slate-500")}
                         >
                             Java
                         </Button>
                         <Button
                             variant="ghost" size="xs"
                             onClick={() => setTechFilter('web')}
-                            className={cn("h-7 px-2.5 text-[10px] font-bold uppercase tracking-tight", techFilter === 'web' ? "bg-slate-800 text-nexus-neon" : "text-slate-500")}
+                            className={cn("h-7 px-2.5 text-[10px] font-bold uppercase tracking-tight", techFilter === 'web' ? "bg-slate-800 text-microtermix-neon" : "text-slate-500")}
                         >
                             Web
                         </Button>
@@ -144,7 +144,7 @@ export const ProcessesPanel: React.FC = () => {
             </div>
 
             {error && (
-                <div className="m-4 p-3 rounded-lg bg-nexus-danger/10 border border-nexus-danger/20 text-nexus-danger text-xs flex items-center gap-2">
+                <div className="m-4 p-3 rounded-lg bg-microtermix-danger/10 border border-microtermix-danger/20 text-microtermix-danger text-xs flex items-center gap-2">
                     <Activity size={14} />
                     <span>Error al obtener procesos: {(error as Error).message}</span>
                 </div>
@@ -153,7 +153,7 @@ export const ProcessesPanel: React.FC = () => {
             <div className="flex-1 overflow-auto scrollbar-hide px-4">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-                        <Loader2 size={32} className="animate-spin text-nexus-neon/40" />
+                        <Loader2 size={32} className="animate-spin text-microtermix-neon/40" />
                         <span className="text-sm font-medium animate-pulse">Analizando puertos del sistema...</span>
                     </div>
                 ) : processes.length === 0 ? (
@@ -186,7 +186,7 @@ export const ProcessesPanel: React.FC = () => {
                                         <td className="py-2.5 px-3 rounded-l-lg border-y border-l border-slate-800 group-hover:border-slate-700">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-lg bg-slate-950 flex items-center justify-center border border-slate-800 shrink-0">
-                                                    <span className="text-[10px] font-bold text-nexus-neon/70">{proc.name[0]?.toUpperCase() || '?'}</span>
+                                                    <span className="text-[10px] font-bold text-microtermix-neon/70">{proc.name[0]?.toUpperCase() || '?'}</span>
                                                 </div>
                                                 <div className="flex flex-col min-w-0">
                                                     <div className="flex items-center gap-2">
@@ -196,8 +196,8 @@ export const ProcessesPanel: React.FC = () => {
                                                         {proc.serviceId && (
                                                             <Tooltip>
                                                                 <TooltipTrigger render={
-                                                                    <Badge className="bg-nexus-neon text-nexus-darker border-none text-[8px] h-4 px-1 font-black animate-pulse">
-                                                                        NEXUS
+                                                                    <Badge className="bg-microtermix-neon text-microtermix-darker border-none text-[8px] h-4 px-1 font-black animate-pulse">
+                                                                        Microtermix
                                                                     </Badge>
                                                                 } />
                                                                 <TooltipContent>Servicio gestionado por Microtermix: {proc.serviceId}</TooltipContent>
@@ -205,7 +205,7 @@ export const ProcessesPanel: React.FC = () => {
                                                         )}
                                                     </div>
                                                     <div className="flex items-center gap-1.5 font-mono text-[9px] text-slate-500">
-                                                        <span className="text-nexus-accent">PID: {proc.pid}</span>
+                                                        <span className="text-microtermix-accent">PID: {proc.pid}</span>
                                                         {proc.pid > 0 && proc.path !== 'unknown' && (
                                                             <span className="truncate max-w-[120px] opacity-50 hidden md:block">· {proc.path}</span>
                                                         )}
@@ -220,7 +220,7 @@ export const ProcessesPanel: React.FC = () => {
                                         </td>
                                         <td className="py-2.5 px-3 border-y border-slate-800 group-hover:border-slate-700">
                                             <div className="flex flex-col">
-                                                <span className={cn("font-mono text-[11px]", localhost ? "text-nexus-neon" : "text-slate-300")}>
+                                                <span className={cn("font-mono text-[11px]", localhost ? "text-microtermix-neon" : "text-slate-300")}>
                                                     {proc.localAddress}
                                                 </span>
                                                 {localhost && (
@@ -243,7 +243,7 @@ export const ProcessesPanel: React.FC = () => {
                                                                 variant="ghost"
                                                                 size="icon-xs"
                                                                 onClick={() => openInBrowser(proc.localAddress)}
-                                                                className="text-slate-500 hover:text-nexus-neon hover:bg-nexus-neon/10"
+                                                                className="text-slate-500 hover:text-microtermix-neon hover:bg-microtermix-neon/10"
                                                             >
                                                                 <Globe size={14} />
                                                             </Button>
@@ -251,7 +251,7 @@ export const ProcessesPanel: React.FC = () => {
                                                         <TooltipContent>Abrir en navegador (localhost)</TooltipContent>
                                                     </Tooltip>
                                                 )}
-                                                
+
                                                 <Tooltip>
                                                     <TooltipTrigger render={
                                                         <Button
@@ -259,7 +259,7 @@ export const ProcessesPanel: React.FC = () => {
                                                             size="icon-xs"
                                                             onClick={() => setConfirmConfirmKill({ pid: proc.pid, name: proc.name })}
                                                             disabled={killing === proc.pid || proc.pid === 0}
-                                                            className="text-slate-500 hover:text-nexus-danger hover:bg-nexus-danger/10 transition-all"
+                                                            className="text-slate-500 hover:text-microtermix-danger hover:bg-microtermix-danger/10 transition-all"
                                                         >
                                                             {killing === proc.pid ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                                                         </Button>
@@ -280,11 +280,11 @@ export const ProcessesPanel: React.FC = () => {
             <Dialog open={!!confirmKill} onOpenChange={(open) => !open && setConfirmConfirmKill(null)}>
                 <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-[400px]">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-nexus-danger">
+                        <DialogTitle className="flex items-center gap-2 text-microtermix-danger">
                             <Trash2 size={18} /> Confirmar terminación
                         </DialogTitle>
                         <DialogDescription className="text-slate-400 pt-2">
-                            ¿Estás seguro de que deseas terminar el proceso <strong className="text-white">{confirmKill?.name}</strong> con PID <strong className="text-nexus-accent">{confirmKill?.pid}</strong>?
+                            ¿Estás seguro de que deseas terminar el proceso <strong className="text-white">{confirmKill?.name}</strong> con PID <strong className="text-microtermix-accent">{confirmKill?.pid}</strong>?
                             <br /><br />
                             Esta acción forzará el cierre de la aplicación y podría causar pérdida de datos no guardados.
                         </DialogDescription>

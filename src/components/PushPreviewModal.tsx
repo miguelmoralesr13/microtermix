@@ -143,7 +143,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                 {/* Header */}
                 <DialogHeader className="flex flex-row items-center justify-between gap-3 px-5 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0 m-0 space-y-0 text-left relative">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <UploadCloud size={18} className="text-nexus-accent shrink-0" />
+                        <UploadCloud size={18} className="text-microtermix-accent shrink-0" />
                         <div className="flex-1 min-w-0">
                             <DialogTitle className="text-sm font-bold text-slate-100 flex items-center m-0">
                                 Vista previa de Push
@@ -152,7 +152,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                             {currentBranch && (
                                 <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1">
                                     <Hash size={10} />
-                                    <span className="font-mono text-nexus-neon">{currentBranch}</span>
+                                    <span className="font-mono text-microtermix-neon">{currentBranch}</span>
                                     {commits.length > 0 && (
                                         <span className="text-slate-500">— {commits.length} commit{commits.length !== 1 ? 's' : ''} pendiente{commits.length !== 1 ? 's' : ''}</span>
                                     )}
@@ -179,7 +179,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                         </div>
                     ) : commits.length === 0 && !error ? (
                         <div className="flex flex-col items-center justify-center py-16 text-slate-600 gap-3">
-                            <CheckCircle size={32} className="text-nexus-success/50" />
+                            <CheckCircle size={32} className="text-microtermix-success/50" />
                             <div className="text-center">
                                 <div className="text-sm font-medium text-slate-400">Todo está actualizado</div>
                                 <div className="text-xs text-slate-600 mt-1">No hay commits locales pendientes de subir</div>
@@ -194,7 +194,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                                     className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-slate-800/60 transition-colors group"
                                 >
                                     <div className="flex flex-col items-center shrink-0 mt-0.5">
-                                        <div className={`w-2 h-2 rounded-full shrink-0 ${i === 0 ? 'bg-nexus-accent' : 'bg-slate-600'}`} />
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${i === 0 ? 'bg-microtermix-accent' : 'bg-slate-600'}`} />
                                         {i < commits.length - 1 && <div className="w-px flex-1 bg-slate-800 mt-1 min-h-[16px]" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -202,7 +202,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                                             <span className="text-sm text-slate-200 group-hover:text-white line-clamp-1 flex-1">
                                                 {commit.message}
                                             </span>
-                                            <span className="font-mono text-[10px] text-nexus-neon bg-nexus-neon/10 px-1.5 py-0.5 rounded shrink-0">
+                                            <span className="font-mono text-[10px] text-microtermix-neon bg-microtermix-neon/10 px-1.5 py-0.5 rounded shrink-0">
                                                 {commit.shortHash}
                                             </span>
                                         </div>
@@ -218,7 +218,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                                             </span>
                                         </div>
                                     </div>
-                                    <ChevronRight size={14} className="text-slate-600 group-hover:text-nexus-accent shrink-0 mt-0.5 transition-colors" />
+                                    <ChevronRight size={14} className="text-slate-600 group-hover:text-microtermix-accent shrink-0 mt-0.5 transition-colors" />
                                 </button>
                             ))}
                         </div>
@@ -227,7 +227,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
 
                 {/* Error banner */}
                 {error && (
-                    <div className="px-4 py-2.5 bg-nexus-danger/10 border-t border-nexus-danger/20 flex items-start gap-2 text-xs text-nexus-danger shrink-0">
+                    <div className="px-4 py-2.5 bg-microtermix-danger/10 border-t border-microtermix-danger/20 flex items-start gap-2 text-xs text-microtermix-danger shrink-0">
                         <AlertCircle size={13} className="shrink-0 mt-0.5" />
                         <span className="whitespace-pre-wrap">{error}</span>
                     </div>
@@ -235,7 +235,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
 
                 {/* Push success */}
                 {pushSuccess && (
-                    <div className="px-4 py-2.5 bg-nexus-success/10 border-t border-nexus-success/20 flex items-center gap-2 text-xs text-nexus-success shrink-0">
+                    <div className="px-4 py-2.5 bg-microtermix-success/10 border-t border-microtermix-success/20 flex items-center gap-2 text-xs text-microtermix-success shrink-0">
                         <CheckCircle size={13} />
                         ¡Push completado! Cerrando...
                     </div>
@@ -260,7 +260,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                         <Button
                             onClick={handlePush}
                             disabled={pushing || pushSuccess || commits.length === 0}
-                            className="bg-nexus-accent text-white hover:bg-nexus-accent/80 font-medium"
+                            className="bg-microtermix-accent text-white hover:bg-microtermix-accent/80 font-medium"
                         >
                             {pushing ? <RefreshCw size={14} className="animate-spin mr-2" /> : <UploadCloud size={14} className="mr-2" />}
                             {pushing ? 'Subiendo...' : 'Push'}

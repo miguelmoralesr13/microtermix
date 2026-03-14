@@ -29,7 +29,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     setVitePreviewOpen
 }) => {
     const { state, executeProjectScript } = useWorkspace();
-    
+
     // Zustand Store
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const activeTerminalTab = useProcessStore(s => s.activeTerminalTab);
@@ -67,7 +67,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
 
     const allScripts = useMemo(() => {
         const scripts = new Set<string>();
-        
+
         // Add Java presets if we are working with Java
         if (activeSelectionType === 'java') {
             JAVA_PRESETS.forEach(p => scripts.add(p.cmd));
@@ -76,7 +76,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         state.projects.forEach(p => {
             // If we have an active type, only collect scripts from projects of that type
             if (activeSelectionType && String(p.project_type) !== activeSelectionType) return;
-            
+
             if (p.scripts) p.scripts.forEach(s => scripts.add(s));
         });
         return Array.from(scripts);
@@ -86,7 +86,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         const envs = new Set<string>();
         state.projects.forEach(p => {
             try {
-                const rawStore = localStorage.getItem(`nexus-envs-${(p.path as string).replace(/[/\\:]/g, '_')}`);
+                const rawStore = localStorage.getItem(`microtermix-envs-${(p.path as string).replace(/[/\\:]/g, '_')}`);
                 if (rawStore) {
                     const parsed = JSON.parse(rawStore);
                     if (parsed.envs) {
@@ -110,12 +110,12 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
 
         setSelectedProjects(prev => {
             if (prev.includes(path)) return prev.filter(p => p !== path);
-            
+
             // Smart Filter: If we have an active type, only allow same type
             if (activeSelectionType && String(project.project_type) !== activeSelectionType) {
                 return prev;
             }
-            
+
             return [...prev, path];
         });
     };
@@ -192,9 +192,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     const handleOpenViteWrapper = async () => {
         try {
             const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
-            setViteWrapperCandidates(list.map((p: ProxyCandidateItem) => ({ 
-                project_path: p.project_path, 
-                display_name: p.display_name 
+            setViteWrapperCandidates(list.map((p: ProxyCandidateItem) => ({
+                project_path: p.project_path,
+                display_name: p.display_name
             })));
             setViteWrapperModalOpen(true);
         } catch (_) {

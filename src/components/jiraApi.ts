@@ -1,8 +1,8 @@
 // ── Jira REST API v3 helper ────────────────────────────────────────────────────
 
-export const JIRA_CONFIG_KEY = 'nexus-jira-config';
-export const JIRA_ACCOUNTS_KEY = 'nexus-jira-accounts';
-export const JIRA_ACTIVE_KEY = 'nexus-jira-active';
+export const JIRA_CONFIG_KEY = 'microtermix-jira-config';
+export const JIRA_ACCOUNTS_KEY = 'microtermix-jira-accounts';
+export const JIRA_ACTIVE_KEY = 'microtermix-jira-active';
 
 // ── Multi-account types (JiraConfig declared below — TS resolves at compile time) ──
 

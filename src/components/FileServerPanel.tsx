@@ -20,14 +20,14 @@ export interface FileServerRouteEntry {
 }
 
 const LANGUAGES = [
-    { value: 'json',       label: 'JSON' },
+    { value: 'json', label: 'JSON' },
     { value: 'javascript', label: 'JavaScript' },
     { value: 'typescript', label: 'TypeScript' },
-    { value: 'html',       label: 'HTML' },
-    { value: 'css',        label: 'CSS' },
-    { value: 'xml',        label: 'XML' },
-    { value: 'yaml',       label: 'YAML' },
-    { value: 'plaintext',  label: 'Texto plano' },
+    { value: 'html', label: 'HTML' },
+    { value: 'css', label: 'CSS' },
+    { value: 'xml', label: 'XML' },
+    { value: 'yaml', label: 'YAML' },
+    { value: 'plaintext', label: 'Texto plano' },
 ] as const;
 
 type MonacoLang = typeof LANGUAGES[number]['value'];
@@ -69,7 +69,7 @@ function contentTypeFromPath(path: string): string {
     return map[ext] || 'application/octet-stream';
 }
 
-const STORAGE_KEY = 'nexus-file-server';
+const STORAGE_KEY = 'microtermix-file-server';
 function loadSaved(): { port: number; bindHost: string; routes: FileServerRouteEntry[]; baseDir?: string } {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -206,7 +206,7 @@ export const FileServerPanel: React.FC = () => {
     const handleStart = useCallback(async () => {
         setError(null);
         const valid = routes.filter(r => r.path.trim() && (r.content?.trim?.()?.length ?? 0) > 0);
-        
+
         const config = {
             port,
             bindHost: bindHost || undefined,
@@ -221,7 +221,7 @@ export const FileServerPanel: React.FC = () => {
         try {
             await invoke('start_file_server', { config });
             setRunning(true);
-            setLogs([]); 
+            setLogs([]);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
@@ -251,13 +251,13 @@ export const FileServerPanel: React.FC = () => {
                         type="number" min={1} max={65535} value={port}
                         onChange={e => setPort(parseInt(e.target.value, 10) || DEFAULT_FILE_SERVER_PORT)}
                         disabled={running}
-                        className="w-20 bg-slate-900 border-slate-800 text-slate-200 font-mono text-xs h-8 focus-visible:ring-nexus-neon disabled:opacity-60"
+                        className="w-20 bg-slate-900 border-slate-800 text-slate-200 font-mono text-xs h-8 focus-visible:ring-microtermix-neon disabled:opacity-60"
                     />
                 </div>
                 <div className="flex items-center gap-2">
                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Host</label>
                     <Select value={bindHost} onValueChange={v => v && setBindHost(v)} disabled={running}>
-                        <SelectTrigger className="h-8 w-28 border-slate-800 bg-slate-900 text-slate-200 font-mono text-xs focus:ring-nexus-neon">
+                        <SelectTrigger className="h-8 w-28 border-slate-800 bg-slate-900 text-slate-200 font-mono text-xs focus:ring-microtermix-neon">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -280,7 +280,7 @@ export const FileServerPanel: React.FC = () => {
                         />
                         {!running && (
                             <Button variant="outline" size="icon-xs" onClick={handleSelectFolder} className="h-8 w-8 bg-slate-900 border-slate-800 hover:bg-slate-800">
-                                <FolderOpen size={14} className="text-nexus-accent" />
+                                <FolderOpen size={14} className="text-microtermix-accent" />
                             </Button>
                         )}
                         {!running && baseDir && (
@@ -308,7 +308,7 @@ export const FileServerPanel: React.FC = () => {
                             </Button>
                         </>
                     ) : (
-                        <Button onClick={handleStart} disabled={!canStart} className="bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/80 font-black gap-1.5 h-8 text-xs uppercase">
+                        <Button onClick={handleStart} disabled={!canStart} className="bg-microtermix-neon text-microtermix-darker hover:bg-microtermix-neon/80 font-black gap-1.5 h-8 text-xs uppercase">
                             <Power size={14} /> Iniciar Servidor
                         </Button>
                     )}
@@ -316,7 +316,7 @@ export const FileServerPanel: React.FC = () => {
             </div>
 
             {error && (
-                <div className="shrink-0 mx-4 mt-3 px-3 py-2 rounded-lg bg-nexus-danger/10 border border-nexus-danger/30 text-nexus-danger text-xs flex items-center gap-2">
+                <div className="shrink-0 mx-4 mt-3 px-3 py-2 rounded-lg bg-microtermix-danger/10 border border-microtermix-danger/30 text-microtermix-danger text-xs flex items-center gap-2">
                     <Activity size={14} /> <span>{error}</span>
                 </div>
             )}
@@ -332,13 +332,13 @@ export const FileServerPanel: React.FC = () => {
                                 variant="outline"
                                 size="xs"
                                 onClick={addRoute}
-                                className="h-7 border-dashed border-slate-700 text-slate-500 hover:text-nexus-neon hover:border-nexus-neon/40 hover:bg-nexus-neon/5 gap-2"
+                                className="h-7 border-dashed border-slate-700 text-slate-500 hover:text-microtermix-neon hover:border-microtermix-neon/40 hover:bg-microtermix-neon/5 gap-2"
                             >
                                 <Plus size={14} /> Añadir Ruta
                             </Button>
                         )}
                     </div>
-                    
+
                     {routes.length === 0 ? (
                         <div className="py-12 text-center text-slate-700 text-xs italic border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
                             No hay rutas virtuales configuradas.
@@ -350,21 +350,21 @@ export const FileServerPanel: React.FC = () => {
                                 const isJson = contentType.includes('json');
                                 const isHtml = contentType.includes('html');
                                 const isText = contentType.includes('plain');
-                                
+
                                 return (
-                                    <div 
-                                        key={i} 
+                                    <div
+                                        key={i}
                                         className={cn(
                                             "flex flex-col rounded-xl border p-3 transition-all group relative",
-                                            running ? "bg-slate-900/20 border-slate-800 opacity-80" : "bg-slate-900/40 border-slate-800 hover:border-slate-600 hover:shadow-lg hover:shadow-nexus-neon/5"
+                                            running ? "bg-slate-900/20 border-slate-800 opacity-80" : "bg-slate-900/40 border-slate-800 hover:border-slate-600 hover:shadow-lg hover:shadow-microtermix-neon/5"
                                         )}
                                     >
                                         <div className="flex items-start justify-between mb-3">
                                             <div className={cn(
                                                 "p-2 rounded-lg",
                                                 isJson ? "bg-amber-500/10 text-amber-500" :
-                                                isHtml ? "bg-blue-500/10 text-blue-500" :
-                                                "bg-slate-500/10 text-slate-500"
+                                                    isHtml ? "bg-blue-500/10 text-blue-500" :
+                                                        "bg-slate-500/10 text-slate-500"
                                             )}>
                                                 <FileCode size={16} />
                                             </div>
@@ -376,18 +376,18 @@ export const FileServerPanel: React.FC = () => {
                                         <div className="flex-1 space-y-2">
                                             <div className="relative group/input">
                                                 <Input
-                                                    type="text" 
-                                                    value={r.path} 
+                                                    type="text"
+                                                    value={r.path}
                                                     onChange={e => updateRoutePath(i, e.target.value)}
-                                                    placeholder="/config.json" 
+                                                    placeholder="/config.json"
                                                     disabled={running}
-                                                    className="bg-slate-950/50 border-slate-800 text-nexus-neon font-mono text-[11px] h-8 px-2 pr-8 focus-visible:ring-1 focus-visible:ring-nexus-neon disabled:opacity-100 disabled:border-transparent"
+                                                    className="bg-slate-950/50 border-slate-800 text-microtermix-neon font-mono text-[11px] h-8 px-2 pr-8 focus-visible:ring-1 focus-visible:ring-microtermix-neon disabled:opacity-100 disabled:border-transparent"
                                                 />
                                                 <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-700 group-hover/input:text-slate-500">
                                                     <ExternalLink size={10} />
                                                 </div>
                                             </div>
-                                            
+
                                             <div className="flex items-center justify-between px-1">
                                                 <span className="text-[10px] font-mono text-slate-600">
                                                     {r.content.length > 0 ? (r.content.length < 1024 ? `${r.content.length} B` : `${(r.content.length / 1024).toFixed(1)} KB`) : '0 B'}
@@ -395,11 +395,11 @@ export const FileServerPanel: React.FC = () => {
                                                 <div className="flex items-center gap-1">
                                                     <Tooltip>
                                                         <TooltipTrigger render={
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon-xs" 
-                                                                onClick={() => openEditor(i)} 
-                                                                className="h-7 w-7 text-slate-500 hover:text-nexus-neon hover:bg-slate-800"
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-xs"
+                                                                onClick={() => openEditor(i)}
+                                                                className="h-7 w-7 text-slate-500 hover:text-microtermix-neon hover:bg-slate-800"
                                                             >
                                                                 <Pencil size={12} />
                                                             </Button>
@@ -412,11 +412,11 @@ export const FileServerPanel: React.FC = () => {
                                                             <input type="file" ref={el => { fileInputRefs.current[i] = el; }} className="hidden" onChange={e => handleFileUpload(i, e)} />
                                                             <Tooltip>
                                                                 <TooltipTrigger render={
-                                                                    <Button 
-                                                                        variant="ghost" 
-                                                                        size="icon-xs" 
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon-xs"
                                                                         onClick={() => fileInputRefs.current[i]?.click()}
-                                                                        className="h-7 w-7 text-slate-500 hover:text-nexus-neon hover:bg-slate-800"
+                                                                        className="h-7 w-7 text-slate-500 hover:text-microtermix-neon hover:bg-slate-800"
                                                                     >
                                                                         <Upload size={12} />
                                                                     </Button>
@@ -426,11 +426,11 @@ export const FileServerPanel: React.FC = () => {
 
                                                             <Tooltip>
                                                                 <TooltipTrigger render={
-                                                                    <Button 
-                                                                        variant="ghost" 
-                                                                        size="icon-xs" 
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon-xs"
                                                                         onClick={() => removeRoute(i)}
-                                                                        className="h-7 w-7 text-slate-500 hover:text-nexus-danger hover:bg-red-500/10"
+                                                                        className="h-7 w-7 text-slate-500 hover:text-microtermix-danger hover:bg-red-500/10"
                                                                     >
                                                                         <Trash2 size={12} />
                                                                     </Button>
@@ -485,12 +485,12 @@ export const FileServerPanel: React.FC = () => {
                             Escanea para abrir en tu móvil o tablet (asegúrate de estar en la misma red).
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="p-4 bg-white rounded-2xl shadow-2xl shadow-nexus-neon/10">
+                    <div className="p-4 bg-white rounded-2xl shadow-2xl shadow-microtermix-neon/10">
                         <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(baseUrl.replace('localhost', '127.0.0.1'))}`} alt="QR Code" className="w-48 h-48" />
                     </div>
                     <div className="mt-6 w-full p-3 bg-slate-950 rounded-lg border border-slate-800">
                         <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">URL Detectada</p>
-                        <p className="text-xs font-mono text-nexus-neon truncate">{baseUrl}</p>
+                        <p className="text-xs font-mono text-microtermix-neon truncate">{baseUrl}</p>
                     </div>
                     <Button className="mt-6 w-full" variant="outline" onClick={() => setShowQr(false)}>Cerrar</Button>
                 </DialogContent>
@@ -500,10 +500,10 @@ export const FileServerPanel: React.FC = () => {
             <Dialog open={editingIndex !== null} onOpenChange={open => !open && setEditingIndex(null)}>
                 <DialogContent className="!inset-4 !w-auto !h-auto !max-w-none !max-h-none !translate-x-0 !translate-y-0 rounded-xl flex flex-col bg-slate-900 border border-slate-700 p-0" showCloseButton={false}>
                     <DialogHeader className="flex flex-row items-center gap-2 px-4 py-2.5 border-b border-slate-700 shrink-0">
-                        <FileCode size={14} className="text-nexus-neon shrink-0" />
+                        <FileCode size={14} className="text-microtermix-neon shrink-0" />
                         <DialogTitle className="text-slate-200 font-mono text-sm flex-1 truncate">{editingRoute?.path || ''}</DialogTitle>
                         <Select value={editLang} onValueChange={v => v && setEditLang(v as MonacoLang)}>
-                            <SelectTrigger className="h-7 w-36 border-slate-700 bg-slate-800 text-slate-300 text-xs focus-visible:border-nexus-neon shrink-0">
+                            <SelectTrigger className="h-7 w-36 border-slate-700 bg-slate-800 text-slate-300 text-xs focus-visible:border-microtermix-neon shrink-0">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>{LANGUAGES.map(l => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
@@ -516,7 +516,7 @@ export const FileServerPanel: React.FC = () => {
                         <span className="text-[10px] font-mono text-slate-600">{editDraft.length} chars · {editDraft.split('\n').length} líneas</span>
                         <div className="flex gap-2">
                             <Button variant="ghost" onClick={() => setEditingIndex(null)} className="text-slate-400">Cancelar</Button>
-                            <Button onClick={saveEditor} className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">Guardar</Button>
+                            <Button onClick={saveEditor} className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold">Guardar</Button>
                         </div>
                     </div>
                 </DialogContent>

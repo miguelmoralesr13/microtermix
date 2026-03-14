@@ -65,7 +65,7 @@ export const WorklogList: React.FC<WorklogListProps> = ({ worklogs, onEdit, onDe
       })}
       <div className="border-t border-slate-800 pt-3 flex justify-between items-center px-1">
         <span className="text-xs text-slate-500">Total del período</span>
-        <span className="text-sm font-bold font-mono text-nexus-neon">{formatDuration(totalSeconds)}</span>
+        <span className="text-sm font-bold font-mono text-microtermix-neon">{formatDuration(totalSeconds)}</span>
       </div>
     </div>
   );

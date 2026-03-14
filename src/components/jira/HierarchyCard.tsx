@@ -16,7 +16,7 @@ export function HierarchyCard({
         <div
             onClick={onSelect}
             className={`group flex items-start gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${selected
-                ? 'bg-nexus-neon/20 border-nexus-neon/60 shadow-[0_0_12px_rgba(0,255,170,0.15)] border-l-4'
+                ? 'bg-microtermix-neon/20 border-microtermix-neon/60 shadow-[0_0_12px_rgba(0,255,170,0.15)] border-l-4'
                 : released
                     ? 'bg-slate-900/40 border-slate-800/50 opacity-60 hover:opacity-80'
                     : 'bg-slate-900/60 border-slate-800 hover:bg-slate-800/60 hover:border-slate-600 border-l-4 border-l-transparent'
@@ -32,7 +32,7 @@ export function HierarchyCard({
             )}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                    <span className="font-mono text-[10px] text-nexus-neon/60">{issue.key}</span>
+                    <span className="font-mono text-[10px] text-microtermix-neon/60">{issue.key}</span>
                     {released && (
                         <span className="px-1.5 py-px text-[9px] rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold uppercase">
                             {issue.fields.status.name}
@@ -51,7 +51,7 @@ export function HierarchyCard({
                     {onAssign && (
                         <button
                             onClick={e => { e.stopPropagation(); onAssign(); }}
-                            className="p-0.5 rounded flex items-center justify-center hover:bg-nexus-neon/10 text-slate-500 hover:text-nexus-neon shrink-0 transition-colors"
+                            className="p-0.5 rounded flex items-center justify-center hover:bg-microtermix-neon/10 text-slate-500 hover:text-microtermix-neon shrink-0 transition-colors"
                             title="Asignarme esta tarea"
                         >
                             <UserCheck size={11} />
@@ -65,7 +65,7 @@ export function HierarchyCard({
                                 title="Ver Defectos Asociados"
                             >
                                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                                 </svg>
                                 Bugs
                             </button>
@@ -93,7 +93,7 @@ export function HierarchyCard({
                     </div>
                 )}
             </div>
-            {selected && <ChevronRight size={12} className="text-nexus-neon shrink-0 mt-1" />}
+            {selected && <ChevronRight size={12} className="text-microtermix-neon shrink-0 mt-1" />}
         </div>
     );
 }

@@ -40,7 +40,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [applyingAction, setApplyingAction] = useState(false);
     const [selectedHunkId, setSelectedHunkId] = useState<number | null>(null);
-    
+
     const monacoTheme = useMonacoTheme();
     const editorRef = useRef<any>(null);
 
@@ -49,7 +49,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         if (!ext) return 'plaintext';
         const map: Record<string, string> = {
             'js': 'javascript', 'jsx': 'javascript', 'ts': 'typescript', 'tsx': 'typescript',
-            'rs': 'rust', 'py': 'python', 'json': 'json', 'html': 'html', 'css': 'css', 
+            'rs': 'rust', 'py': 'python', 'json': 'json', 'html': 'html', 'css': 'css',
             'md': 'markdown', 'yml': 'yaml', 'yaml': 'yaml', 'toml': 'toml', 'go': 'go'
         };
         return map[ext] || 'plaintext';
@@ -102,7 +102,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         if (!editorRef.current) return;
         setSelectedHunkId(hunk.id);
         editorRef.current.getModifiedEditor().revealLineInCenter(hunk.new_start);
-        
+
         // Highlight the lines briefly
         const editor = editorRef.current.getModifiedEditor();
         const decorations = editor.deltaDecorations([], [
@@ -120,7 +120,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
             // Logic: keep only the targeted hunk, reject all others
             const allIndices = hunks.map(h => h.id);
             const rejectIndices = allIndices.filter(id => id !== hunkId);
-            
+
             const partialModified: string = await invoke('apply_rejected_hunks', {
                 original: originalText,
                 modified: modifiedText,
@@ -134,11 +134,11 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
                 filePath: file
             });
 
-            await invoke('git_apply_patch', { 
-                projectPath, 
-                patchContent: partialPatch, 
-                reverse: mode === 'staged', 
-                target: 'index' 
+            await invoke('git_apply_patch', {
+                projectPath,
+                patchContent: partialPatch,
+                reverse: mode === 'staged',
+                target: 'index'
             });
 
             await loadContent();
@@ -173,21 +173,21 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         )}>
             {/* Toolbar */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 bg-slate-900/80 shrink-0">
-                <GitCompare size={14} className="text-nexus-neon" />
+                <GitCompare size={14} className="text-microtermix-neon" />
                 <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">Diff Viewer</span>
                 <span className="text-slate-700">/</span>
                 <span className="font-mono text-xs text-slate-300 truncate flex-1">{file}</span>
-                
+
                 <div className="flex items-center gap-1 ml-auto">
-                    <Button 
+                    <Button
                         variant="outline"
                         size="xs"
-                        onClick={stageWholeFile} 
+                        onClick={stageWholeFile}
                         className={cn(
                             "h-7 gap-1.5 px-2.5 font-bold transition-all",
-                            mode === 'unstaged' 
+                            mode === 'unstaged'
                                 ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
-                                : "bg-nexus-accent/10 text-nexus-accent border-nexus-accent/30 hover:bg-nexus-accent/20"
+                                : "bg-microtermix-accent/10 text-microtermix-accent border-microtermix-accent/30 hover:bg-microtermix-accent/20"
                         )}
                     >
                         {mode === 'unstaged' ? <FilePlus size={13} /> : <FileMinus size={13} />}
@@ -199,7 +199,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
                     <Tooltip>
                         <TooltipTrigger render={
                             <Button variant="ghost" size="icon-xs" onClick={loadContent} className="text-slate-500 hover:text-white">
-                                <RefreshCw size={14} className={loading ? 'animate-spin' : ''}/>
+                                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                             </Button>
                         } />
                         <TooltipContent>Recargar diferencias</TooltipContent>
@@ -207,7 +207,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
 
                     <Tooltip>
                         <TooltipTrigger render={
-                            <Button variant="ghost" size="icon-xs" onClick={() => setIsFullScreen(v => !v)} className="text-slate-500 hover:text-nexus-neon">
+                            <Button variant="ghost" size="icon-xs" onClick={() => setIsFullScreen(v => !v)} className="text-slate-500 hover:text-microtermix-neon">
                                 {isFullScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
                             </Button>
                         } />
@@ -230,22 +230,22 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
                 <div className="w-48 border-r border-slate-800 bg-slate-900/30 flex flex-col shrink-0 overflow-hidden">
                     <div className="px-3 py-1.5 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Blocks</span>
-                        <span className="text-[9px] font-mono text-nexus-neon bg-nexus-neon/10 px-1.5 rounded">{hunks.length}</span>
+                        <span className="text-[9px] font-mono text-microtermix-neon bg-microtermix-neon/10 px-1.5 rounded">{hunks.length}</span>
                     </div>
-                    
+
                     <div className="flex-1 overflow-y-auto p-1.5 space-y-2">
                         {loading ? (
                             <div className="py-8 text-center"><Loader2 size={16} className="animate-spin mx-auto text-slate-700" /></div>
                         ) : hunks.length === 0 ? (
                             <div className="py-8 text-center text-[9px] text-slate-600 italic">No changes detected.</div>
                         ) : hunks.map((hunk) => (
-                            <div 
+                            <div
                                 key={hunk.id}
                                 onClick={() => scrollToHunk(hunk)}
                                 className={cn(
                                     "p-1.5 rounded-lg border transition-all cursor-pointer group",
-                                    selectedHunkId === hunk.id 
-                                        ? "bg-sky-500/10 border-sky-500/40 shadow-sm" 
+                                    selectedHunkId === hunk.id
+                                        ? "bg-sky-500/10 border-sky-500/40 shadow-sm"
                                         : "bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-900/50"
                                 )}
                             >
@@ -255,15 +255,15 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
                                     </Badge>
                                     <span className="text-[8px] font-mono text-slate-600">L:{hunk.new_start}</span>
                                 </div>
-                                <Button 
+                                <Button
                                     variant="outline"
                                     size="xs"
                                     onClick={(e) => { e.stopPropagation(); stageHunk(hunk.id); }}
                                     className={cn(
                                         "w-full h-5 text-[8px] font-bold gap-1 transition-colors",
                                         mode === 'unstaged'
-                                            ? "bg-nexus-neon/5 text-nexus-neon border-nexus-neon/20 hover:bg-nexus-neon/20"
-                                            : "bg-nexus-accent/5 text-nexus-accent border-nexus-accent/20 hover:bg-nexus-accent/20"
+                                            ? "bg-microtermix-neon/5 text-microtermix-neon border-microtermix-neon/20 hover:bg-microtermix-neon/20"
+                                            : "bg-microtermix-accent/5 text-microtermix-accent border-microtermix-accent/20 hover:bg-microtermix-accent/20"
                                     )}
                                 >
                                     <Zap size={9} /> {mode === 'unstaged' ? 'STAGE BLOCK' : 'UNSTAGE BLOCK'}
@@ -285,8 +285,8 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
                     />
                     {applyingAction && (
                         <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm z-30 flex flex-col items-center justify-center gap-3">
-                            <Loader2 size={32} className="animate-spin text-nexus-neon" />
-                            <span className="text-xs font-mono text-nexus-neon tracking-widest uppercase animate-pulse">Updating Stage...</span>
+                            <Loader2 size={32} className="animate-spin text-microtermix-neon" />
+                            <span className="text-xs font-mono text-microtermix-neon tracking-widest uppercase animate-pulse">Updating Stage...</span>
                         </div>
                     )}
                 </div>

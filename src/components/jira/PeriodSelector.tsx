@@ -32,7 +32,7 @@ export const PeriodSelector: React.FC<PeriodSelectorProps> = ({ period, onChange
             onClick={() => onChange({ ...period, type: t })}
             className={cn(
               'px-2.5 py-1 rounded capitalize transition-colors',
-              period.type === t ? 'bg-nexus-neon text-slate-900' : 'text-slate-400 hover:text-slate-200',
+              period.type === t ? 'bg-microtermix-neon text-slate-900' : 'text-slate-400 hover:text-slate-200',
             )}
           >
             {t === 'week' ? 'Semana' : 'Mes'}

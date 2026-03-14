@@ -25,18 +25,18 @@ export function JenkinsLogViewer({
 }) {
     const activeAccountId = useJenkinsStore(s => s.activeAccountId);
     const cfg = useJenkinsStore(s => s.accounts.find(a => a.id === activeAccountId));
-    
+
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<XTerm | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const searchAddonRef = useRef<SearchAddon | null>(null);
-    
+
     const [loading, setLoading] = useState(true);
     const [live, setLive] = useState(target.building);
     const [copied, setCopied] = useState(false);
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    
+
     const offsetRef = useRef(0);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -67,13 +67,13 @@ export function JenkinsLogViewer({
 
         const fitAddon = new FitAddon();
         const searchAddon = new SearchAddon();
-        
+
         term.loadAddon(fitAddon);
         term.loadAddon(searchAddon);
-        
+
         term.open(terminalRef.current);
         fitAddon.fit();
-        
+
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
         searchAddonRef.current = searchAddon;
@@ -100,14 +100,14 @@ export function JenkinsLogViewer({
                 target.buildNumber,
                 offsetRef.current,
             );
-            
+
             if (chunk.text && xtermRef.current) {
                 // Jenkins logs can have HTML or ANSI codes. Progressive log usually has plain text/ANSI.
                 // We write directly to xterm
                 xtermRef.current.write(chunk.text);
                 offsetRef.current = chunk.textSize;
             }
-            
+
             if (!chunk.moreData) {
                 setLive(false);
                 if (intervalRef.current) clearInterval(intervalRef.current);
@@ -154,11 +154,11 @@ export function JenkinsLogViewer({
         <div className="flex flex-col h-full bg-slate-950">
             {/* Header */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 shrink-0">
-                <Terminal size={13} className="text-nexus-neon shrink-0" />
+                <Terminal size={13} className="text-microtermix-neon shrink-0" />
                 <span className="text-xs text-slate-300 font-mono truncate flex-1">
                     {target.jobName}{target.branchName ? ` / ${target.branchName}` : ''} #{target.buildNumber}
                 </span>
-                
+
                 {searchOpen && (
                     <div className="flex items-center gap-1 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
                         <input
@@ -172,9 +172,9 @@ export function JenkinsLogViewer({
                                 if (e.key === 'Escape') setSearchOpen(false);
                             }}
                         />
-                        <button onClick={() => searchAddonRef.current?.findPrevious(searchQuery)} className="text-slate-500 hover:text-slate-300"><ChevronUp size={10}/></button>
-                        <button onClick={() => searchAddonRef.current?.findNext(searchQuery)} className="text-slate-500 hover:text-slate-300"><ChevronDown size={10}/></button>
-                        <button onClick={() => setSearchOpen(false)} className="text-slate-500 hover:text-red-400"><X size={10}/></button>
+                        <button onClick={() => searchAddonRef.current?.findPrevious(searchQuery)} className="text-slate-500 hover:text-slate-300"><ChevronUp size={10} /></button>
+                        <button onClick={() => searchAddonRef.current?.findNext(searchQuery)} className="text-slate-500 hover:text-slate-300"><ChevronDown size={10} /></button>
+                        <button onClick={() => setSearchOpen(false)} className="text-slate-500 hover:text-red-400"><X size={10} /></button>
                     </div>
                 )}
 
@@ -189,12 +189,12 @@ export function JenkinsLogViewer({
                 )}
 
                 {live && (
-                    <span className="flex items-center gap-1 text-[10px] text-nexus-neon font-mono mx-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-nexus-neon animate-pulse" />
+                    <span className="flex items-center gap-1 text-[10px] text-microtermix-neon font-mono mx-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-microtermix-neon animate-pulse" />
                         LIVE
                     </span>
                 )}
-                
+
                 <button
                     onClick={handleCopy}
                     title="Copy log"

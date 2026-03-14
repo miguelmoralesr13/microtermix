@@ -130,9 +130,9 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                 {/* Header */}
                 <DialogHeader className="px-5 py-4 border-b border-slate-800 shrink-0">
                     <DialogTitle className="flex items-center gap-2 m-0 text-sm font-bold text-slate-200">
-                        <Clock size={15} className="text-nexus-accent" />
+                        <Clock size={15} className="text-microtermix-accent" />
                         Log Time
-                        <span className="font-mono text-xs text-nexus-neon/70 ml-1 font-normal">{issue.key}</span>
+                        <span className="font-mono text-xs text-microtermix-neon/70 ml-1 font-normal">{issue.key}</span>
                     </DialogTitle>
                 </DialogHeader>
 
@@ -148,14 +148,14 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 type="date"
                                 value={date}
                                 onChange={e => setDate(e.target.value)}
-                                className="h-9 bg-slate-950 border-slate-700 text-xs focus-visible:ring-nexus-accent"
+                                className="h-9 bg-slate-950 border-slate-700 text-xs focus-visible:ring-microtermix-accent"
                             />
                         </div>
                         <div>
                             <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Inicio</label>
                             <div className="flex gap-1">
                                 <Select value={String(startH)} onValueChange={v => setStartH(Number(v))}>
-                                    <SelectTrigger className="h-9 w-full bg-slate-950 border-slate-700 text-xs focus:ring-nexus-accent font-mono px-2">
+                                    <SelectTrigger className="h-9 w-full bg-slate-950 border-slate-700 text-xs focus:ring-microtermix-accent font-mono px-2">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent className="min-w-[4rem]">
@@ -167,7 +167,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                     </SelectContent>
                                 </Select>
                                 <Select value={String(startM)} onValueChange={v => setStartM(Number(v))}>
-                                    <SelectTrigger className="h-9 w-full bg-slate-950 border-slate-700 text-xs focus:ring-nexus-accent font-mono px-2">
+                                    <SelectTrigger className="h-9 w-full bg-slate-950 border-slate-700 text-xs focus:ring-microtermix-accent font-mono px-2">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent className="min-w-[4rem]">
@@ -194,7 +194,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                         <label className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Duración</label>
                         <div className="flex items-center gap-2">
                             <Select value={String(durH)} onValueChange={v => setDurH(Number(v))}>
-                                <SelectTrigger className="w-24 h-9 bg-slate-950 border-slate-700 text-xs focus:ring-nexus-accent">
+                                <SelectTrigger className="w-24 h-9 bg-slate-950 border-slate-700 text-xs focus:ring-microtermix-accent">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -204,7 +204,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 </SelectContent>
                             </Select>
                             <Select value={String(durM)} onValueChange={v => setDurM(Number(v))}>
-                                <SelectTrigger className="w-24 h-9 bg-slate-950 border-slate-700 text-xs focus:ring-nexus-accent">
+                                <SelectTrigger className="w-24 h-9 bg-slate-950 border-slate-700 text-xs focus:ring-microtermix-accent">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -214,7 +214,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 </SelectContent>
                             </Select>
                             {durationSeconds > 0 && (
-                                <span className="text-xs font-bold text-nexus-accent ml-2">
+                                <span className="text-xs font-bold text-microtermix-accent ml-2">
                                     = {formatMinutes(durH * 60 + durM)}
                                 </span>
                             )}
@@ -229,7 +229,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                             onChange={e => setDescription(e.target.value)}
                             placeholder="Describe el trabajo realizado..."
                             rows={2}
-                            className="w-full bg-slate-950 border-slate-700 text-xs focus-visible:ring-nexus-accent resize-none placeholder:text-slate-600"
+                            className="w-full bg-slate-950 border-slate-700 text-xs focus-visible:ring-microtermix-accent resize-none placeholder:text-slate-600"
                         />
                     </div>
 
@@ -256,7 +256,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                             {worklogs.length === 0 && !loadingLogs && durationSeconds === 0 && (
                                 <p className="text-xs text-slate-700 italic py-2 text-center">Sin registros este día.</p>
                             )}
-                            
+
                             {/* Compute timeline with gaps */}
                             {(() => {
                                 // 1. Gather all blocks
@@ -277,7 +277,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                         log
                                     };
                                 });
-                                
+
                                 // 2. Add new entry if duration > 0
                                 if (durationSeconds > 0) {
                                     const newStart = toTotalMinutes(startH, startM);
@@ -328,7 +328,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                                 }}
                                                 title="Click para rellenar este espacio"
                                             >
-                                                <span className="font-mono text-slate-600 shrink-0 w-20 text-[10px] group-hover:text-nexus-accent transition-colors">
+                                                <span className="font-mono text-slate-600 shrink-0 w-20 text-[10px] group-hover:text-microtermix-accent transition-colors">
                                                     {formatHHMM(startH, startM)} – {formatHHMM(endH, endM)}
                                                 </span>
                                                 <span className="text-slate-600 italic flex-1 text-[10px] group-hover:text-slate-300 transition-colors">
@@ -345,19 +345,19 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                     const startM = item.startMin % 60;
                                     const endH = Math.floor(item.endMin / 60) % 24;
                                     const endM = item.endMin % 60;
-                                    
+
                                     if (item.isNew) {
                                         return (
-                                            <div key="new-entry" className={`flex relative items-center gap-2 px-2 py-2 rounded text-xs border shadow-lg z-10 ${hasOverlap ? 'bg-amber-500/10 border-amber-500/50 shadow-amber-500/10' : 'bg-nexus-neon/10 border-nexus-neon/50 shadow-nexus-neon/10'}`}>
-                                                <div className={`absolute -left-1.5 w-1 h-full rounded-full bg-current opacity-70 ${hasOverlap ? 'text-amber-500' : 'text-nexus-neon'}`} />
-                                                <span className={`font-mono shrink-0 w-20 ${hasOverlap ? 'text-amber-400' : 'text-nexus-neon font-bold'}`}>
+                                            <div key="new-entry" className={`flex relative items-center gap-2 px-2 py-2 rounded text-xs border shadow-lg z-10 ${hasOverlap ? 'bg-amber-500/10 border-amber-500/50 shadow-amber-500/10' : 'bg-microtermix-neon/10 border-microtermix-neon/50 shadow-microtermix-neon/10'}`}>
+                                                <div className={`absolute -left-1.5 w-1 h-full rounded-full bg-current opacity-70 ${hasOverlap ? 'text-amber-500' : 'text-microtermix-neon'}`} />
+                                                <span className={`font-mono shrink-0 w-20 ${hasOverlap ? 'text-amber-400' : 'text-microtermix-neon font-bold'}`}>
                                                     {formatHHMM(startH, startM)} – {formatHHMM(endH, endM)}
                                                 </span>
-                                                <span className="font-mono text-[10px] shrink-0 text-nexus-accent bg-nexus-accent/10 px-1 py-0.5 rounded">{issue.key}</span>
-                                                <span className={`truncate flex-1 ${hasOverlap ? 'text-amber-300' : 'text-nexus-neon/90 font-medium'}`}>
+                                                <span className="font-mono text-[10px] shrink-0 text-microtermix-accent bg-microtermix-accent/10 px-1 py-0.5 rounded">{issue.key}</span>
+                                                <span className={`truncate flex-1 ${hasOverlap ? 'text-amber-300' : 'text-microtermix-neon/90 font-medium'}`}>
                                                     {description || '(nuevo registro)'}
                                                 </span>
-                                                <span className={`shrink-0 font-bold ${hasOverlap ? 'text-amber-400' : 'text-nexus-neon'}`}>
+                                                <span className={`shrink-0 font-bold ${hasOverlap ? 'text-amber-400' : 'text-microtermix-neon'}`}>
                                                     {formatMinutes(Math.floor(durationSeconds / 60))}
                                                 </span>
                                             </div>
@@ -371,7 +371,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                             <span className="font-mono text-slate-400 shrink-0 w-20">
                                                 {formatHHMM(startH, startM)} – {formatHHMM(endH, endM)}
                                             </span>
-                                            <span className="text-nexus-accent/70 font-mono text-[10px] shrink-0 bg-slate-900 px-1 py-0.5 rounded">
+                                            <span className="text-microtermix-accent/70 font-mono text-[10px] shrink-0 bg-slate-900 px-1 py-0.5 rounded">
                                                 {log.issue.key ?? `#${log.issue.id}`}
                                             </span>
                                             <span className="text-slate-400 truncate flex-1" title={log.description}>
@@ -394,10 +394,10 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                         <p className="text-xs text-amber-400 flex-1">Configura tu Account ID en Ajustes de Jira primero.</p>
                     )}
                     {error && (
-                        <p className="text-xs text-nexus-danger flex-1 truncate">{error}</p>
+                        <p className="text-xs text-microtermix-danger flex-1 truncate">{error}</p>
                     )}
                     {success && (
-                        <p className="text-xs text-nexus-success flex items-center gap-1 flex-1 font-bold">
+                        <p className="text-xs text-microtermix-success flex items-center gap-1 flex-1 font-bold">
                             <CheckCircle size={14} /> ¡Tiempo registrado!
                         </p>
                     )}
@@ -407,7 +407,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                             Total esperado al guardar: <span className="font-bold text-slate-300">{formatMinutes(Math.floor((totalDaySeconds + durationSeconds) / 60))}</span>
                         </div>
                     )}
-                    
+
                     <Button
                         variant="ghost"
                         onClick={onClose}
@@ -418,7 +418,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                     <Button
                         onClick={handleSubmit}
                         disabled={!isValid || submitting || success}
-                        className="text-xs font-bold bg-nexus-accent hover:bg-nexus-accent/80 text-white gap-1.5 min-w-[120px]"
+                        className="text-xs font-bold bg-microtermix-accent hover:bg-microtermix-accent/80 text-white gap-1.5 min-w-[120px]"
                     >
                         {submitting && <RefreshCw size={12} className="animate-spin" />}
                         {submitting ? 'Registrando...' : 'Registrar tiempo'}

@@ -9,7 +9,7 @@ export interface ProjectEnvStore {
 }
 
 const storageKey = (projectPath: string) =>
-    `nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`;
+    `microtermix-envs-${projectPath.replace(/[/\\:]/g, '_')}`;
 
 const defaultStore = (): ProjectEnvStore => ({
     activeEnv: 'dev',

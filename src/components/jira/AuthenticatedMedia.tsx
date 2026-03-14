@@ -138,10 +138,10 @@ export function AuthenticatedMedia({ url, mimeType, className, autoLoad = false,
                         <div className="relative w-8 h-8">
                             <svg className="w-full h-full" viewBox="0 0 36 36">
                                 <circle cx="18" cy="18" r="16" fill="none" className="stroke-slate-800" strokeWidth="3" />
-                                <circle cx="18" cy="18" r="16" fill="none" className="stroke-nexus-neon transition-all duration-300" strokeWidth="3"
+                                <circle cx="18" cy="18" r="16" fill="none" className="stroke-microtermix-neon transition-all duration-300" strokeWidth="3"
                                     strokeDasharray="100" strokeDashoffset={100 - progress} strokeLinecap="round" transform="rotate(-90 18 18)" />
                             </svg>
-                            <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-nexus-neon">{progress}%</span>
+                            <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-microtermix-neon">{progress}%</span>
                         </div>
                         <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">Cargando...</span>
                     </div>
@@ -152,7 +152,7 @@ export function AuthenticatedMedia({ url, mimeType, className, autoLoad = false,
                         </div>
                         <button
                             onClick={(e) => { e.stopPropagation(); setUserRequested(true); }}
-                            className="px-3 py-1.5 bg-nexus-neon/10 border border-nexus-neon/30 text-nexus-neon rounded text-[10px] font-bold hover:bg-nexus-neon/20 transition-colors uppercase tracking-wider"
+                            className="px-3 py-1.5 bg-microtermix-neon/10 border border-microtermix-neon/30 text-microtermix-neon rounded text-[10px] font-bold hover:bg-microtermix-neon/20 transition-colors uppercase tracking-wider"
                         >
                             Cargar {mimeType.startsWith('video/') ? 'Video' : 'Imagen'}
                         </button>
@@ -224,7 +224,7 @@ export function AttachmentViewer({ attachments, initialIndex, onClose }: { attac
                 ) : (
                     <div className="bg-slate-800 p-8 rounded-xl text-center">
                         <p className="text-slate-300 font-medium mb-4">{attachment.filename}</p>
-                        <a href={attachment.content} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-nexus-accent hover:bg-opacity-80 rounded text-white font-bold text-sm transition-colors decoration-none">
+                        <a href={attachment.content} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-microtermix-accent hover:bg-opacity-80 rounded text-white font-bold text-sm transition-colors decoration-none">
                             Descargar Archivo
                         </a>
                     </div>

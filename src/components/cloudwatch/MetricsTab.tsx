@@ -94,13 +94,13 @@ interface MetricsTabProps {
 
 export function MetricsTab({ cfg }: MetricsTabProps) {
     const queryClient = useQueryClient();
-    const [namespace, setNamespace] = usePersistedState('nexus-cw-metrics-ns', '');
-    const [metricSearch, setMetricSearch] = usePersistedState('nexus-cw-metrics-search', '');
-    const [selectedMetric, setSelectedMetric] = usePersistedState<CwMetricItem | null>('nexus-cw-metrics-selected', null);
-    const [dimensions, setDimensions] = usePersistedState<CwDimension[]>('nexus-cw-metrics-dims', []);
-    const [stat, setStat] = usePersistedState('nexus-cw-metrics-stat', 'Average');
-    const [period, setPeriod] = usePersistedState('nexus-cw-metrics-period', 300);
-    const [range, setRange] = usePersistedState('nexus-cw-metrics-range', 3600_000);
+    const [namespace, setNamespace] = usePersistedState('microtermix-cw-metrics-ns', '');
+    const [metricSearch, setMetricSearch] = usePersistedState('microtermix-cw-metrics-search', '');
+    const [selectedMetric, setSelectedMetric] = usePersistedState<CwMetricItem | null>('microtermix-cw-metrics-selected', null);
+    const [dimensions, setDimensions] = usePersistedState<CwDimension[]>('microtermix-cw-metrics-dims', []);
+    const [stat, setStat] = usePersistedState('microtermix-cw-metrics-stat', 'Average');
+    const [period, setPeriod] = usePersistedState('microtermix-cw-metrics-period', 300);
+    const [range, setRange] = usePersistedState('microtermix-cw-metrics-range', 3600_000);
 
     // Queries
     const {
@@ -157,7 +157,7 @@ export function MetricsTab({ cfg }: MetricsTabProps) {
                         value={namespace}
                         onChange={e => setNamespace(e.target.value)}
                         placeholder="AWS/Lambda"
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-44 focus:outline-none focus:border-nexus-neon placeholder:text-slate-600"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-44 focus:outline-none focus:border-microtermix-neon placeholder:text-slate-600"
                     />
                     <datalist id="ns-suggestions">
                         {NAMESPACE_SUGGESTIONS.map(n => <option key={n} value={n} />)}
@@ -170,7 +170,7 @@ export function MetricsTab({ cfg }: MetricsTabProps) {
                         onChange={e => setMetricSearch(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && searchMetrics()}
                         placeholder="Errors ↵"
-                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-36 focus:outline-none focus:border-nexus-neon placeholder:text-slate-600"
+                        className="bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-slate-200 w-36 focus:outline-none focus:border-microtermix-neon placeholder:text-slate-600"
                     />
                 </div>
                 <button onClick={() => searchMetrics()} disabled={loadingMetrics}
@@ -186,7 +186,7 @@ export function MetricsTab({ cfg }: MetricsTabProps) {
                     {metrics.map((m, i) => (
                         <button key={i} onClick={() => handleSelectMetric(m)}
                             className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b border-slate-800 last:border-0 transition-colors">
-                            <span className="text-nexus-neon font-mono">{m.namespace}</span>
+                            <span className="text-microtermix-neon font-mono">{m.namespace}</span>
                             <span className="text-slate-400 mx-1">/</span>
                             <span className="text-slate-200">{m.metric_name}</span>
                             {m.dimensions.length > 0 && (
@@ -216,7 +216,7 @@ export function MetricsTab({ cfg }: MetricsTabProps) {
                                     <span className="text-[11px] text-slate-400 font-mono w-28 shrink-0">{d.name}</span>
                                     <input value={d.value}
                                         onChange={e => setDimensions(prev => prev.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
-                                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-nexus-neon"
+                                        className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:outline-none focus:border-microtermix-neon"
                                     />
                                 </div>
                             ))}
@@ -227,27 +227,27 @@ export function MetricsTab({ cfg }: MetricsTabProps) {
                         <div className="flex flex-col gap-1">
                             <label className="text-[9px] text-slate-500 uppercase tracking-wider">Estadística</label>
                             <select value={stat} onChange={e => setStat(e.target.value)}
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon">
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon">
                                 {STAT_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col gap-1">
                             <label className="text-[9px] text-slate-500 uppercase tracking-wider">Período</label>
                             <select value={period} onChange={e => setPeriod(Number(e.target.value))}
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon">
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon">
                                 {PERIOD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col gap-1">
                             <label className="text-[9px] text-slate-500 uppercase tracking-wider">Rango</label>
                             <select value={range} onChange={e => setRange(Number(e.target.value))}
-                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon">
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon">
                                 {RANGE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
                         <div className="flex flex-col justify-end">
                             <button onClick={loadData} disabled={loadingData}
-                                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 disabled:opacity-40 rounded-lg transition-colors">
+                                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 disabled:opacity-40 rounded-lg transition-colors">
                                 {loadingData ? <RefreshCw size={11} className="animate-spin" /> : null}
                                 {loadingData ? 'Cargando…' : 'Cargar'}
                             </button>

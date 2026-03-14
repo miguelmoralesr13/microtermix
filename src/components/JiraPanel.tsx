@@ -13,7 +13,7 @@ type Tab = 'board' | 'stories' | 'create' | 'time' | 'settings';
 
 // ── Main JiraPanel ─────────────────────────────────────────────────────────────
 
-const STORAGE_JIRA_TAB = 'nexus-jira-active-tab';
+const STORAGE_JIRA_TAB = 'microtermix-jira-active-tab';
 
 export const JiraPanel: React.FC = () => {
     const [tab, setTab] = useState<Tab>(() => {
@@ -55,7 +55,7 @@ export const JiraPanel: React.FC = () => {
                 {tabs.map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                         className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === t.id
-                            ? 'border-nexus-neon text-white'
+                            ? 'border-microtermix-neon text-white'
                             : 'border-transparent text-slate-500 hover:text-slate-300'
                             }`}>
                         {t.icon}{t.label}
@@ -72,7 +72,7 @@ export const JiraPanel: React.FC = () => {
                                 <select
                                     value={activeAccountId ?? ''}
                                     onChange={e => handleSwitchAccount(e.target.value)}
-                                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-slate-300 focus:outline-none focus:border-nexus-neon cursor-pointer"
+                                    className="bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs text-slate-300 focus:outline-none focus:border-microtermix-neon cursor-pointer"
                                 >
                                     {accounts.map(a => (
                                         <option key={a.id} value={a.id}>{a.name}</option>
@@ -83,7 +83,7 @@ export const JiraPanel: React.FC = () => {
                     )}
 
                     {successMsg && (
-                        <div className="flex items-center gap-1.5 text-xs text-nexus-success">
+                        <div className="flex items-center gap-1.5 text-xs text-microtermix-success">
                             <CheckCircle size={13} /> {successMsg}
                             <button onClick={() => setSuccessMsg(null)} className="ml-1 text-slate-500 hover:text-slate-300"><X size={11} /></button>
                         </div>

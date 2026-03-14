@@ -22,10 +22,10 @@ export interface PipelineConfig {
 }
 
 /**
- * Configuración del workspace que se guarda en nexus-workspace.json en la carpeta del workspace.
+ * Configuración del workspace que se guarda en microtermix.json en la carpeta del workspace.
  * Los proyectos se identifican solo por nombre de carpeta (no rutas) para evitar conflictos entre máquinas/rutas.
  */
-export interface NexusWorkspaceConfig {
+export interface MicrotermixConfig {
     version?: number;
     workspacePath?: string;
     /** Nombres de carpeta de proyectos seleccionados (no rutas completas). */
@@ -53,6 +53,7 @@ export interface NexusWorkspaceConfig {
 
 export const WORKSPACE_CONFIG_FILENAME = 'nexus-workspace.json';
 
+
 /** Obtiene solo el nombre de la carpeta del proyecto (último segmento del path). */
 export function getFolderName(path: string): string {
     const segments = path.replace(/\/+$/, '').split(/[/\\]/).filter(Boolean);
@@ -69,7 +70,7 @@ export function resolveFolderNameToPath(folderName: string, projectPaths: string
  * resolver nombres de carpeta (config) a paths (localStorage).
  */
 export function applyWorkspaceConfigToStorage(
-    config: NexusWorkspaceConfig,
+    config: MicrotermixConfig,
     workspacePath: string,
     projectPaths: string[],
 ): void {
@@ -82,23 +83,23 @@ export function applyWorkspaceConfigToStorage(
                 .map((name) => resolveFolderNameToPath(name, projectPaths))
                 .filter((p): p is string => p != null);
             if (resolved.length) {
-                localStorage.setItem(`nexus-selected-projects-${pathKey}`, JSON.stringify(resolved));
+                localStorage.setItem(`microtermix-selected-projects-${pathKey}`, JSON.stringify(resolved));
             }
         } catch (_) { }
     }
     if (config.multiScript != null) {
         try {
-            localStorage.setItem('nexus-multi-script', config.multiScript);
+            localStorage.setItem('microtermix-multi-script', config.multiScript);
         } catch (_) { }
     }
     if (config.globalEnvName != null) {
         try {
-            localStorage.setItem('nexus-multi-env-name', config.globalEnvName);
+            localStorage.setItem('microtermix-multi-env-name', config.globalEnvName);
         } catch (_) { }
     }
     if (config.vitePreviewOpen != null) {
         try {
-            localStorage.setItem('nexus-vite-preview-open', config.vitePreviewOpen ? '1' : '0');
+            localStorage.setItem('microtermix-vite-preview-open', config.vitePreviewOpen ? '1' : '0');
         } catch (_) { }
     }
     if (config.activeTerminalTabId != null) {
@@ -106,7 +107,7 @@ export function applyWorkspaceConfigToStorage(
             if (config.activeTerminalTabId) {
                 const resolved = resolveFolderNameToPath(config.activeTerminalTabId, projectPaths);
                 if (resolved) {
-                    localStorage.setItem(`nexus-active-terminal-tab-${pathKey}`, resolved);
+                    localStorage.setItem(`microtermix-active-terminal-tab-${pathKey}`, resolved);
                 }
             }
         } catch (_) { }
@@ -116,7 +117,7 @@ export function applyWorkspaceConfigToStorage(
             try {
                 const resolved = resolveFolderNameToPath(folderName, projectPaths);
                 if (resolved) {
-                    localStorage.setItem(`nexus-envs-${pathKeyFor(resolved)}`, JSON.stringify(value));
+                    localStorage.setItem(`microtermix-envs-${pathKeyFor(resolved)}`, JSON.stringify(value));
                 }
             } catch (_) { }
         }
@@ -126,19 +127,19 @@ export function applyWorkspaceConfigToStorage(
             try {
                 const resolved = resolveFolderNameToPath(folderName, projectPaths);
                 if (resolved) {
-                    localStorage.setItem(`nexus-vite-wrapper-${pathKeyFor(resolved)}`, JSON.stringify(value));
+                    localStorage.setItem(`microtermix-vite-wrapper-${pathKeyFor(resolved)}`, JSON.stringify(value));
                 }
             } catch (_) { }
         }
     }
     if (config.savedCommands || config.savedCommandSteps || config.savedCommandTypes) {
         try {
-            const current = localStorage.getItem('nexus-workspace-settings');
+            const current = localStorage.getItem('microtermix-settings');
             const parsed = current ? JSON.parse(current) : {};
             if (config.savedCommands) parsed.savedCommands = config.savedCommands;
             if (config.savedCommandSteps) parsed.savedCommandSteps = config.savedCommandSteps;
             if (config.savedCommandTypes) parsed.savedCommandTypes = config.savedCommandTypes;
-            localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
+            localStorage.setItem('microtermix-settings', JSON.stringify(parsed));
         } catch (_) { }
     }
 }
@@ -155,7 +156,7 @@ export function buildWorkspaceConfigFromCurrentState(
     savedCommandSteps: Record<string, CommandStep[]> = {},
     savedCommandTypes: Record<string, string> = {},
     pipelines: PipelineConfig[] = [],
-): NexusWorkspaceConfig {
+): MicrotermixConfig {
     const pathKey = (p: string) => p.replace(/[/\\:]/g, '_');
     const projectEnvs: Record<string, { activeEnv: string; envs: Record<string, Record<string, string>> }> = {};
     const projectViteWrapper: Record<string, { enabled: boolean; remotes: Record<string, string> }> = {};
@@ -163,14 +164,14 @@ export function buildWorkspaceConfigFromCurrentState(
     for (const p of projectPaths) {
         const folderName = getFolderName(p);
         try {
-            const raw = localStorage.getItem(`nexus-envs-${pathKey(p)}`);
+            const raw = localStorage.getItem(`microtermix-envs-${pathKey(p)}`);
             if (raw) {
                 const parsed = JSON.parse(raw);
                 projectEnvs[folderName] = parsed;
             }
         } catch (_) { }
         try {
-            const raw = localStorage.getItem(`nexus-vite-wrapper-${pathKey(p)}`);
+            const raw = localStorage.getItem(`microtermix-vite-wrapper-${pathKey(p)}`);
             if (raw) {
                 const parsed = JSON.parse(raw);
                 projectViteWrapper[folderName] = parsed;

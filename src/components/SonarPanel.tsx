@@ -75,9 +75,9 @@ const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = 
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
-const METRICS_CACHE_KEY = 'nexus-sonar-metrics-cache';
-const STORAGE_SONAR_PATH = 'nexus-sonar-selected-path';
-const STORAGE_SONAR_TAB = 'nexus-sonar-active-tab';
+const METRICS_CACHE_KEY = 'microtermix-sonar-metrics-cache';
+const STORAGE_SONAR_PATH = 'microtermix-sonar-selected-path';
+const STORAGE_SONAR_TAB = 'microtermix-sonar-active-tab';
 
 function loadMetricsCache(): Record<string, SonarMetrics> {
     try {
@@ -88,7 +88,7 @@ function loadMetricsCache(): Record<string, SonarMetrics> {
 }
 
 function issuesCacheKey(path: string) {
-    return `nexus-sonar-issues-${path.replace(/[/\\:]/g, '_')}`;
+    return `microtermix-sonar-issues-${path.replace(/[/\\:]/g, '_')}`;
 }
 function loadIssuesCache(path: string): SonarIssue[] {
     try { const r = localStorage.getItem(issuesCacheKey(path)); return r ? JSON.parse(r) : []; } catch { return []; }
@@ -98,7 +98,7 @@ function saveIssuesCache(path: string, items: SonarIssue[]) {
 }
 
 function linkKey(path: string) {
-    return `nexus-sonar-link-${path.replace(/[/\\:]/g, '_')}`;
+    return `microtermix-sonar-link-${path.replace(/[/\\:]/g, '_')}`;
 }
 function loadLink(path: string): ProjectLink {
     try {
@@ -129,8 +129,8 @@ const QGBadge: React.FC<{ status?: 'OK' | 'ERROR' | 'NONE' }> = ({ status }) => 
     if (!status || status === 'NONE')
         return <span className="text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-600 font-bold">—</span>;
     return status === 'OK'
-        ? <span className="text-[9px] px-1 py-0.5 rounded bg-nexus-success/20 text-nexus-success font-bold">OK</span>
-        : <span className="text-[9px] px-1 py-0.5 rounded bg-nexus-danger/20 text-nexus-danger font-bold">ERR</span>;
+        ? <span className="text-[9px] px-1 py-0.5 rounded bg-microtermix-success/20 text-microtermix-success font-bold">OK</span>
+        : <span className="text-[9px] px-1 py-0.5 rounded bg-microtermix-danger/20 text-microtermix-danger font-bold">ERR</span>;
 };
 
 const MetricCard: React.FC<{
@@ -146,7 +146,7 @@ const MetricCard: React.FC<{
             <div className="flex items-baseline gap-2">
                 <span className="text-xl font-bold text-slate-200">{value}</span>
                 {rating && (
-                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${rating === 'A' ? 'bg-nexus-success/20 text-nexus-success' : rating === 'B' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-nexus-danger/20 text-nexus-danger'}`}>
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${rating === 'A' ? 'bg-microtermix-success/20 text-microtermix-success' : rating === 'B' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-microtermix-danger/20 text-microtermix-danger'}`}>
                         {rating}
                     </span>
                 )}
@@ -184,10 +184,10 @@ export const SonarPanel: React.FC = () => {
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
     const repos = useGitStore(s => s.repos);
-    
+
     const sonarConfig = useSonarStore(s => s.config);
     const setSonarConfig = useSonarStore(s => s.setConfig);
-    
+
     const projects = state.projects;
 
     // ── Selection
@@ -499,7 +499,7 @@ export const SonarPanel: React.FC = () => {
                         onClick={isRunning ? handleStop : handleRunAnalysis}
                         disabled={!selectedPath || !projectKey}
                         className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-md ${isRunning
-                            ? 'bg-nexus-danger hover:bg-red-600 text-white'
+                            ? 'bg-microtermix-danger hover:bg-red-600 text-white'
                             : 'bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed'}`}
                     >
                         {isRunning ? <Square size={13} fill="currentColor" /> : <Play size={13} fill="currentColor" />}
@@ -534,7 +534,7 @@ export const SonarPanel: React.FC = () => {
                                         <div className="flex items-center gap-1.5 mt-0.5">
                                             <QGBadge status={qg} />
                                             {!linked && <span className="text-[9px] text-slate-600 italic">sin vincular</span>}
-                                            {running && <span className="w-1.5 h-1.5 rounded-full bg-nexus-success animate-pulse" />}
+                                            {running && <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse" />}
                                         </div>
                                     </div>
                                     <button onClick={e => { e.stopPropagation(); handleSearch(path, name); }} className="p-1 rounded text-slate-600 hover:text-blue-400 opacity-0 group-hover:opacity-100"><Search size={12} /></button>
@@ -562,10 +562,10 @@ export const SonarPanel: React.FC = () => {
                                 <div className="space-y-5">
                                     {metrics ? (
                                         <>
-                                            <div className={`p-5 rounded-2xl border flex items-center justify-between ${metrics.qualityGate === 'OK' ? 'bg-nexus-success/10 border-nexus-success/30' : 'bg-nexus-danger/10 border-nexus-danger/30'}`}>
+                                            <div className={`p-5 rounded-2xl border flex items-center justify-between ${metrics.qualityGate === 'OK' ? 'bg-microtermix-success/10 border-microtermix-success/30' : 'bg-microtermix-danger/10 border-microtermix-danger/30'}`}>
                                                 <div className="flex items-center gap-4">
-                                                    <div className={`p-3 rounded-xl ${metrics.qualityGate === 'OK' ? 'bg-nexus-success/20' : 'bg-nexus-danger/20'}`}>
-                                                        <ShieldCheck size={28} className={metrics.qualityGate === 'OK' ? 'text-nexus-success' : 'text-nexus-danger'} />
+                                                    <div className={`p-3 rounded-xl ${metrics.qualityGate === 'OK' ? 'bg-microtermix-success/20' : 'bg-microtermix-danger/20'}`}>
+                                                        <ShieldCheck size={28} className={metrics.qualityGate === 'OK' ? 'text-microtermix-success' : 'text-microtermix-danger'} />
                                                     </div>
                                                     <div>
                                                         <h3 className="text-base font-black text-slate-200">Quality Gate {metrics.qualityGate}</h3>
@@ -577,7 +577,7 @@ export const SonarPanel: React.FC = () => {
                                                 </button>
                                             </div>
                                             <div className="grid grid-cols-3 gap-4">
-                                                <MetricCard label="Bugs" value={metrics.bugs} rating={metrics.reliability} icon={Bug} colorClass="text-nexus-danger" />
+                                                <MetricCard label="Bugs" value={metrics.bugs} rating={metrics.reliability} icon={Bug} colorClass="text-microtermix-danger" />
                                                 <MetricCard label="Vulnerabilidades" value={metrics.vulnerabilities} rating={metrics.security} icon={ShieldAlert} colorClass="text-yellow-400" />
                                                 <MetricCard label="Code Smells" value={metrics.codeSmells} rating={metrics.maintainability} icon={FileSearch} colorClass="text-blue-400" />
                                             </div>
@@ -611,10 +611,10 @@ export const SonarPanel: React.FC = () => {
                                         <div className="bg-black/40 p-2.5 rounded border border-slate-900 font-mono text-[11px] text-slate-200 break-all select-all">$ {scanCommand}</div>
                                     </div>
                                     {reportUrl && (
-                                        <div className="shrink-0 flex items-center gap-3 px-4 py-3 bg-nexus-success/10 border border-nexus-success/30 rounded-xl">
-                                            <ShieldCheck size={16} className="text-nexus-success shrink-0" />
-                                            <div className="flex-1 min-w-0"><p className="text-xs font-bold text-nexus-success">Análisis completado</p><p className="text-[10px] font-mono text-slate-400 truncate">{reportUrl}</p></div>
-                                            <button onClick={() => openUrl(reportUrl)} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-nexus-success text-slate-900 text-xs font-black rounded-lg hover:bg-green-400 transition-colors"><ExternalLink size={13} /> Ver reporte</button>
+                                        <div className="shrink-0 flex items-center gap-3 px-4 py-3 bg-microtermix-success/10 border border-microtermix-success/30 rounded-xl">
+                                            <ShieldCheck size={16} className="text-microtermix-success shrink-0" />
+                                            <div className="flex-1 min-w-0"><p className="text-xs font-bold text-microtermix-success">Análisis completado</p><p className="text-[10px] font-mono text-slate-400 truncate">{reportUrl}</p></div>
+                                            <button onClick={() => openUrl(reportUrl)} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-microtermix-success text-slate-900 text-xs font-black rounded-lg hover:bg-green-400 transition-colors"><ExternalLink size={13} /> Ver reporte</button>
                                         </div>
                                     )}
                                     <div className="flex-1 min-h-[200px] border border-slate-800 rounded-xl overflow-hidden">
@@ -638,8 +638,8 @@ export const SonarPanel: React.FC = () => {
                                                     {collapsed ? <ChevronRight size={13} className={s.text} /> : <ChevronDown size={13} className={s.text} />}
                                                 </button>
                                                 {!collapsed && <div className="divide-y divide-slate-800/40">{group.map(i => (
-                                                    <div 
-                                                        key={i.key} 
+                                                    <div
+                                                        key={i.key}
                                                         onClick={() => handleOpenIssue(i)}
                                                         className="px-4 py-2.5 hover:bg-slate-800/30 cursor-pointer transition-colors group/issue"
                                                     >
@@ -682,13 +682,13 @@ export const SonarPanel: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <button 
+                            <button
                                 onClick={() => setSonarConfig({ serverUrl: 'https://sonarcloud.io', authType: 'bearer' })}
                                 className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${sonarConfig.serverUrl.includes('sonarcloud.io') ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
                             >
                                 SonarCloud (Public)
                             </button>
-                            <button 
+                            <button
                                 onClick={() => setSonarConfig({ authType: 'basic' })}
                                 className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${!sonarConfig.serverUrl.includes('sonarcloud.io') ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
                             >
@@ -719,8 +719,8 @@ export const SonarPanel: React.FC = () => {
                                     <span className="text-[10px] font-bold text-slate-200 uppercase">Tipo de Autenticación</span>
                                     <span className="text-[9px] text-slate-500 tracking-tight">Cloud usa Bearer, On-Premise suele usar Basic</span>
                                 </div>
-                                <select 
-                                    value={sonarConfig.authType} 
+                                <select
+                                    value={sonarConfig.authType}
                                     onChange={e => setSonarConfig({ authType: e.target.value as any })}
                                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none cursor-pointer"
                                 >
@@ -731,20 +731,20 @@ export const SonarPanel: React.FC = () => {
                         </div>
 
                         <div className="flex justify-end gap-3 pt-2">
-                            <button 
-                                onClick={handleTestConnection} 
+                            <button
+                                onClick={handleTestConnection}
                                 className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-700 hover:bg-slate-700 transition-colors"
                             >
                                 Probar Conexión
                             </button>
-                            <button 
-                                onClick={() => { setConfigModalOpen(false); }} 
+                            <button
+                                onClick={() => { setConfigModalOpen(false); }}
                                 className="px-6 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
                             >
                                 Guardar Configuración
                             </button>
                         </div>
-                        
+
                         {testResult && (
                             <div className={`text-xs p-3 rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1 ${testResult.ok ? 'bg-green-900/20 text-green-400 border border-green-500/20' : 'bg-red-900/20 text-red-400 border border-red-500/20'}`}>
                                 {testResult.ok ? <ShieldCheck size={14} /> : <AlertCircle size={14} />}

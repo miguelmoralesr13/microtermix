@@ -36,7 +36,7 @@ const DEFAULT_SERVICE: ServiceConfig = {
     url: '',
     method: 'GET',
     tokenHeader: 'x-user-token',
-    extraHeaders: '{"x-platform": "NEXUS_POS"}',
+    extraHeaders: '{"x-platform": "Microtermix_POS"}',
     publicKeyPath: 'publicKey',
     privateKeyPath: 'privateKey',
     accessIdPath: 'accessId',
@@ -105,7 +105,7 @@ export const LibCipherKeysPanel: React.FC<LibCipherKeysPanelProps> = ({ algorith
             const res = await tauriFetch(url, { method: cfg.method, headers });
             const data = await res.json();
 
-            const pubKey  = getNestedValue(data, cfg.publicKeyPath);
+            const pubKey = getNestedValue(data, cfg.publicKeyPath);
             const privKey = getNestedValue(data, cfg.privateKeyPath);
             const accessId = cfg.accessIdPath ? getNestedValue(data, cfg.accessIdPath) : '';
 
@@ -192,7 +192,7 @@ export const LibCipherKeysPanel: React.FC<LibCipherKeysPanelProps> = ({ algorith
                         <FieldLabel>Headers adicionales (JSON)</FieldLabel>
                         <textarea className={`${inputCls} h-16 resize-none`} value={cfg.extraHeaders}
                             onChange={e => patch({ extraHeaders: e.target.value })}
-                            placeholder='{"x-platform": "NEXUS_POS"}' />
+                            placeholder='{"x-platform": "Microtermix_POS"}' />
 
                         <FieldLabel>Path llave pública en respuesta</FieldLabel>
                         <input className={inputCls} value={cfg.publicKeyPath}

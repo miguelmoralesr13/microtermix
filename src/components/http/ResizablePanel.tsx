@@ -61,7 +61,7 @@ export const ResizablePanel: React.FC<ResizablePanelProps> = ({
 
             <div
                 onMouseDown={handleMouseDown}
-                className={`transition-colors hover:bg-nexus-neon/50 z-10
+                className={`transition-colors hover:bg-microtermix-neon/50 z-10
                     ${direction === 'horizontal'
                         ? 'w-1 cursor-col-resize hover:w-1 bg-slate-800'
                         : 'h-1 cursor-row-resize hover:h-1 bg-slate-800'

@@ -119,7 +119,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                 type={type}
                 value={(cfg[key] as string) ?? ''}
                 onChange={e => setCfg(c => ({ ...c, [key]: e.target.value }))}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon transition-colors"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon transition-colors"
             />
         </div>
     );
@@ -148,14 +148,14 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                         key={item.id}
                         onClick={() => setSection(item.id)}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left ${section === item.id
-                            ? 'bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/20'
+                            ? 'bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/20'
                             : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'
                             }`}
                     >
                         <span className="shrink-0">{item.icon}</span>
                         <span className="flex-1">{item.label}</span>
                         {item.badge != null && item.badge > 0 && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${section === item.id ? 'bg-nexus-neon/20 text-nexus-neon' : 'bg-slate-700 text-slate-400'}`}>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${section === item.id ? 'bg-microtermix-neon/20 text-microtermix-neon' : 'bg-slate-700 text-slate-400'}`}>
                                 {item.badge}
                             </span>
                         )}
@@ -182,10 +182,10 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                 {accounts.map(acc => (
                                     <div
                                         key={acc.id}
-                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer group ${acc.id === activeAccountId ? 'border-nexus-neon/40 bg-nexus-neon/5' : 'border-slate-700 bg-slate-800/40 hover:border-slate-600'}`}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors cursor-pointer group ${acc.id === activeAccountId ? 'border-microtermix-neon/40 bg-microtermix-neon/5' : 'border-slate-700 bg-slate-800/40 hover:border-slate-600'}`}
                                         onClick={() => acc.id !== activeAccountId && switchToAccount(acc.id)}
                                     >
-                                        <div className={`w-2 h-2 rounded-full shrink-0 ${acc.id === activeAccountId ? 'bg-nexus-neon' : 'bg-slate-600'}`} />
+                                        <div className={`w-2 h-2 rounded-full shrink-0 ${acc.id === activeAccountId ? 'bg-microtermix-neon' : 'bg-slate-600'}`} />
                                         <input
                                             type="text"
                                             defaultValue={acc.name}
@@ -195,12 +195,12 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                             title="Clic para renombrar"
                                         />
                                         {acc.id === activeAccountId && (
-                                            <span className="text-[10px] text-nexus-neon font-semibold shrink-0 px-1.5 py-0.5 bg-nexus-neon/10 rounded-full">activa</span>
+                                            <span className="text-[10px] text-microtermix-neon font-semibold shrink-0 px-1.5 py-0.5 bg-microtermix-neon/10 rounded-full">activa</span>
                                         )}
                                         {acc.id !== activeAccountId && (
                                             <button
                                                 onClick={e => { e.stopPropagation(); switchToAccount(acc.id); setSection('connection'); }}
-                                                className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-400 hover:text-nexus-neon px-2 py-0.5 rounded border border-transparent hover:border-nexus-neon/30 transition-all"
+                                                className="opacity-0 group-hover:opacity-100 text-[10px] text-slate-400 hover:text-microtermix-neon px-2 py-0.5 rounded border border-transparent hover:border-microtermix-neon/30 transition-all"
                                             >
                                                 Activar
                                             </button>
@@ -227,9 +227,9 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                         onKeyDown={e => { if (e.key === 'Enter') handleAddAccount(); if (e.key === 'Escape') setShowAddAccount(false); }}
                                         placeholder="ej. Trabajo, Cliente X..."
                                         autoFocus
-                                        className="flex-1 bg-slate-950 border border-nexus-neon/40 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
+                                        className="flex-1 bg-slate-950 border border-microtermix-neon/40 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none"
                                     />
-                                    <button onClick={handleAddAccount} className="px-4 py-2 rounded-lg text-xs font-bold bg-nexus-neon text-slate-900 hover:bg-opacity-80 transition-colors">
+                                    <button onClick={handleAddAccount} className="px-4 py-2 rounded-lg text-xs font-bold bg-microtermix-neon text-slate-900 hover:bg-opacity-80 transition-colors">
                                         Crear
                                     </button>
                                     <button onClick={() => setShowAddAccount(false)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-700 transition-colors">
@@ -239,7 +239,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                             ) : (
                                 <button
                                     onClick={() => setShowAddAccount(true)}
-                                    className="flex items-center gap-1.5 text-xs text-nexus-neon hover:text-white transition-colors py-1"
+                                    className="flex items-center gap-1.5 text-xs text-microtermix-neon hover:text-white transition-colors py-1"
                                 >
                                     <PlusCircle size={13} /> Añadir cuenta
                                 </button>
@@ -249,7 +249,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                 <div className="pt-2 border-t border-slate-800">
                                     <button
                                         onClick={() => setSection('connection')}
-                                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-nexus-neon transition-colors"
+                                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-microtermix-neon transition-colors"
                                     >
                                         <Settings size={12} /> Configurar conexión de la cuenta activa
                                         <ChevronRight size={12} />
@@ -272,7 +272,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                             </div>
                             {accounts.length === 0 && (
                                 <div className="p-3 rounded-lg bg-slate-800/60 border border-slate-700 text-xs text-slate-400">
-                                    Ve a <button onClick={() => setSection('accounts')} className="text-nexus-neon underline">Cuentas</button> y crea una cuenta primero.
+                                    Ve a <button onClick={() => setSection('accounts')} className="text-microtermix-neon underline">Cuentas</button> y crea una cuenta primero.
                                 </div>
                             )}
                             {field('Jira Base URL (ej. https://empresa.atlassian.net)', 'baseUrl')}
@@ -319,7 +319,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                 <label className="block text-xs text-slate-400 mb-1">Tipo de issue por defecto</label>
                                 <select value={cfg.defaultIssueType}
                                     onChange={e => setCfg(c => ({ ...c, defaultIssueType: e.target.value }))}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon">
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon">
                                     {['Story', 'Bug', 'Task', 'Sub-task', 'Epic'].map(t => <option key={t}>{t}</option>)}
                                 </select>
                             </div>
@@ -328,7 +328,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                 <label className="block text-xs text-slate-400 mb-1">Prioridad por defecto</label>
                                 <select value={cfg.defaultPriority}
                                     onChange={e => setCfg(c => ({ ...c, defaultPriority: e.target.value }))}
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon">
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon">
                                     {['Highest', 'High', 'Medium', 'Low', 'Lowest'].map(p => <option key={p}>{p}</option>)}
                                 </select>
                             </div>
@@ -339,7 +339,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                     value={cfg.defaultLabels.join(', ')}
                                     onChange={e => setCfg(c => ({ ...c, defaultLabels: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
                                     placeholder="frontend, microfrontend"
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon"
                                 />
                             </div>
                         </>
@@ -372,7 +372,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                             setCfg(c => ({ ...c, activityValue: e.target.value, activityId: found?.id ?? c.activityId }));
                                         }}
                                         disabled={activityOpts.length === 0}
-                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon disabled:text-slate-600"
+                                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon disabled:text-slate-600"
                                     >
                                         <option value="">{activityOpts.length === 0 ? 'Carga las opciones →' : 'Selecciona un valor'}</option>
                                         {activityOpts.map(a => <option key={a.id} value={a.value}>{a.value}</option>)}
@@ -395,7 +395,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                     value={(cfg.releasedStatuses ?? []).join(', ')}
                                     onChange={e => setCfg(c => ({ ...c, releasedStatuses: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
                                     placeholder="Released, Discarded"
-                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon"
                                 />
                             </div>
                             {/* Defect configuration */}
@@ -406,9 +406,9 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                     <label className="block text-xs text-slate-400 mb-1">
                                         Proyectos de Defectos <span className="text-slate-600">(ej. NTCQA, BUGS) — vacío = busca en todos</span>
                                     </label>
-                                    <div className="flex flex-wrap gap-1.5 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 focus-within:border-nexus-neon transition-colors min-h-[40px]">
+                                    <div className="flex flex-wrap gap-1.5 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 focus-within:border-microtermix-neon transition-colors min-h-[40px]">
                                         {(cfg.defectProjects ?? []).map(proj => (
-                                            <span key={proj} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-nexus-neon/10 border border-nexus-neon/30 text-nexus-neon text-xs font-mono">
+                                            <span key={proj} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-microtermix-neon/10 border border-microtermix-neon/30 text-microtermix-neon text-xs font-mono">
                                                 {proj}
                                                 <button
                                                     type="button"
@@ -456,7 +456,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                             <div className="space-y-2">
                                 {Object.entries(cfg.customFields).map(([k, v]) => (
                                     <div key={k} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700">
-                                        <span className="font-mono text-nexus-neon/80 text-xs flex-1">{k}</span>
+                                        <span className="font-mono text-microtermix-neon/80 text-xs flex-1">{k}</span>
                                         <span className="text-slate-300 text-xs flex-1 truncate">{JSON.stringify(v)}</span>
                                         <button onClick={() => removeCustomField(k)} className="p-1 rounded hover:bg-red-900/30 text-slate-500 hover:text-red-400 transition-colors">
                                             <X size={12} />
@@ -469,12 +469,12 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                                 <input value={newFieldKey} onChange={e => setNewFieldKey(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && addCustomField()}
                                     placeholder="customfield_XXXXX"
-                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon font-mono" />
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-microtermix-neon font-mono" />
                                 <input value={newFieldVal} onChange={e => setNewFieldVal(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && addCustomField()}
                                     placeholder="valor"
-                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-nexus-neon" />
-                                <button onClick={addCustomField} className="px-3 py-2 text-xs bg-nexus-neon text-nexus-darker rounded-lg font-bold hover:bg-opacity-80 transition-colors">
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-microtermix-neon" />
+                                <button onClick={addCustomField} className="px-3 py-2 text-xs bg-microtermix-neon text-microtermix-darker rounded-lg font-bold hover:bg-opacity-80 transition-colors">
                                     <Plus size={13} />
                                 </button>
                             </div>
@@ -489,7 +489,7 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="px-5 py-2 rounded-lg bg-nexus-accent hover:bg-opacity-80 text-white font-bold text-xs transition-colors disabled:opacity-50"
+                            className="px-5 py-2 rounded-lg bg-microtermix-accent hover:bg-opacity-80 text-white font-bold text-xs transition-colors disabled:opacity-50"
                         >
                             {saving ? 'Guardando...' : 'Guardar configuración'}
                         </button>

@@ -99,14 +99,14 @@ interface GitStore {
     repos: Record<string, GitRepoData>;
     ui: GitUi;
 
-    // Cuentas en memoria — NO persisten en Zustand, solo en nexus-workspace.json
+    // Cuentas en memoria — NO persisten en Zustand, solo en microtermix.json
     accounts: GitAccount[];
     repoAccounts: Record<string, string>; // repoPath → accountId
 
-    addAccount:       (a: Omit<GitAccount, 'id'>) => string;
-    updateAccount:    (id: string, patch: Partial<Omit<GitAccount, 'id'>>) => void;
-    removeAccount:    (id: string) => void;
-    setRepoAccount:   (repoPath: string, accountId: string | null) => void;
+    addAccount: (a: Omit<GitAccount, 'id'>) => string;
+    updateAccount: (id: string, patch: Partial<Omit<GitAccount, 'id'>>) => void;
+    removeAccount: (id: string) => void;
+    setRepoAccount: (repoPath: string, accountId: string | null) => void;
     getActiveAccount: (repoPath: string) => GitAccount | undefined;
 
     cloneFavorites: CloneFavorite[];
@@ -437,18 +437,18 @@ export const useGitStore = create<GitStore>()(
                 },
 
                 initWatchers: async (projectPaths) => {
-                    const {  invalidate } = get();
-                    
+                    const { invalidate } = get();
+
                     // Start watchers in backend for all projects
                     projectPaths.forEach(path => {
-                        invoke('watch_repo', { projectPath: path }).catch(() => {});
+                        invoke('watch_repo', { projectPath: path }).catch(() => { });
                     });
 
                     // Listen for global events
                     const unlistenPromise = listen('git-changed', (event) => {
                         const path = event.payload as string;
                         console.log(`⚡ Global Git Watcher: ${path} changed`);
-                        
+
                         // Refresco local estrictamente silencioso y forzado
                         // NO llamamos a fetchAheadBehind aquí porque causa bucle infinito (hace fetch)
                         invalidate(path);
@@ -464,17 +464,17 @@ export const useGitStore = create<GitStore>()(
                         const unlisten = await unlistenPromise;
                         unlisten();
                         projectPaths.forEach(path => {
-                            invoke('stop_watching_repo', { projectPath: path }).catch(() => {});
+                            invoke('stop_watching_repo', { projectPath: path }).catch(() => { });
                         });
                     };
                 },
             }),
             {
-                name: 'nexus-git-store',
+                name: 'microtermix-git-store',
                 partialize: (s) => ({
                     ui: s.ui,
                     accounts: s.accounts,
-                    // repoAccounts se persiste en nexus-workspace.json, no aquí
+                    // repoAccounts se persiste en microtermix.json, no aquí
                     cloneFavorites: s.cloneFavorites,
                     repos: Object.fromEntries(
                         Object.entries(s.repos).map(([k, v]) => [

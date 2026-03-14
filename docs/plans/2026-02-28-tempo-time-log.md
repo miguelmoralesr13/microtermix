@@ -394,9 +394,9 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 shrink-0">
                     <div className="flex items-center gap-2">
-                        <Clock size={15} className="text-nexus-accent" />
+                        <Clock size={15} className="text-microtermix-accent" />
                         <span className="text-sm font-bold text-slate-200">Log Time</span>
-                        <span className="font-mono text-xs text-nexus-neon/70 ml-1">{issue.key}</span>
+                        <span className="font-mono text-xs text-microtermix-neon/70 ml-1">{issue.key}</span>
                     </div>
                     <button onClick={onClose} className="p-1 text-slate-500 hover:text-white rounded transition-colors">
                         <X size={16} />
@@ -416,7 +416,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 type="date"
                                 value={date}
                                 onChange={e => setDate(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-accent transition-colors"
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-accent transition-colors"
                             />
                         </div>
                         {/* Start time */}
@@ -426,7 +426,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 <select
                                     value={startH}
                                     onChange={e => setStartH(Number(e.target.value))}
-                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-accent"
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-accent"
                                 >
                                     {Array.from({ length: 24 }, (_, i) => (
                                         <option key={i} value={i}>{String(i).padStart(2, '0')}</option>
@@ -435,7 +435,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 <select
                                     value={startM}
                                     onChange={e => setStartM(Number(e.target.value))}
-                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-accent"
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-accent"
                                 >
                                     {[0, 15, 30, 45].map(m => (
                                         <option key={m} value={m}>{String(m).padStart(2, '0')}</option>
@@ -459,7 +459,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                             <select
                                 value={durH}
                                 onChange={e => setDurH(Number(e.target.value))}
-                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-accent"
+                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-accent"
                             >
                                 {Array.from({ length: 9 }, (_, i) => (
                                     <option key={i} value={i}>{i}h</option>
@@ -468,7 +468,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                             <select
                                 value={durM}
                                 onChange={e => setDurM(Number(e.target.value))}
-                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-accent"
+                                className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-accent"
                             >
                                 {[0, 15, 30, 45].map(m => (
                                     <option key={m} value={m}>{m}m</option>
@@ -488,7 +488,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                             onChange={e => setDescription(e.target.value)}
                             placeholder="Describe el trabajo realizado..."
                             rows={2}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-nexus-accent transition-colors resize-none scrollbar-hide"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-accent transition-colors resize-none scrollbar-hide"
                         />
                     </div>
 
@@ -533,7 +533,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                             <span className="font-mono text-slate-500 shrink-0 w-20">
                                                 {log.startTime.slice(0, 5)} – {formatHHMM(logEndH, logEndM)}
                                             </span>
-                                            <span className="text-nexus-accent/80 font-mono text-[10px] shrink-0">
+                                            <span className="text-microtermix-accent/80 font-mono text-[10px] shrink-0">
                                                 {log.issue.key ?? `#${log.issue.id}`}
                                             </span>
                                             <span className="text-slate-400 truncate flex-1">
@@ -547,15 +547,15 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                                 })}
                             {/* New entry preview */}
                             {durationSeconds > 0 && (
-                                <div className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs border ${hasOverlap ? 'bg-amber-500/10 border-amber-500/30' : 'bg-nexus-neon/10 border-nexus-neon/30'}`}>
-                                    <span className={`font-mono shrink-0 w-20 ${hasOverlap ? 'text-amber-400' : 'text-nexus-neon'}`}>
+                                <div className={`flex items-center gap-2 px-2 py-1.5 rounded text-xs border ${hasOverlap ? 'bg-amber-500/10 border-amber-500/30' : 'bg-microtermix-neon/10 border-microtermix-neon/30'}`}>
+                                    <span className={`font-mono shrink-0 w-20 ${hasOverlap ? 'text-amber-400' : 'text-microtermix-neon'}`}>
                                         {formatHHMM(startH, startM)} – {formatHHMM(endH, endM)}
                                     </span>
-                                    <span className="font-mono text-[10px] shrink-0 text-nexus-accent">{issue.key}</span>
-                                    <span className={`truncate flex-1 ${hasOverlap ? 'text-amber-300' : 'text-nexus-neon/80'}`}>
+                                    <span className="font-mono text-[10px] shrink-0 text-microtermix-accent">{issue.key}</span>
+                                    <span className={`truncate flex-1 ${hasOverlap ? 'text-amber-300' : 'text-microtermix-neon/80'}`}>
                                         {description || '(nuevo)'}
                                     </span>
-                                    <span className={`shrink-0 ${hasOverlap ? 'text-amber-400' : 'text-nexus-neon'}`}>
+                                    <span className={`shrink-0 ${hasOverlap ? 'text-amber-400' : 'text-microtermix-neon'}`}>
                                         {formatMinutes(durH * 60 + durM)}
                                     </span>
                                 </div>
@@ -567,10 +567,10 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                 {/* Footer */}
                 <div className="px-5 py-4 border-t border-slate-800 shrink-0 flex items-center justify-between gap-3">
                     {error && (
-                        <p className="text-xs text-nexus-danger flex-1 truncate">{error}</p>
+                        <p className="text-xs text-microtermix-danger flex-1 truncate">{error}</p>
                     )}
                     {success && (
-                        <p className="text-xs text-nexus-success flex items-center gap-1 flex-1">
+                        <p className="text-xs text-microtermix-success flex items-center gap-1 flex-1">
                             <CheckCircle size={12} /> Tiempo registrado correctamente
                         </p>
                     )}
@@ -584,7 +584,7 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                     <button
                         onClick={handleSubmit}
                         disabled={!isValid || submitting || success}
-                        className="px-4 py-2 text-xs font-bold bg-nexus-accent hover:bg-opacity-80 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-1.5"
+                        className="px-4 py-2 text-xs font-bold bg-microtermix-accent hover:bg-opacity-80 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center gap-1.5"
                     >
                         {submitting && <RefreshCw size={11} className="animate-spin" />}
                         {submitting ? 'Registrando...' : 'Registrar tiempo'}
@@ -642,7 +642,7 @@ Find this block (around line 1339–1355):
                         ) : (
                             <div className="space-y-3">
                                 <div className="bg-slate-900/60 rounded-lg p-3 border border-slate-800">
-                                    <p className="font-mono text-[10px] text-nexus-neon/60 mb-1">{selectedTask.key}</p>
+                                    <p className="font-mono text-[10px] text-microtermix-neon/60 mb-1">{selectedTask.key}</p>
                                     <p className="text-xs text-slate-200 leading-snug">{selectedTask.fields.summary}</p>
                                     <div className="mt-2">
                                         <span
@@ -662,7 +662,7 @@ After the closing `</div>` of the status badge `<div className="mt-2">`, add the
                                     {selectedTask.fields.status.name.toLowerCase() === 'working' && (
                                         <button
                                             onClick={() => setShowTempoModal(true)}
-                                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-lg transition-colors"
+                                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 rounded-lg transition-colors"
                                         >
                                             <Timer size={12} />
                                             Log Time

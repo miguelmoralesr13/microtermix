@@ -42,7 +42,7 @@ export function CreateSubTaskModal({ parentKey, onCreated, onClose }: {
             <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between p-4 border-b border-slate-800">
                     <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                        <Plus size={14} className="text-nexus-neon" /> Nueva Sub-tarea en <span className="font-mono text-nexus-neon text-xs">{parentKey}</span>
+                        <Plus size={14} className="text-microtermix-neon" /> Nueva Sub-tarea en <span className="font-mono text-microtermix-neon text-xs">{parentKey}</span>
                     </h3>
                     <button onClick={onClose} className="text-slate-500 hover:text-white"><X size={16} /></button>
                 </div>
@@ -56,7 +56,7 @@ export function CreateSubTaskModal({ parentKey, onCreated, onClose }: {
                             onChange={e => setSummary(e.target.value)}
                             required
                             placeholder="¿Qué hay que hacer?"
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon"
                         />
                     </div>
                     <div>
@@ -66,7 +66,7 @@ export function CreateSubTaskModal({ parentKey, onCreated, onClose }: {
                             onChange={e => setDescription(e.target.value)}
                             rows={3}
                             placeholder="Detalles adicionales..."
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon resize-none"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-microtermix-neon resize-none"
                         />
                     </div>
                     <div className="flex gap-2 pt-1">
@@ -76,7 +76,7 @@ export function CreateSubTaskModal({ parentKey, onCreated, onClose }: {
                         <button
                             type="submit"
                             disabled={submitting || !summary.trim()}
-                            className="flex-1 py-2 text-xs rounded-lg bg-nexus-accent hover:bg-opacity-80 text-white font-bold disabled:opacity-50"
+                            className="flex-1 py-2 text-xs rounded-lg bg-microtermix-accent hover:bg-opacity-80 text-white font-bold disabled:opacity-50"
                         >
                             {submitting ? <RefreshCw size={12} className="inline animate-spin mr-1" /> : null}
                             {submitting ? 'Creando...' : 'Crear + Working'}

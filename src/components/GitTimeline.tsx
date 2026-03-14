@@ -64,7 +64,7 @@ function parseRefs(refs: string): ParsedRef[] {
 
 function RefBadge({ ref }: { ref: ParsedRef }) {
     const cls: Record<ParsedRef['type'], string> = {
-        head: 'bg-nexus-neon/20 text-nexus-neon border-nexus-neon/40 hover:bg-nexus-neon/30',
+        head: 'bg-microtermix-neon/20 text-microtermix-neon border-microtermix-neon/40 hover:bg-microtermix-neon/30',
         local: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25',
         remote: 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25',
         tag: 'bg-blue-500/15 text-blue-300 border-blue-400/30 hover:bg-blue-500/25',
@@ -76,7 +76,7 @@ function RefBadge({ ref }: { ref: ParsedRef }) {
         tag: <Tag size={8} />, stash: <Archive size={8} />,
     };
     return (
-        <Badge 
+        <Badge
             variant="outline"
             className={cn("gap-0.5 px-1 py-0 h-4 text-[9px] font-mono font-medium leading-none border shrink-0", cls[ref.type])}
         >
@@ -181,7 +181,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     useEffect(() => {
         if (!projectPath) return;
         let active = true;
-        
+
         invoke<any>('git_execute', { projectPath, args: ['config', 'user.name'] }).then(r => {
             if (active) {
                 setCurrentUser(r?.stdout?.trim() ?? '');
@@ -324,7 +324,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     );
 
     if (error) return (
-        <div className="flex-1 flex flex-col items-center justify-center text-nexus-danger gap-3 p-8 text-sm text-center">
+        <div className="flex-1 flex flex-col items-center justify-center text-microtermix-danger gap-3 p-8 text-sm text-center">
             {error}
             <Button variant="outline" size="sm" onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} className="bg-slate-800 text-slate-300 border-none hover:bg-slate-700 hover:text-white">Reintentar</Button>
         </div>
@@ -339,13 +339,13 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                     <Input
                         type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
                         placeholder="Buscar commit, autor, hash..."
-                        className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-nexus-neon transition-colors"
+                        className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-7 text-xs text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-microtermix-neon transition-colors"
                     />
                     {searchText && (
-                        <Button 
-                            variant="ghost" 
-                            size="icon-xs" 
-                            onClick={() => setSearchText('')} 
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={() => setSearchText('')}
                             className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 h-6 w-6"
                         >
                             <X size={12} />
@@ -354,9 +354,9 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                     {/* View toggle: Locales / Todos */}
-                    <Button 
-                        variant="outline" 
-                        size="xs" 
+                    <Button
+                        variant="outline"
+                        size="xs"
                         onClick={() => setTimelineView('local')}
                         className={cn(
                             "h-6 rounded-full text-[10px] px-2.5 transition-colors border",
@@ -367,9 +367,9 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                     >
                         Locales {localHashes.size > 0 && <span className="ml-0.5 opacity-70">({localHashes.size})</span>}
                     </Button>
-                    <Button 
-                        variant="outline" 
-                        size="xs" 
+                    <Button
+                        variant="outline"
+                        size="xs"
                         onClick={() => setTimelineView('all')}
                         className={cn(
                             "h-6 rounded-full text-[10px] px-2.5 transition-colors border",
@@ -382,15 +382,15 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                     </Button>
                     <div className="w-px h-3 bg-slate-700 mx-0.5" />
                     {filters.map(f => (
-                        <Button 
-                            variant="outline" 
-                            size="xs" 
-                            key={f.id} 
+                        <Button
+                            variant="outline"
+                            size="xs"
+                            key={f.id}
                             onClick={() => setFilter(f.id)}
                             className={cn(
                                 "h-6 flex items-center gap-1.5 rounded-full text-[10px] px-2.5 transition-colors border",
                                 filter === f.id
-                                    ? 'bg-nexus-neon text-nexus-darker border-transparent hover:bg-nexus-neon/80 hover:text-nexus-darker'
+                                    ? 'bg-microtermix-neon text-microtermix-darker border-transparent hover:bg-microtermix-neon/80 hover:text-microtermix-darker'
                                     : 'bg-transparent text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-200'
                             )}
                         >
@@ -399,10 +399,10 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                     ))}
                     <Tooltip>
                         <TooltipTrigger render={
-                            <Button 
-                                variant="ghost" 
-                                size="icon-xs" 
-                                onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }} 
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => { invalidate(projectPath, 'timeline'); fetchTimeline(projectPath, true); }}
                                 className="ml-auto h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-slate-800"
                             >
                                 <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
@@ -469,7 +469,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                 key={n.hash}
                                 style={{ position: 'absolute', top: n.rowIndex * ROW_H, left: 0, right: 0, height: ROW_H, paddingLeft: svgW }}
                                 className={`flex items-center gap-2 pr-2 border-b border-slate-900/50 transition-colors group
-                                    ${isEditing || isDeleting ? 'bg-slate-800/80' : isSelected ? 'bg-nexus-neon/8 border-nexus-neon/20' : 'hover:bg-slate-800/40'}
+                                    ${isEditing || isDeleting ? 'bg-slate-800/80' : isSelected ? 'bg-microtermix-neon/8 border-microtermix-neon/20' : 'hover:bg-slate-800/40'}
                                     ${!matched ? 'opacity-20 pointer-events-none' : ''}
                                 `}
                             >
@@ -509,29 +509,29 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                             value={editValue}
                                             onChange={e => setEditValue(e.target.value)}
                                             onKeyDown={e => { if (e.key === 'Enter') handleEditSave(n); if (e.key === 'Escape') setEditingHash(null); }}
-                                            className="flex-1 bg-slate-900 border-nexus-neon/50 h-7 text-xs text-slate-100 focus-visible:ring-1 focus-visible:ring-nexus-neon"
+                                            className="flex-1 bg-slate-900 border-microtermix-neon/50 h-7 text-xs text-slate-100 focus-visible:ring-1 focus-visible:ring-microtermix-neon"
                                         />
                                         <Tooltip>
                                             <TooltipTrigger render={
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon-xs" 
-                                                    onClick={() => handleEditSave(n)} 
-                                                    disabled={editSaving} 
-                                                    className="h-6 w-6 text-nexus-success hover:bg-slate-700/50 hover:text-nexus-success"
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-xs"
+                                                    onClick={() => handleEditSave(n)}
+                                                    disabled={editSaving}
+                                                    className="h-6 w-6 text-microtermix-success hover:bg-slate-700/50 hover:text-microtermix-success"
                                                 >
                                                     {editSaving ? <RefreshCw size={13} className="animate-spin" /> : <Check size={13} />}
                                                 </Button>
                                             } />
                                             <TooltipContent>Guardar (Enter)</TooltipContent>
                                         </Tooltip>
-                                        
+
                                         <Tooltip>
                                             <TooltipTrigger render={
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon-xs" 
-                                                    onClick={() => setEditingHash(null)} 
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon-xs"
+                                                    onClick={() => setEditingHash(null)}
                                                     className="h-6 w-6 text-slate-500 hover:bg-slate-700/50 hover:text-white"
                                                 >
                                                     <X size={13} />
@@ -543,8 +543,8 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                 ) : isDeleting ? (
                                     /* ── DELETE CONFIRM mode ── */
                                     <div className="flex-1 flex items-center gap-2">
-                                        <AlertTriangle size={12} className="text-nexus-danger shrink-0" />
-                                        <span className="text-xs text-nexus-danger">¿Eliminar este commit?</span>
+                                        <AlertTriangle size={12} className="text-microtermix-danger shrink-0" />
+                                        <span className="text-xs text-microtermix-danger">¿Eliminar este commit?</span>
                                         <Button variant="destructive" size="xs" onClick={() => handleDelete(n)} disabled={deleteWorking} className="h-6 text-[10px] px-2.5">
                                             {deleteWorking ? '...' : 'Eliminar'}
                                         </Button>
@@ -575,7 +575,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                                         <Button
                                                             variant="ghost" size="icon-xs"
                                                             onClick={e => { e.stopPropagation(); setEditingHash(n.hash); setEditValue(n.message); }}
-                                                            className="h-6 w-6 text-slate-500 hover:text-nexus-neon hover:bg-slate-700/50"
+                                                            className="h-6 w-6 text-slate-500 hover:text-microtermix-neon hover:bg-slate-700/50"
                                                         >
                                                             <Pencil size={11} />
                                                         </Button>
@@ -588,7 +588,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                                         <Button
                                                             variant="ghost" size="icon-xs"
                                                             onClick={e => { e.stopPropagation(); setDeletingHash(n.hash); }}
-                                                            className="h-6 w-6 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50"
+                                                            className="h-6 w-6 text-slate-500 hover:text-microtermix-danger hover:bg-slate-700/50"
                                                         >
                                                             <Trash2 size={11} />
                                                         </Button>

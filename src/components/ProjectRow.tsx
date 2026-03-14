@@ -23,7 +23,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
     const { setTargetTerminalTab, executeProjectScript } = useWorkspace();
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
-    
+
     const projectPath = project.path as string;
     const isNode = project.project_type === 'node';
     const isJava = project.project_type === 'java';
@@ -42,17 +42,17 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
 
     const filteredScripts = useMemo(() => {
         let scripts = project.scripts || [];
-        
+
         // Smart Filter: If Node, hide obvious Java commands that might be in global saved commands
         if (isNode) {
             scripts = scripts.filter(s => !['mvn ', 'gradle', './gradlew', 'java -jar'].some(k => s.includes(k)));
         }
-        
+
         // If Java, hide Node commands
         if (isJava) {
             scripts = scripts.filter(s => !['npm ', 'yarn ', 'pnpm ', 'bun '].some(k => s.includes(k)));
         }
-        
+
         return scripts;
     }, [project.scripts, isNode, isJava]);
 
@@ -89,34 +89,34 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
         setAddDepsOpen(false);
     };
 
-    const activeProcessIds = useMemo(() => 
+    const activeProcessIds = useMemo(() =>
         Object.keys(activeProcesses).filter(id => id.startsWith(`${projectPath}::`)),
-    [activeProcesses, projectPath]);
-    
+        [activeProcesses, projectPath]);
+
     const processState = activeProcessIds.length > 0 ? activeProcesses[activeProcessIds[0]] : null;
     const status = processState?.status || 'idle';
 
     const TYPE_BADGE: Record<string, string> = {
-        node:   'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-        bun:    'bg-amber-500/15 text-amber-400 border-amber-500/30',
-        go:     'bg-sky-500/15 text-sky-400 border-sky-500/30',
-        rust:   'bg-orange-500/15 text-orange-400 border-orange-500/30',
+        node: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        bun: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+        go: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
+        rust: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
         python: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-        java:   'bg-red-500/15 text-red-400 border-red-500/30',
+        java: 'bg-red-500/15 text-red-400 border-red-500/30',
     };
 
     const FRAMEWORK_BADGE: Record<string, string> = {
-        django:        'bg-emerald-700/20 text-emerald-300 border-emerald-700/40',
-        fastapi:       'bg-teal-500/20 text-teal-300 border-teal-500/40',
-        flask:         'bg-slate-500/20 text-slate-300 border-slate-500/40',
+        django: 'bg-emerald-700/20 text-emerald-300 border-emerald-700/40',
+        fastapi: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+        flask: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
         'spring-boot': 'bg-green-600/20 text-green-300 border-green-600/40',
     };
 
     const STATUS_BAR: Record<string, string> = {
         running: 'bg-emerald-400',
-        error:   'bg-red-400',
+        error: 'bg-red-400',
         stopped: 'bg-slate-500',
-        idle:    'bg-transparent',
+        idle: 'bg-transparent',
     };
 
     return (
@@ -137,7 +137,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                     type="checkbox"
                     checked={isSelected}
                     onChange={onToggleSelect}
-                    className="accent-nexus-neon shrink-0 w-3.5 h-3.5 ml-2"
+                    className="accent-microtermix-neon shrink-0 w-3.5 h-3.5 ml-2"
                 />
 
                 {/* Nombre + Badge tipo */}
@@ -167,7 +167,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         <p className={cn(
                             'text-[9px] mt-0.5',
                             status === 'running' && 'text-emerald-400',
-                            status === 'error'   && 'text-red-400',
+                            status === 'error' && 'text-red-400',
                             status === 'stopped' && 'text-slate-500',
                         )}>
                             {status === 'stopped' ? 'parado' : status}
@@ -182,7 +182,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         {project.scripts && project.scripts.length > 0 && (
                             <Popover open={scriptMenuOpen} onOpenChange={setScriptMenuOpen}>
                                 <PopoverTrigger render={
-                                    <Button variant="ghost" size="icon-xs" className="text-slate-500 hover:text-nexus-neon">
+                                    <Button variant="ghost" size="icon-xs" className="text-slate-500 hover:text-microtermix-neon">
                                         <Play size={13} className="fill-current" />
                                     </Button>
                                 } />
@@ -219,7 +219,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                                     {filteredScripts.map(s => (
                                         <button
                                             key={s}
-                                            className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-nexus-neon rounded transition-colors"
+                                            className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-microtermix-neon rounded transition-colors"
                                             onClick={() => { onPlayScript(s); setScriptMenuOpen(false); }}
                                         >
                                             {s}
@@ -236,7 +236,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                                     <TooltipTrigger render={
                                         <Button variant="ghost" size="icon-xs"
                                             onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleNpmInstall(); }}
-                                            className="text-slate-500 hover:text-nexus-neon" />
+                                            className="text-slate-500 hover:text-microtermix-neon" />
                                     }>
                                         <Package size={12} />
                                     </TooltipTrigger>
@@ -247,7 +247,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                                     <TooltipTrigger render={
                                         <Button variant="ghost" size="icon-xs"
                                             onClick={(e: React.MouseEvent) => { e.stopPropagation(); setAddDepsOpen(true); }}
-                                            className="text-slate-500 hover:text-nexus-neon" />
+                                            className="text-slate-500 hover:text-microtermix-neon" />
                                     }>
                                         <Plus size={12} />
                                     </TooltipTrigger>
@@ -261,7 +261,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                             <TooltipTrigger render={
                                 <Button variant="ghost" size="icon-xs"
                                     onClick={(e: React.MouseEvent) => { e.stopPropagation(); setEnvManagerOpen(true); }}
-                                    className="text-slate-500 hover:text-nexus-neon font-mono text-[9px] w-auto px-1.5 h-6" />
+                                    className="text-slate-500 hover:text-microtermix-neon font-mono text-[9px] w-auto px-1.5 h-6" />
                             }>
                                 <span>ENV{Object.keys(activeVars).length > 0 && ` (${Object.keys(activeVars).length})`}</span>
                             </TooltipTrigger>
@@ -283,7 +283,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         value={addDepsPackages}
                         onChange={e => setAddDepsPackages(e.target.value)}
                         placeholder="lodash axios react"
-                        className="bg-slate-950 border-slate-700 focus:border-nexus-neon"
+                        className="bg-slate-950 border-slate-700 focus:border-microtermix-neon"
                         onKeyDown={e => e.key === 'Enter' && handleAddDepsInstall()}
                         autoFocus
                     />
@@ -291,12 +291,12 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                     <div className="flex items-center gap-4">
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name={`depsType-${projectPath}`} checked={!addDepsDev}
-                                onChange={() => setAddDepsDev(false)} className="accent-nexus-neon" />
+                                onChange={() => setAddDepsDev(false)} className="accent-microtermix-neon" />
                             <span className="text-xs text-slate-300">Dependencies</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input type="radio" name={`depsType-${projectPath}`} checked={addDepsDev}
-                                onChange={() => setAddDepsDev(true)} className="accent-nexus-neon" />
+                                onChange={() => setAddDepsDev(true)} className="accent-microtermix-neon" />
                             <span className="text-xs text-slate-300">Dev Dependencies</span>
                         </label>
                     </div>
@@ -307,7 +307,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         <Button
                             onClick={handleAddDepsInstall}
                             disabled={!addDepsPackages.trim()}
-                            className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">
+                            className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold">
                             Instalar
                         </Button>
                     </DialogFooter>

@@ -66,7 +66,7 @@ export function Ec2Terminal({ session, onDisconnect }: Ec2TerminalProps) {
         <div className="flex flex-col h-full min-h-0">
             {/* Terminal header */}
             <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-700 bg-slate-900 shrink-0">
-                <Terminal size={14} className="text-nexus-neon" />
+                <Terminal size={14} className="text-microtermix-neon" />
                 <span className="text-sm font-medium text-slate-200">{displayName}</span>
                 <span className="text-xs text-slate-500 font-mono">{session.inst.public_ip ?? session.inst.private_ip}</span>
                 {alive
@@ -107,14 +107,14 @@ export function Ec2Terminal({ session, onDisconnect }: Ec2TerminalProps) {
                         onClick={() => inputRef.current?.focus()}
                     >
                         {logs.map((l, i) => (
-                            <div key={i} className={l.isError ? 'text-red-400' : l.text.startsWith('$') ? 'text-nexus-neon' : l.text.startsWith('[') ? 'text-slate-500' : 'text-slate-200'}>
+                            <div key={i} className={l.isError ? 'text-red-400' : l.text.startsWith('$') ? 'text-microtermix-neon' : l.text.startsWith('[') ? 'text-slate-500' : 'text-slate-200'}>
                                 {l.text}
                             </div>
                         ))}
                         <div ref={logsEndRef} />
                     </div>
                     <div className="flex items-center gap-2 px-4 py-2 border-t border-slate-800 bg-slate-900 shrink-0">
-                        <span className="text-nexus-neon font-mono text-xs select-none">$</span>
+                        <span className="text-microtermix-neon font-mono text-xs select-none">$</span>
                         <input
                             ref={inputRef}
                             value={input}

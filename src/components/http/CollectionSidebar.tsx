@@ -64,7 +64,7 @@ const CollectionTreeItem: React.FC<{
                     <div className="text-slate-500 w-4 flex justify-center shrink-0">
                         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </div>
-                    <Folder size={14} className="text-nexus-accent shrink-0" />
+                    <Folder size={14} className="text-microtermix-accent shrink-0" />
                     <span className="truncate flex-1">{folder.name}</span>
                 </div>
 
@@ -159,7 +159,7 @@ export const CollectionSidebar: React.FC<CollectionSidebarProps> = ({
                     placeholder="Filter requests..."
                     value={filter}
                     onChange={(e) => setFilter(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:border-nexus-neon outline-none"
+                    className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-sm text-slate-200 focus:border-microtermix-neon outline-none"
                 />
                 <button
                     onClick={() => handleAddSubfolder('root', 'New Collection')}

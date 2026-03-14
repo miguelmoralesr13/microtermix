@@ -13,7 +13,7 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
         .unwrap()
         .as_millis();
     // More robust window label
-    let window_label = format!("nexus-ws-{}", timestamp);
+    let window_label = format!("microtermix-ws-{}", timestamp);
 
     println!("[open_new_workspace] Registering path for window {}: {}", window_label, path);
 
@@ -35,7 +35,7 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
         &window_label,
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title(format!("Nexus — {}", title))
+    .title(format!("Microtermix — {}", title))
     .inner_size(1280.0, 800.0) // Bigger default size
     .build();
 

@@ -66,12 +66,12 @@ export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials })
 
             {/* Main Content Area: Master / Detail */}
             <div className="flex flex-1 overflow-hidden min-h-0 relative">
-                
+
                 {!credentials?.accessKeyId && (
                     <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center">
                         <div className="flex flex-col items-center gap-4 text-slate-400 max-w-sm text-center">
                             <Network size={48} className="opacity-20" />
-                            <div>Please configure your AWS Credentials in the <span className="text-nexus-neon">Settings</span> tab to view API Gateways.</div>
+                            <div>Please configure your AWS Credentials in the <span className="text-microtermix-neon">Settings</span> tab to view API Gateways.</div>
                         </div>
                     </div>
                 )}

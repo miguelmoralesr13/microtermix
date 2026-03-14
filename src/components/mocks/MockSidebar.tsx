@@ -3,11 +3,11 @@ import { useMockStore } from '../../stores/mockStore';
 import { Button } from '@/components/ui/button';
 import { FolderPlus, FilePlus, Folder, FileJson, ChevronDown, ChevronRight, Server } from 'lucide-react';
 
-const TreeNode: React.FC<{ 
-    nodeId: string; 
-    depth: number; 
-    nodes: Record<string, any>; 
-    selectedId: string | null; 
+const TreeNode: React.FC<{
+    nodeId: string;
+    depth: number;
+    nodes: Record<string, any>;
+    selectedId: string | null;
     onSelect: (id: string) => void;
     onAddEndpoint: (pid: string) => void;
     onAddFolder: (pid: string) => void;
@@ -29,17 +29,17 @@ const TreeNode: React.FC<{
 
     return (
         <div className="w-full">
-            <div 
-                className={`flex items-center gap-1.5 py-1 px-1 rounded cursor-pointer group ${isSelected ? 'bg-nexus-neon/10 text-nexus-neon' : 'text-slate-300 hover:bg-slate-800/50'}`}
+            <div
+                className={`flex items-center gap-1.5 py-1 px-1 rounded cursor-pointer group ${isSelected ? 'bg-microtermix-neon/10 text-microtermix-neon' : 'text-slate-300 hover:bg-slate-800/50'}`}
                 style={{ paddingLeft: `${depth * 12 + 8}px` }}
                 onClick={(e) => { e.stopPropagation(); onSelect(nodeId); }}
             >
                 {/* Expand toggler for folders */}
-                <span 
+                <span
                     className={`shrink-0 w-4 h-4 flex items-center justify-center ${isFolder ? 'cursor-pointer hover:text-white' : 'opacity-0'}`}
-                    onClick={(e) => { 
+                    onClick={(e) => {
                         if (isFolder) {
-                            e.stopPropagation(); 
+                            e.stopPropagation();
                             setExpanded(!expanded);
                         }
                     }}
@@ -49,7 +49,7 @@ const TreeNode: React.FC<{
 
                 {/* Icon */}
                 <span className="shrink-0 text-slate-500">
-                    {isFolder ? <Folder size={14} className={isSelected ? 'text-nexus-neon' : ''} /> : <FileJson size={14} className={isSelected ? 'text-nexus-neon' : ''} />}
+                    {isFolder ? <Folder size={14} className={isSelected ? 'text-microtermix-neon' : ''} /> : <FileJson size={14} className={isSelected ? 'text-microtermix-neon' : ''} />}
                 </span>
 
                 {/* Name */}
@@ -60,15 +60,15 @@ const TreeNode: React.FC<{
                 {/* Contextual actions */}
                 {isFolder && (
                     <div className="opacity-0 group-hover:opacity-100 flex items-center pr-1 shrink-0">
-                        <Button variant="ghost" size="icon-sm" className="h-5 w-5 hover:text-nexus-neon" onClick={(e) => { e.stopPropagation(); onAddFolder(nodeId); }} title="Nueva Carpeta">
+                        <Button variant="ghost" size="icon-sm" className="h-5 w-5 hover:text-microtermix-neon" onClick={(e) => { e.stopPropagation(); onAddFolder(nodeId); }} title="Nueva Carpeta">
                             <FolderPlus size={12} />
                         </Button>
-                        <Button variant="ghost" size="icon-sm" className="h-5 w-5 hover:text-nexus-neon" onClick={(e) => { e.stopPropagation(); onAddEndpoint(nodeId); }} title="Nuevo Endpoint">
+                        <Button variant="ghost" size="icon-sm" className="h-5 w-5 hover:text-microtermix-neon" onClick={(e) => { e.stopPropagation(); onAddEndpoint(nodeId); }} title="Nuevo Endpoint">
                             <FilePlus size={12} />
                         </Button>
                     </div>
                 )}
-                
+
                 {node.type === 'endpoint' && (
                     <span className="text-[9px] font-mono px-1 rounded bg-slate-800 text-slate-400 mr-2 shrink-0">
                         {node.method}
@@ -78,12 +78,12 @@ const TreeNode: React.FC<{
 
             {/* Recursion */}
             {isFolder && expanded && children.map((child: any) => (
-                <TreeNode 
-                    key={child.id} 
-                    nodeId={child.id} 
-                    depth={depth + 1} 
-                    nodes={nodes} 
-                    selectedId={selectedId} 
+                <TreeNode
+                    key={child.id}
+                    nodeId={child.id}
+                    depth={depth + 1}
+                    nodes={nodes}
+                    selectedId={selectedId}
                     onSelect={onSelect}
                     onAddEndpoint={onAddEndpoint}
                     onAddFolder={onAddFolder}
@@ -107,14 +107,14 @@ export const MockSidebar: React.FC = () => {
         <div className="w-64 shrink-0 flex flex-col bg-slate-950/30 overflow-hidden">
             <div className="px-3 py-3 border-b border-slate-800/60 bg-slate-950/50 flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
-                    <Server size={14} className="text-nexus-neon" />
+                    <Server size={14} className="text-microtermix-neon" />
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Mocks</h3>
                 </div>
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-nexus-neon hover:bg-slate-800" onClick={() => addFolder(null, 'Nueva Carpeta')} title="Nueva Carpeta Raíz">
+                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-microtermix-neon hover:bg-slate-800" onClick={() => addFolder(null, 'Nueva Carpeta')} title="Nueva Carpeta Raíz">
                         <FolderPlus size={14} />
                     </Button>
-                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-nexus-neon hover:bg-slate-800" onClick={() => addEndpoint(null, 'Nuevo Endpoint')} title="Nuevo Endpoint Raíz">
+                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-microtermix-neon hover:bg-slate-800" onClick={() => addEndpoint(null, 'Nuevo Endpoint')} title="Nuevo Endpoint Raíz">
                         <FilePlus size={14} />
                     </Button>
                 </div>
@@ -128,12 +128,12 @@ export const MockSidebar: React.FC = () => {
                     </div>
                 ) : (
                     rootNodes.map((node: any) => (
-                        <TreeNode 
-                            key={node.id} 
-                            nodeId={node.id} 
-                            depth={0} 
-                            nodes={nodes} 
-                            selectedId={selectedNodeId} 
+                        <TreeNode
+                            key={node.id}
+                            nodeId={node.id}
+                            depth={0}
+                            nodes={nodes}
+                            selectedId={selectedNodeId}
                             onSelect={setSelectedNodeId}
                             onAddEndpoint={(pid) => addEndpoint(pid, 'Nuevo Endpoint')}
                             onAddFolder={(pid) => addFolder(pid, 'Nueva Carpeta')}

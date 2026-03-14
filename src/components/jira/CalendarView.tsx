@@ -26,14 +26,14 @@ function parseStartTime(startTime?: string): { h: number; m: number } {
 
 function issueColor(key: string): { bg: string; border: string; text: string } {
   const palettes = [
-    { bg: 'bg-cyan-500/20',    border: 'border-cyan-500/60',   text: 'text-cyan-300' },
-    { bg: 'bg-violet-500/20',  border: 'border-violet-500/60', text: 'text-violet-300' },
-    { bg: 'bg-amber-500/20',   border: 'border-amber-500/60',  text: 'text-amber-300' },
-    { bg: 'bg-emerald-500/20', border: 'border-emerald-500/60',text: 'text-emerald-300' },
-    { bg: 'bg-rose-500/20',    border: 'border-rose-500/60',   text: 'text-rose-300' },
-    { bg: 'bg-sky-500/20',     border: 'border-sky-500/60',    text: 'text-sky-300' },
-    { bg: 'bg-orange-500/20',  border: 'border-orange-500/60', text: 'text-orange-300' },
-    { bg: 'bg-pink-500/20',    border: 'border-pink-500/60',   text: 'text-pink-300' },
+    { bg: 'bg-cyan-500/20', border: 'border-cyan-500/60', text: 'text-cyan-300' },
+    { bg: 'bg-violet-500/20', border: 'border-violet-500/60', text: 'text-violet-300' },
+    { bg: 'bg-amber-500/20', border: 'border-amber-500/60', text: 'text-amber-300' },
+    { bg: 'bg-emerald-500/20', border: 'border-emerald-500/60', text: 'text-emerald-300' },
+    { bg: 'bg-rose-500/20', border: 'border-rose-500/60', text: 'text-rose-300' },
+    { bg: 'bg-sky-500/20', border: 'border-sky-500/60', text: 'text-sky-300' },
+    { bg: 'bg-orange-500/20', border: 'border-orange-500/60', text: 'text-orange-300' },
+    { bg: 'bg-pink-500/20', border: 'border-pink-500/60', text: 'text-pink-300' },
   ];
   let hash = 0;
   for (const c of key) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
@@ -74,7 +74,7 @@ const WeekView: React.FC<{ days: string[]; byDate: Map<string, TempoWorklog[]>; 
       <div className="flex shrink-0 pl-10 border-b border-slate-800">
         {days.map(d => (
           <div key={d} className="flex-1 min-w-0 py-2 text-center border-r border-slate-800 last:border-r-0">
-            <div className={cn('text-[10px] font-medium uppercase tracking-wide', isToday(d) ? 'text-nexus-neon' : 'text-slate-500')}>
+            <div className={cn('text-[10px] font-medium uppercase tracking-wide', isToday(d) ? 'text-microtermix-neon' : 'text-slate-500')}>
               {dayLabel(d)}
             </div>
             {byDate.get(d)?.length ? (
@@ -126,7 +126,7 @@ const WeekView: React.FC<{ days: string[]; byDate: Map<string, TempoWorklog[]>; 
 
                 {/* Today highlight */}
                 {isToday(d) && (
-                  <div className="absolute inset-0 bg-nexus-neon/3 pointer-events-none" />
+                  <div className="absolute inset-0 bg-microtermix-neon/3 pointer-events-none" />
                 )}
 
                 {/* Worklog blocks */}
@@ -223,7 +223,7 @@ const MonthView: React.FC<{ from: string; to: string; byDate: Map<string, TempoW
               {/* Date number */}
               <div className={cn(
                 'text-[11px] font-mono leading-none w-5 h-5 flex items-center justify-center rounded-full shrink-0',
-                isCurrentDay ? 'bg-nexus-neon text-slate-900 font-bold' : 'text-slate-400',
+                isCurrentDay ? 'bg-microtermix-neon text-slate-900 font-bold' : 'text-slate-400',
               )}>
                 {new Date(date + 'T12:00:00').getDate()}
               </div>
@@ -239,7 +239,7 @@ const MonthView: React.FC<{ from: string; to: string; byDate: Map<string, TempoW
               {barWidth > 0 && (
                 <div className="h-1.5 rounded-full bg-slate-800 w-full overflow-hidden mt-auto">
                   <div
-                    className="h-full rounded-full bg-nexus-neon/70"
+                    className="h-full rounded-full bg-microtermix-neon/70"
                     style={{ width: `${barWidth}%` }}
                   />
                 </div>

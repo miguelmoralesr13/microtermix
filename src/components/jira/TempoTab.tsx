@@ -95,7 +95,7 @@ const TempoConsole: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     : <XCircle size={10} className="text-red-400 shrink-0" />
                   }
                   <span className="text-slate-600 shrink-0">{e.time}</span>
-                  <span className={cn('font-bold shrink-0 w-9', e.ok ? 'text-nexus-neon' : 'text-red-400')}>
+                  <span className={cn('font-bold shrink-0 w-9', e.ok ? 'text-microtermix-neon' : 'text-red-400')}>
                     {e.method}
                   </span>
                   <span className="text-slate-300 truncate flex-1">{e.path}</span>
@@ -262,7 +262,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
       <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 p-8 text-center">
         <AlertCircle size={24} />
         <p className="text-sm">Tempo token no configurado.</p>
-        <p className="text-xs text-slate-600">Ve a <span className="text-nexus-neon">Configuración</span> y completa el campo "Tempo Token".</p>
+        <p className="text-xs text-slate-600">Ve a <span className="text-microtermix-neon">Configuración</span> y completa el campo "Tempo Token".</p>
       </div>
     );
   }
@@ -295,7 +295,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
         </div>
         <div className="flex items-center gap-2">
           {totalPeriod > 0 && subTab === 'my-worklogs' && (
-            <span className="border border-nexus-neon/30 text-nexus-neon font-mono text-[11px] px-2 py-0.5 rounded">
+            <span className="border border-microtermix-neon/30 text-microtermix-neon font-mono text-[11px] px-2 py-0.5 rounded">
               {formatDuration(totalPeriod)} total
             </span>
           )}
@@ -314,7 +314,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
           </button>
           <button
             onClick={() => handleLogTime()}
-            className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-nexus-neon text-slate-900 hover:bg-opacity-80 transition-colors"
+            className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-microtermix-neon text-slate-900 hover:bg-opacity-80 transition-colors"
           >
             <Plus size={12} /> Registrar
           </button>
@@ -375,7 +375,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
                   onChange={e => setIssueSearchInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleIssueSearch()}
                   placeholder="PROJ-123"
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-nexus-neon"
+                  className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-white font-mono text-sm focus:outline-none focus:border-microtermix-neon"
                 />
                 <button
                   onClick={handleIssueSearch}
@@ -386,7 +386,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
                 {activeIssueId && (
                   <button
                     onClick={() => handleLogTime(issueSearchInput.trim().toUpperCase())}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-nexus-neon text-slate-900 hover:bg-opacity-80 transition-colors"
+                    className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-semibold bg-microtermix-neon text-slate-900 hover:bg-opacity-80 transition-colors"
                   >
                     <Plus size={12} /> Log
                   </button>

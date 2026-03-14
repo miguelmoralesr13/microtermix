@@ -104,7 +104,7 @@ export const useMockStore = create<MockStoreState>()(
             deleteNode: (id) => {
                 set((state) => {
                     const newNodes = { ...state.nodes };
-                    
+
                     // Recursively get all children to delete
                     const getChildrenIds = (parentId: string): string[] => {
                         const children = Object.values(newNodes).filter(n => n.parentId === parentId);
@@ -112,7 +112,7 @@ export const useMockStore = create<MockStoreState>()(
                             return [...acc, child.id, ...getChildrenIds(child.id)];
                         }, [] as string[]);
                     };
-                    
+
                     const idsToDelete = [id, ...getChildrenIds(id)];
                     idsToDelete.forEach(deleteId => {
                         delete newNodes[deleteId];
@@ -130,10 +130,10 @@ export const useMockStore = create<MockStoreState>()(
             setServerPort: (port) => set({ serverPort: port }),
         }),
         {
-            name: 'nexus-mock-store',
-            partialize: (state) => ({ 
-                nodes: state.nodes, 
-                serverPort: state.serverPort 
+            name: 'microtermix-mock-store',
+            partialize: (state) => ({
+                nodes: state.nodes,
+                serverPort: state.serverPort
                 // Don't persist selectedNodeId or serverRunning state
             }),
         }
@@ -144,11 +144,11 @@ export const useMockStore = create<MockStoreState>()(
 export const getFullPath = (nodes: Record<string, MockNode>, nodeId: string): string => {
     let currentId: string | null = nodeId;
     const paths: string[] = [];
-    
+
     while (currentId) {
         const node = nodes[currentId] as MockNode | undefined;
         if (!node) break;
-        
+
         if (node.type === 'endpoint') {
             paths.unshift(node.route);
         } else {
@@ -156,7 +156,7 @@ export const getFullPath = (nodes: Record<string, MockNode>, nodeId: string): st
         }
         currentId = node.parentId;
     }
-    
+
     // Clean up empty segments and join
     const cleanPaths = paths.filter(p => p.trim() !== '');
     return '/' + cleanPaths.join('/');

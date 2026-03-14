@@ -148,7 +148,7 @@ export function Ec2Tab({ cfg }: Ec2TabProps) {
                 <div className="flex gap-1">
                     {(['all', 'running', 'stopped'] as Ec2StateFilter[]).map(f => (
                         <button key={f} onClick={() => setStateFilter(f)}
-                            className={`px-3 py-1 rounded text-xs capitalize transition-colors ${stateFilter === f ? 'bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30' : 'text-slate-500 hover:text-slate-300'}`}>
+                            className={`px-3 py-1 rounded text-xs capitalize transition-colors ${stateFilter === f ? 'bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30' : 'text-slate-500 hover:text-slate-300'}`}>
                             {f} <span className="opacity-50">({counts[f]})</span>
                         </button>
                     ))}

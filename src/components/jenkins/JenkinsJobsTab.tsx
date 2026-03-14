@@ -66,9 +66,9 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
                 </div>
 
                 <div className="relative flex-1 min-w-32">
-                    <Search size={12} className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${isFetching ? 'text-nexus-neon animate-pulse' : 'text-slate-500'}`} />
+                    <Search size={12} className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${isFetching ? 'text-microtermix-neon animate-pulse' : 'text-slate-500'}`} />
                     <input
-                        className="w-full bg-slate-800 border border-slate-700 rounded-md pl-7 pr-16 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-nexus-neon/50"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-md pl-7 pr-16 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-microtermix-neon/50"
                         placeholder="Search jobs..."
                         value={inputValue}
                         onChange={e => setInputValue(e.target.value)}
@@ -76,15 +76,15 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
                     />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         {inputValue && <button onClick={handleClear} className="text-slate-500 hover:text-slate-300"><X size={11} /></button>}
-                        <button onClick={handleFullRefresh} className="text-slate-500 hover:text-nexus-neon transition-colors">
+                        <button onClick={handleFullRefresh} className="text-slate-500 hover:text-microtermix-neon transition-colors">
                             <RefreshCw size={11} className={isFetching ? 'animate-spin' : ''} />
                         </button>
                     </div>
                 </div>
 
                 {runningCount > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] text-nexus-neon font-mono shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full bg-nexus-neon animate-pulse" />
+                    <span className="flex items-center gap-1 text-[10px] text-microtermix-neon font-mono shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-microtermix-neon animate-pulse" />
                         {runningCount} running
                     </span>
                 )}

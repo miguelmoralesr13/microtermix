@@ -24,7 +24,7 @@ type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway';
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export const CloudWatchPanel: React.FC = () => {
-    const [tab, setTab] = usePersistedState<CwTab>('nexus-cw-active-tab', 'settings');
+    const [tab, setTab] = usePersistedState<CwTab>('microtermix-cw-active-tab', 'settings');
     const [savedMsg, setSavedMsg] = useState(false);
     const [cfg, setCfg] = useState<CwCredentials>(() => loadCwConfig());
     const isConfigured = !!(cfg.accessKeyId && cfg.secretAccessKey && cfg.region);
@@ -48,11 +48,11 @@ export const CloudWatchPanel: React.FC = () => {
         <div className="flex flex-col h-full min-h-0 bg-slate-950">
             {/* Tab bar */}
             <div className="flex items-center gap-1 px-4 pt-3 border-b border-slate-800 shrink-0 bg-slate-900/50">
-                <Cloud size={15} className="text-nexus-neon mr-2 shrink-0" />
+                <Cloud size={15} className="text-microtermix-neon mr-2 shrink-0" />
                 {tabs.map(t => (
                     <button key={t.id} onClick={() => setTab(t.id)}
                         className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === t.id
-                            ? 'border-nexus-neon text-white'
+                            ? 'border-microtermix-neon text-white'
                             : 'border-transparent text-slate-500 hover:text-slate-300'
                             }`}>
                         {t.label}

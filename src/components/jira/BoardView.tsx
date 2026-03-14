@@ -40,25 +40,25 @@ export function BoardView() {
 
     // ── TanStack Queries ──────────────────────────────────────────────────────
     const { data: projects = [], isLoading: loadingProjects } = useJiraProjects();
-    const { 
-        issueTypes: { data: issueTypesRaw = [] }, 
-        statuses: { data: projectStatuses = [] }, 
-        epics: { data: projectEpics = [] }, 
+    const {
+        issueTypes: { data: issueTypesRaw = [] },
+        statuses: { data: projectStatuses = [] },
+        epics: { data: projectEpics = [] },
         users: { data: usersRaw = [] },
-        isLoading: loadingMetadata 
+        isLoading: loadingMetadata
     } = useJiraMetadata(projectKey);
 
-    const { 
-        data: issues = [], 
-        isLoading: loadingIssues, 
+    const {
+        data: issues = [],
+        isLoading: loadingIssues,
         isFetching: fetchingIssues,
         error: issuesError,
-        refetch: refetchIssues 
+        refetch: refetchIssues
     } = useJiraIssues(projectKey, filter);
 
-    const projectAssignees = useMemo(() => 
-        usersRaw.map(u => ({ value: u.accountId, label: u.displayName })), 
-    [usersRaw]);
+    const projectAssignees = useMemo(() =>
+        usersRaw.map(u => ({ value: u.accountId, label: u.displayName })),
+        [usersRaw]);
 
     // Accumulate labels across loads so options don't disappear when filter changes
     const [allLabels, setAllLabels] = useState<string[]>([]);
@@ -100,7 +100,7 @@ export function BoardView() {
                     <select
                         value={projectKey || ''}
                         onChange={e => { setProjectKey(e.target.value); setFilter({ ...filter, issueTypes: [], epicKeys: [] }); }}
-                        className="h-8 bg-slate-950 border border-slate-800 rounded-md px-2.5 text-[11px] font-bold text-nexus-neon focus:outline-none focus:border-nexus-neon transition-colors"
+                        className="h-8 bg-slate-950 border border-slate-800 rounded-md px-2.5 text-[11px] font-bold text-microtermix-neon focus:outline-none focus:border-microtermix-neon transition-colors"
                     >
                         <option value="">Seleccionar Proyecto...</option>
                         {projects.map(p => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)}
@@ -116,11 +116,11 @@ export function BoardView() {
                                 if (e.key === 'Escape') { setSearchInput(''); setFilter({ ...filter, text: undefined }); }
                             }}
                             placeholder="Buscar título o clave... ↵"
-                            className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-8 text-xs text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-nexus-neon"
+                            className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-8 text-xs text-slate-200 placeholder:text-slate-600 focus-visible:ring-1 focus-visible:ring-microtermix-neon"
                         />
                         {searchInput && (
-                            <Button 
-                                variant="ghost" 
+                            <Button
+                                variant="ghost"
                                 size="icon-xs"
                                 onClick={() => { setSearchInput(''); setFilter({ ...filter, text: undefined }); }}
                                 className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
@@ -131,11 +131,11 @@ export function BoardView() {
                     </div>
 
                     {hasFilters && (
-                        <Button 
-                            variant="outline" 
+                        <Button
+                            variant="outline"
                             size="xs"
                             onClick={resetFilters}
-                            className="h-8 text-[10px] text-nexus-neon gap-1.5 border-nexus-neon/30 bg-nexus-neon/10 hover:bg-nexus-neon/20 px-3"
+                            className="h-8 text-[10px] text-microtermix-neon gap-1.5 border-microtermix-neon/30 bg-microtermix-neon/10 hover:bg-microtermix-neon/20 px-3"
                         >
                             <FilterX size={12} /> Reset
                         </Button>
@@ -143,10 +143,10 @@ export function BoardView() {
 
                     <Tooltip>
                         <TooltipTrigger render={
-                            <Button 
-                                variant="outline" 
+                            <Button
+                                variant="outline"
                                 size="icon-xs"
-                                onClick={() => refetchIssues()} 
+                                onClick={() => refetchIssues()}
                                 disabled={fetchingIssues}
                                 className="h-8 w-8 text-slate-500 border-slate-800 bg-slate-950 hover:bg-slate-800 hover:text-slate-200"
                             >
@@ -197,7 +197,7 @@ export function BoardView() {
                             onChange={v => setFilter({ ...filter, labels: v })}
                         />
                     )}
-                    
+
                     <div className="ml-auto flex items-center gap-3">
                         {fetchingIssues && !loadingIssues && (
                             <span className="flex items-center gap-1.5 text-[10px] text-slate-500 animate-pulse">
@@ -213,19 +213,19 @@ export function BoardView() {
 
             <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-2 bg-slate-950">
                 {(issuesError) && (
-                    <div className="p-3 bg-nexus-danger/10 border border-nexus-danger/30 rounded-lg text-nexus-danger text-xs flex items-start gap-2">
+                    <div className="p-3 bg-microtermix-danger/10 border border-microtermix-danger/30 rounded-lg text-microtermix-danger text-xs flex items-start gap-2">
                         <AlertCircle size={14} className="shrink-0 mt-0.5" /> {(issuesError as Error).message}
                     </div>
                 )}
                 {loadingIssues && !issues.length ? (
                     <div className="flex flex-col items-center justify-center py-24 text-slate-500 gap-3">
-                        <Loader2 size={32} className="animate-spin text-nexus-neon/40" />
+                        <Loader2 size={32} className="animate-spin text-microtermix-neon/40" />
                         <span className="text-sm font-medium animate-pulse">Cargando tablero...</span>
                     </div>
                 ) : issues.length === 0 ? (
                     <div className="text-center text-slate-500 py-16 text-[13px] border border-dashed border-slate-800 rounded-xl m-4 bg-slate-900/40">
                         No se encontraron issues con los filtros actuales en {projectKey || 'el proyecto'}.
-                        {hasFilters && <p className="mt-2"><button onClick={resetFilters} className="text-nexus-neon underline decoration-nexus-neon/30 hover:decoration-nexus-neon">Restablecer filtros</button></p>}
+                        {hasFilters && <p className="mt-2"><button onClick={resetFilters} className="text-microtermix-neon underline decoration-microtermix-neon/30 hover:decoration-microtermix-neon">Restablecer filtros</button></p>}
                     </div>
                 ) : (
                     issues.map(issue => <IssueCard key={issue.id} issue={issue} onClick={() => setSelected(issue)} />)

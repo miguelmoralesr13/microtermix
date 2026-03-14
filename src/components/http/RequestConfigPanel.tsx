@@ -43,7 +43,7 @@ const KVTable: React.FC<KVTableProps> = ({ items, availableVariables, onChange, 
                             type="checkbox"
                             checked={item.isActive}
                             onChange={(e) => updateItem(idx, 'isActive', e.target.checked)}
-                            className="accent-nexus-neon cursor-pointer"
+                            className="accent-microtermix-neon cursor-pointer"
                             disabled={!item.key && !item.value}
                         />
                     </div>
@@ -84,14 +84,14 @@ interface RequestConfigPanelProps {
 
 export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request, availableVariables, activeTab, setActiveTab, onChange }) => {
     return (
-        <div className="flex-1 flex flex-col min-h-0 bg-nexus-dark" style={{ minHeight: '150px' }}>
+        <div className="flex-1 flex flex-col min-h-0 bg-microtermix-dark" style={{ minHeight: '150px' }}>
             <div className="flex border-b border-slate-800 bg-slate-950/50">
                 {(['params', 'headers', 'body'] as const).map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`px-6 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${activeTab === tab
-                            ? 'border-nexus-neon text-nexus-neon bg-slate-900/50'
+                            ? 'border-microtermix-neon text-microtermix-neon bg-slate-900/50'
                             : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-900/30'
                             }`}
                     >
@@ -126,7 +126,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                                 <label key={t} className="flex items-center gap-1.5 cursor-pointer text-sm">
                                     <input
                                         type="radio"
-                                        className="accent-nexus-neon"
+                                        className="accent-microtermix-neon"
                                         checked={request.body.type === t}
                                         onChange={() => onChange({ ...request, body: { type: t } })}
                                     />
@@ -148,7 +148,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                                                 })
                                             }
                                             className={`px-3 py-1 rounded text-xs font-mono transition-colors ${request.body.rawLanguage === lang
-                                                ? 'bg-nexus-neon text-slate-900'
+                                                ? 'bg-microtermix-neon text-slate-900'
                                                 : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                                                 }`}
                                         >
@@ -157,7 +157,7 @@ export const RequestConfigPanel: React.FC<RequestConfigPanelProps> = ({ request,
                                     ))}
                                 </div>
                                 <textarea
-                                    className="flex-1 w-full h-full bg-slate-950 border border-slate-700 rounded p-4 font-mono text-sm text-slate-200 outline-none focus:border-nexus-neon resize-none focus:shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all"
+                                    className="flex-1 w-full h-full bg-slate-950 border border-slate-700 rounded p-4 font-mono text-sm text-slate-200 outline-none focus:border-microtermix-neon resize-none focus:shadow-[0_0_15px_rgba(56,189,248,0.2)] transition-all"
                                     placeholder='{ "key": "value" }'
                                     value={request.body.raw || ''}
                                     onChange={(e) =>

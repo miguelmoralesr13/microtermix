@@ -38,7 +38,7 @@ export function TaskDetailModal({ task, onClose, onTransition, onAssign }: {
                     {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-5 h-5 mt-0.5 shrink-0" />}
                     <div className="flex-1 min-w-0">
                         <a href={`${cfg.baseUrl}/browse/${task.key}`} target="_blank" rel="noopener noreferrer"
-                            className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1">
+                            className="text-xs font-mono text-microtermix-neon hover:underline flex items-center gap-1">
                             {task.key} <ExternalLink size={10} />
                         </a>
                         <p className="text-sm font-semibold text-slate-100 mt-0.5 leading-snug">{fields.summary}</p>
@@ -77,7 +77,7 @@ export function TaskDetailModal({ task, onClose, onTransition, onAssign }: {
                         </div>
                         {onAssign && (
                             <button onClick={onAssign}
-                                className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold rounded-lg bg-nexus-neon/10 border border-nexus-neon/30 text-nexus-neon hover:bg-nexus-neon/20 transition-colors">
+                                className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold rounded-lg bg-microtermix-neon/10 border border-microtermix-neon/30 text-microtermix-neon hover:bg-microtermix-neon/20 transition-colors">
                                 <UserCheck size={11} /> Asignarme
                             </button>
                         )}

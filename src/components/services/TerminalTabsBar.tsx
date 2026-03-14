@@ -32,10 +32,10 @@ export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
                 {processIds.map(serviceId => {
                     const procStatus = activeProcesses[serviceId]?.status;
                     const isRunning = procStatus === 'running';
-                    const isError   = procStatus === 'error';
+                    const isError = procStatus === 'error';
                     const isStopped = procStatus === 'stopped';
-                    const isActive  = activeTerminalTab === serviceId;
-                    const tabLabel  = serviceId.split('::')[0].split(/[/\\]/).pop() ?? 'term';
+                    const isActive = activeTerminalTab === serviceId;
+                    const tabLabel = serviceId.split('::')[0].split(/[/\\]/).pop() ?? 'term';
                     const scriptLabel = serviceId.includes('::') ? serviceId.split('::')[1]?.trim() : '';
 
                     return (
@@ -47,8 +47,8 @@ export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
                                     'cursor-pointer border-b-2 transition-all duration-150 select-none',
                                     isActive
                                         ? cn(
-                                            'border-nexus-neon bg-slate-900',
-                                            isError   && 'border-red-400',
+                                            'border-microtermix-neon bg-slate-900',
+                                            isError && 'border-red-400',
                                             isStopped && 'border-slate-600',
                                         )
                                         : 'border-transparent hover:bg-slate-800/60 hover:border-slate-600',
@@ -58,7 +58,7 @@ export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
                                 <span className={cn(
                                     'w-1.5 h-1.5 shrink-0 rounded-full',
                                     isRunning && 'bg-emerald-400 animate-pulse',
-                                    isError   && 'bg-red-400',
+                                    isError && 'bg-red-400',
                                     isStopped && 'bg-slate-500',
                                     !isRunning && !isError && !isStopped && 'bg-slate-600',
                                 )} />
@@ -68,7 +68,7 @@ export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
                                     <span className={cn(
                                         'truncate text-xs font-semibold',
                                         isActive && !isError && !isStopped && 'text-slate-100',
-                                        isActive && isError   && 'text-red-400',
+                                        isActive && isError && 'text-red-400',
                                         isActive && isStopped && 'text-slate-400',
                                         !isActive && 'text-slate-500 group-hover:text-slate-300',
                                     )}>

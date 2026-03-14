@@ -14,9 +14,9 @@ export function AdfMediaFile({ id }: { id: string }) {
 
 export function AdfInline({ node }: { node: any }): React.ReactElement | null {
     if (node.type === 'hardBreak') return <br />;
-    if (node.type === 'mention') return <span className="text-nexus-accent font-medium">@{node.attrs?.text ?? node.attrs?.id}</span>;
+    if (node.type === 'mention') return <span className="text-microtermix-accent font-medium">@{node.attrs?.text ?? node.attrs?.id}</span>;
     if (node.type === 'emoji') return <span>{node.attrs?.text ?? '😊'}</span>;
-    if (node.type === 'inlineCard') return <a href={node.attrs?.url} target="_blank" rel="noopener noreferrer" className="text-nexus-neon underline text-xs break-all">{node.attrs?.url}</a>;
+    if (node.type === 'inlineCard') return <a href={node.attrs?.url} target="_blank" rel="noopener noreferrer" className="text-microtermix-neon underline text-xs break-all">{node.attrs?.url}</a>;
     if (node.type === 'text') {
         const marks: any[] = node.marks ?? [];
         let el: React.ReactNode = node.text;
@@ -25,7 +25,7 @@ export function AdfInline({ node }: { node: any }): React.ReactElement | null {
         if (marks.some(m => m.type === 'code')) el = <code className="bg-slate-800 px-1 rounded text-[11px] font-mono">{el}</code>;
         if (marks.some(m => m.type === 'strike')) el = <s>{el}</s>;
         const link = marks.find(m => m.type === 'link');
-        if (link) el = <a href={link.attrs?.href} target="_blank" rel="noopener noreferrer" className="text-nexus-neon underline">{el}</a>;
+        if (link) el = <a href={link.attrs?.href} target="_blank" rel="noopener noreferrer" className="text-microtermix-neon underline">{el}</a>;
         return <>{el}</>;
     }
     return <>{node.text ?? null}</>;

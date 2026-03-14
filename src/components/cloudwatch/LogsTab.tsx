@@ -33,7 +33,7 @@ const Sidebar = React.memo(({
                             onChange={e => setGroupSearch(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && fetchGroups()}
                             placeholder="Buscar grupo…"
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                         />
                         {loadingGroups && <RefreshCw size={10} className="animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />}
                     </div>
@@ -56,7 +56,7 @@ const Sidebar = React.memo(({
                         <div key={g.name} className="group flex items-center pr-1">
                             <button onClick={() => setSelectedGroup(g.name)}
                                 className={`flex-1 text-left px-3 py-2 text-xs font-mono truncate transition-colors ${selectedGroup === g.name
-                                    ? 'bg-nexus-neon/10 text-nexus-neon'
+                                    ? 'bg-microtermix-neon/10 text-microtermix-neon'
                                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                                     }`} title={g.name}>
                                 {g.name}
@@ -90,7 +90,7 @@ const Sidebar = React.memo(({
                                     onChange={e => setStreamSearch(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && fetchStreams()}
                                     placeholder="Buscar streams (Enter)…"
-                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                                    className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                                 />
                                 {streamSearch && (
                                     <button
@@ -120,7 +120,7 @@ const Sidebar = React.memo(({
                                 <div key={s.name} className="group flex items-center pr-1">
                                     <button onClick={() => setSelectedStream(s.name)}
                                         className={`flex-1 text-left px-3 py-1.5 text-[11px] font-mono transition-colors flex justify-between items-center gap-2 ${selectedStream === s.name
-                                            ? 'bg-nexus-accent/10 text-nexus-accent'
+                                            ? 'bg-microtermix-accent/10 text-microtermix-accent'
                                             : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'
                                             }`} title={s.name}>
                                         <span className="truncate flex-1">{s.name}</span>
@@ -182,7 +182,7 @@ const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, 
         <div className="flex-1 overflow-y-auto bg-slate-950 p-3 font-mono text-[11px] text-slate-300 space-y-1 scroll-smooth">
             {loading && events.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-500">
-                    <RefreshCw size={24} className="animate-spin text-nexus-neon" />
+                    <RefreshCw size={24} className="animate-spin text-microtermix-neon" />
                     <p className="text-xs animate-pulse">Sincronizando con CloudWatch...</p>
                 </div>
             )}
@@ -217,7 +217,7 @@ const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, 
             <div ref={sentinelRef} className="h-20 flex flex-col items-center justify-center gap-2 text-[10px] text-slate-600 mt-4 border-t border-slate-900/50">
                 {loadingHistory ? (
                     <>
-                        <RefreshCw size={14} className="animate-spin text-nexus-neon" />
+                        <RefreshCw size={14} className="animate-spin text-microtermix-neon" />
                         <span>Cargando más logs...</span>
                     </>
                 ) : backToken ? (
@@ -231,14 +231,14 @@ const LogViewer = React.memo(({ events, backToken, loadingHistory, loadHistory, 
 });
 
 export function LogsTab({ cfg }: LogsTabProps) {
-    const [groupSearch, setGroupSearch] = usePersistedState('nexus-cw-logs-group-search', '');
-    const [selectedGroup, setSelectedGroup] = usePersistedState<string | null>('nexus-cw-logs-selected-group', null);
-    const [favorites, setFavorites] = usePersistedState<string[]>('nexus-cw-favorites', []);
-    const [streamFavorites, setStreamFavorites] = usePersistedState<string[]>('nexus-cw-stream-favorites', []);
-    const [streamSearch, setStreamSearch] = usePersistedState('nexus-cw-logs-stream-search', '');
-    const [selectedStream, setSelectedStream] = usePersistedState<string | null>('nexus-cw-logs-selected-stream', null);
-    const [mergedView, setMergedView] = usePersistedState('nexus-cw-logs-merged-view', false);
-    const [timeRange, setTimeRange] = usePersistedState('nexus-cw-logs-time-range', 10); // in minutes
+    const [groupSearch, setGroupSearch] = usePersistedState('microtermix-cw-logs-group-search', '');
+    const [selectedGroup, setSelectedGroup] = usePersistedState<string | null>('microtermix-cw-logs-selected-group', null);
+    const [favorites, setFavorites] = usePersistedState<string[]>('microtermix-cw-favorites', []);
+    const [streamFavorites, setStreamFavorites] = usePersistedState<string[]>('microtermix-cw-stream-favorites', []);
+    const [streamSearch, setStreamSearch] = usePersistedState('microtermix-cw-logs-stream-search', '');
+    const [selectedStream, setSelectedStream] = usePersistedState<string | null>('microtermix-cw-logs-selected-stream', null);
+    const [mergedView, setMergedView] = usePersistedState('microtermix-cw-logs-merged-view', false);
+    const [timeRange, setTimeRange] = usePersistedState('microtermix-cw-logs-time-range', 10); // in minutes
 
     // Events State
     const [events, setEvents] = useState<CwLogEvent[]>([]);
@@ -469,7 +469,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
         );
     }, [setStreamFavorites]);
 
-    const [sidebarWidth, setSidebarWidth] = usePersistedState('nexus-cw-logs-sidebar-width', 256);
+    const [sidebarWidth, setSidebarWidth] = usePersistedState('microtermix-cw-logs-sidebar-width', 256);
     const [isResizing, setIsResizing] = useState(false);
 
     const startResizing = useCallback((e: React.MouseEvent) => {
@@ -522,7 +522,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
             {/* Resize handle */}
             <div
                 onMouseDown={startResizing}
-                className={`w-1 cursor-col-resize hover:bg-nexus-neon/50 transition-colors shrink-0 z-10 ${isResizing ? 'bg-nexus-neon' : 'bg-transparent'}`}
+                className={`w-1 cursor-col-resize hover:bg-microtermix-neon/50 transition-colors shrink-0 z-10 ${isResizing ? 'bg-microtermix-neon' : 'bg-transparent'}`}
             />
 
             {/* Right: event viewer */}
@@ -533,7 +533,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                         {selectedGroup && (
                             <button
                                 onClick={() => setMergedView(true)}
-                                className="px-4 py-2 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/30 rounded-lg text-xs font-bold hover:bg-nexus-neon/20 transition-colors"
+                                className="px-4 py-2 bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 rounded-lg text-xs font-bold hover:bg-microtermix-neon/20 transition-colors"
                             >
                                 Cambiar a Vista Combinada (Todas los streams)
                             </button>
@@ -548,7 +548,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                     <span className="text-[10px] text-slate-500 font-mono truncate" title={selectedGroup!}>
                                         {selectedGroup}
                                     </span>
-                                    <span className="text-[9px] text-nexus-neon/70 font-mono truncate">
+                                    <span className="text-[9px] text-microtermix-neon/70 font-mono truncate">
                                         {mergedView ? '› Vista Combinada (Multistream)' : `› ${selectedStream}`}
                                     </span>
                                 </div>
@@ -558,7 +558,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                     <select
                                         value={timeRange}
                                         onChange={(e) => setTimeRange(Number(e.target.value))}
-                                        className="bg-slate-800 border border-slate-700 text-[10px] text-slate-300 rounded px-1.5 py-1 focus:outline-none focus:border-nexus-neon"
+                                        className="bg-slate-800 border border-slate-700 text-[10px] text-slate-300 rounded px-1.5 py-1 focus:outline-none focus:border-microtermix-neon"
                                         title="Rango de tiempo inicial"
                                     >
                                         <option value={5}>Últimos 5 min</option>
@@ -577,7 +577,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                             }}
                                             title={mergedView ? "Cambiar a vista de stream individual" : "Cambiar a vista combinada (todos los streams)"}
                                             className={`px-2 py-1 text-[10px] font-bold rounded border transition-colors ${mergedView
-                                                ? 'bg-nexus-neon/20 text-nexus-neon border-nexus-neon/40'
+                                                ? 'bg-microtermix-neon/20 text-microtermix-neon border-microtermix-neon/40'
                                                 : 'bg-slate-800 text-slate-500 border-slate-700 hover:text-slate-300'
                                                 }`}
                                         >
@@ -589,7 +589,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                         onChange={e => setFilterInput(e.target.value)}
                                         onKeyDown={addLogFilter}
                                         placeholder="Filtrar logs (Enter)"
-                                        className="w-32 bg-slate-950 border border-slate-700/50 rounded px-2 py-1 text-[10px] text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-nexus-accent transition-colors"
+                                        className="w-32 bg-slate-950 border border-slate-700/50 rounded px-2 py-1 text-[10px] text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-accent transition-colors"
                                     />
                                     <button
                                         onClick={() => setTailing(v => !v)}
@@ -607,7 +607,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                             const all = filteredEvents.map(e => `${new Date(e.timestamp).toISOString()} ${e.message}`).join('\n');
                                             navigator.clipboard.writeText(all);
                                         }}
-                                        className="text-[10px] text-slate-500 hover:text-nexus-neon flex items-center gap-1 transition-colors"
+                                        className="text-[10px] text-slate-500 hover:text-microtermix-neon flex items-center gap-1 transition-colors"
                                     >
                                         <Copy size={10} /> Copiar todo
                                     </button>
@@ -620,7 +620,7 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                 <div className="flex items-center gap-1.5 px-3 py-1.5 flex-wrap">
                                     <span className="text-[9px] text-slate-600 uppercase">Filtros:</span>
                                     {logFilters.map(f => (
-                                        <span key={f} className="flex items-center gap-1 bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/20 px-1.5 py-0.5 rounded text-[10px]">
+                                        <span key={f} className="flex items-center gap-1 bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/20 px-1.5 py-0.5 rounded text-[10px]">
                                             {f}
                                             <button onClick={() => removeLogFilter(f)} className="hover:text-white rounded-full p-0.5 transition-colors"><X size={9} /></button>
                                         </span>

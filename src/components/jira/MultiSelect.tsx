@@ -40,7 +40,7 @@ export function MultiSelect({ label, options, selected, onChange }: {
             <button
                 onClick={() => setOpen(v => !v)}
                 className={`flex items-center gap-1.5 px-2 py-1.5 text-[11px] rounded border transition-colors ${active
-                    ? 'bg-nexus-accent/10 border-nexus-accent/40 text-nexus-accent'
+                    ? 'bg-microtermix-accent/10 border-microtermix-accent/40 text-microtermix-accent'
                     : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-600'}`}
             >
                 <span className="text-[9px] text-slate-500 uppercase tracking-wider">{label}</span>
@@ -61,7 +61,7 @@ export function MultiSelect({ label, options, selected, onChange }: {
                             onChange={e => setSearch(e.target.value)}
                             onClick={e => e.stopPropagation()}
                             placeholder="Buscar..."
-                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                            className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                         />
                     </div>
                     <div className="overflow-y-auto py-1">
@@ -73,7 +73,7 @@ export function MultiSelect({ label, options, selected, onChange }: {
                                     type="checkbox"
                                     checked={selected.includes(opt.value)}
                                     onChange={() => toggle(opt.value)}
-                                    className="accent-nexus-accent w-3 h-3"
+                                    className="accent-microtermix-accent w-3 h-3"
                                 />
                                 {opt.label}
                             </label>

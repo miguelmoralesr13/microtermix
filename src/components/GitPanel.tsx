@@ -34,7 +34,7 @@ const MAX_PANEL = 800;
 
 export const GitPanel: React.FC = () => {
     const { state } = useWorkspace();
-    
+
     // Selectores granulares
     const activeTab = useGitStore(s => s.ui.activeTab);
     const sidebarWidth = useGitStore(s => s.ui.sidebarWidth);
@@ -82,7 +82,7 @@ export const GitPanel: React.FC = () => {
     useEffect(() => {
         if (!activeTab) return;
         ensureRepo(activeTab);
-        
+
         // Carga inicial al cambiar de tab o abrir por primera vez
         fetchRepo(activeTab).then(() => {
             const repo = useGitStore.getState().repos[activeTab!];
@@ -143,25 +143,25 @@ export const GitPanel: React.FC = () => {
     useEffect(() => {
         if (!activeTab) { setDetectedAccounts([]); return; }
         if (gitRepoAccounts[activeTab]) { setDetectedAccounts([]); return; }
-        
+
         if (accounts.length === 0) {
-            setDetectedAccounts([]); 
-            return; 
+            setDetectedAccounts([]);
+            return;
         }
 
         invoke<{ success: boolean; stdout: string }>('git_execute', {
             projectPath: activeTab,
             args: ['remote', 'get-url', 'origin'],
         }).then(res => {
-            if (!res.success) { 
+            if (!res.success) {
                 // Si falla la detección del remoto, mostramos todas las cuentas para que elija
-                setDetectedAccounts(accounts); 
-                return; 
+                setDetectedAccounts(accounts);
+                return;
             }
             const provider = detectProviderFromUrl(res.stdout.trim());
-            if (!provider) { 
-                setDetectedAccounts(accounts); 
-                return; 
+            if (!provider) {
+                setDetectedAccounts(accounts);
+                return;
             }
             const matches = accounts.filter(a => a.provider === provider);
             // Si hay matches del proveedor, mostramos esos. Si no, mostramos todos.
@@ -192,7 +192,7 @@ export const GitPanel: React.FC = () => {
                                     value={project.path as string}
                                     className={cn(
                                         "h-10 px-4 rounded-none border-t-2 border-transparent transition-all",
-                                        "data-[state=active]:bg-slate-900 data-[state=active]:text-nexus-accent data-[state=active]:border-t-nexus-accent",
+                                        "data-[state=active]:bg-slate-900 data-[state=active]:text-microtermix-accent data-[state=active]:border-t-microtermix-accent",
                                         "data-[state=inactive]:text-slate-500 hover:data-[state=inactive]:bg-slate-900 hover:data-[state=inactive]:text-slate-300",
                                         "text-xs font-bold"
                                     )}
@@ -207,11 +207,11 @@ export const GitPanel: React.FC = () => {
                 <div className="flex items-center space-x-1 pl-4 h-full">
                     {repoData && Object.values(repoData.loading).some(Boolean) && (
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-500 animate-pulse mr-3">
-                            <RefreshCw size={10} className="animate-spin" /> 
+                            <RefreshCw size={10} className="animate-spin" />
                             <span className="font-mono uppercase tracking-tighter">Syncing...</span>
                         </div>
                     )}
-                    
+
                     {/* Clone button */}
                     <Tooltip>
                         <TooltipTrigger render={
@@ -314,7 +314,7 @@ export const GitPanel: React.FC = () => {
                         </>
                     )}
                     <div className="flex-1" />
-                    <button 
+                    <button
                         onClick={() => setIsAccountModalOpen(true)}
                         className="text-[10px] text-slate-500 hover:text-blue-400 font-bold uppercase transition-colors"
                     >

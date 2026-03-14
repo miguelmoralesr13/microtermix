@@ -6,7 +6,7 @@ import type { CommandStep } from '../types/commands';
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
-import type { NexusWorkspaceConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
+import type { MicrotermixConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
 import { applyWorkspaceConfigToStorage, resolveFolderNameToPath } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
@@ -35,7 +35,7 @@ export interface WorkspaceState {
     configAppliedTrigger: number;
     savedCommands: Record<string, string>;
     savedCommandSteps: Record<string, CommandStep[]>;
-    savedCommandTypes: Record<string, string>; 
+    savedCommandTypes: Record<string, string>;
     pipelines: PipelineConfig[];
 }
 
@@ -43,7 +43,7 @@ interface WorkspaceContextType {
     state: WorkspaceState;
     setWorkspacePath: (path: string) => void;
     scanWorkspace: (path: string) => Promise<Project[]>;
-    applyWorkspaceConfig: (config: NexusWorkspaceConfig, workspacePath: string, projectPaths: string[]) => void;
+    applyWorkspaceConfig: (config: MicrotermixConfig, workspacePath: string, projectPaths: string[]) => void;
     openFolderInThisWindow: () => Promise<void>;
     openFolderInNewWindow: () => Promise<void>;
     setActiveView: (view: AppView) => void;
@@ -72,7 +72,7 @@ const getPathHash = (path: string) => {
 
 export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const updateProcessStatusStore = useProcessStore(s => s.updateProcessStatus);
-    
+
     // We'll use a temporary state during boot until path is confirmed
     const [isInitialized, setIsInitialized] = useState(false);
 
@@ -84,12 +84,19 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 // If this is a new window, the backend has a path pending for us
                 const initialPath = await invoke<string | null>('get_initial_workspace_for_window', { windowLabel: label });
                 if (initialPath) {
-                    console.log("[Workspace] Initialized with backend path:", initialPath);
                     setWorkspacePath(initialPath);
                     await scanWorkspace(initialPath);
-                } else if (state.currentPath) {
-                    // Fallback to last used path if it's the main window
-                    await scanWorkspace(state.currentPath);
+                } else {
+                    const savedGlobal = localStorage.getItem('microtermix-settings');
+                    if (savedGlobal) {
+                        try {
+                            const parsed = JSON.parse(savedGlobal);
+                            if (parsed.currentPath) {
+                                setWorkspacePath(parsed.currentPath);
+                                await scanWorkspace(parsed.currentPath);
+                            }
+                        } catch(e) {}
+                    }
                 }
             } catch (e) {
                 console.error("[Workspace] Boot recovery failed", e);
@@ -101,11 +108,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }, []);
 
     const [state, setState] = useState<WorkspaceState>(() => {
-        // Initial boot: try to get path from current window metadata or default
-        const savedGlobal = localStorage.getItem('nexus-workspace-settings');
+        // Initial boot: try to get path from global settings
+        const savedGlobal = localStorage.getItem('microtermix-settings');
         let currentPath = '';
         if (savedGlobal) {
-            try { currentPath = JSON.parse(savedGlobal).currentPath || ''; } catch(e) {}
+            try { currentPath = JSON.parse(savedGlobal).currentPath || ''; } catch (e) { }
         }
 
         return {
@@ -122,12 +129,12 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     });
 
     // Dynamic storage key based on the project path itself
-    const STORAGE_KEY = useMemo(() => `nexus-ws-data-${getPathHash(state.currentPath)}`, [state.currentPath]);
+    const STORAGE_KEY = useMemo(() => `microtermix-ws-data-${getPathHash(state.currentPath)}`, [state.currentPath]);
 
     // Effect to load project-specific settings when path changes
     useEffect(() => {
         if (!state.currentPath) return;
-        
+
         const projectSettings = localStorage.getItem(STORAGE_KEY);
         if (projectSettings) {
             try {
@@ -146,23 +153,23 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     // Save project-specific settings
     useEffect(() => {
         if (!isInitialized || !state.currentPath) return;
-        
+
         const data = {
             savedCommands: state.savedCommands,
             savedCommandSteps: state.savedCommandSteps,
             savedCommandTypes: state.savedCommandTypes,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        
+
         // Also update the "last used path" globally
-        localStorage.setItem('nexus-workspace-settings', JSON.stringify({ currentPath: state.currentPath }));
+        localStorage.setItem('microtermix-settings', JSON.stringify({ currentPath: state.currentPath }));
     }, [STORAGE_KEY, state.savedCommands, state.savedCommandSteps, state.savedCommandTypes, isInitialized]);
 
     const setWorkspacePath = (path: string) => {
         setState(prev => ({ ...prev, currentPath: path }));
     };
 
-    const applyWorkspaceConfig = useCallback((config: NexusWorkspaceConfig, workspacePath: string, projectPaths: string[]) => {
+    const applyWorkspaceConfig = useCallback((config: MicrotermixConfig, workspacePath: string, projectPaths: string[]) => {
         applyWorkspaceConfigToStorage(config, workspacePath, projectPaths);
         setState(prev => ({
             ...prev,
@@ -222,20 +229,17 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta del workspace' });
             if (selected !== null && !Array.isArray(selected)) {
-                // Save the new path to our window-specific storage before reloading
-                const current = localStorage.getItem(STORAGE_KEY);
-                const parsed = current ? JSON.parse(current) : {};
-                parsed.currentPath = selected;
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-                
+                // Save the new path to our GLOBAL storage before reloading
+                const globalData = { currentPath: selected };
+                localStorage.setItem('microtermix-settings', JSON.stringify(globalData));
+
                 // Hard reload to clear all stores and re-initialize with the new path
                 window.location.reload();
             }
         } catch (e) {
             console.error('Open folder failed', e);
         }
-    }, [STORAGE_KEY]);
-
+    }, []);
     const openFolderInNewWindow = useCallback(async () => {
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta para nueva ventana' });
@@ -332,7 +336,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
         let configuredEnv: Record<string, string> = {};
         try {
-            const rawStore = localStorage.getItem(`nexus-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
+            const rawStore = localStorage.getItem(`microtermix-envs-${projectPath.replace(/[/\\:]/g, '_')}`);
             if (rawStore) {
                 const parsed = JSON.parse(rawStore);
                 let targetEnv = globalEnvName;
@@ -354,9 +358,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         // Preparar strings de reemplazo según lenguaje
         const envString = Object.entries(configuredEnv).map(([k, v]) => `${k}=${v}`).join(' ');
         const javaPropertyString = Object.entries(configuredEnv).map(([k, v]) => `-D${k}=${v}`).join(' ');
-        
+
         let builtScript = actualScript;
-        
+
         if (isNodeLike) {
             // Para Node, preferimos cross-env si no está presente
             if (builtScript.includes('{{ENVS}}') && !builtScript.includes('cross-env')) {
@@ -383,8 +387,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         } else {
             // Genérico: eliminar marcadores (el backend inyectará las variables vía OS env vars)
             builtScript = builtScript.replace(/npx\s+cross-env\s+\{\{ENVS\}\}\s*/g, '')
-                                     .replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '')
-                                     .replace(/\{\{ENVS\}\}\s*/g, '').trim();
+                .replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '')
+                .replace(/\{\{ENVS\}\}\s*/g, '').trim();
         }
 
         const { command: scriptToRun, env: inlineEnvs } = parseInlineEnvs(builtScript);

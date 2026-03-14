@@ -49,7 +49,7 @@ export interface CwDatapoint {
 
 // ── localStorage ──────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'nexus-cloudwatch-cfg';
+const STORAGE_KEY = 'microtermix-cloudwatch-cfg';
 
 export function loadCwConfig(): CwCredentials {
     try {

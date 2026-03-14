@@ -50,7 +50,7 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
 
     const extendedScripts = useMemo(() => {
         let list = [...new Set([...allScripts, ...filteredSavedNames])];
-        
+
         // Smart Filter by Active Selection Type
         if (activeSelectionType === 'java') {
             const javaKeywords = ['mvn', 'gradle', 'java', 'javac', 'jar', 'spring-boot', 'bootRun'];
@@ -60,7 +60,7 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
             });
         } else if (activeSelectionType === 'node' || activeSelectionType === 'bun') {
             const forbiddenKeywords = ['mvn', 'gradle', './gradlew', 'java -jar', 'javac', 'spring-boot', 'bootRun'];
-            
+
             list = list.filter(s => {
                 const slc = s.toLowerCase();
                 // Hide Java stuff explicitly
@@ -68,7 +68,7 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
                 return true;
             });
         }
-        
+
         if (multiScript && !list.includes(multiScript)) {
             list.push(multiScript);
         }
@@ -78,62 +78,62 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
     return (
         <div className={`bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0 transition-colors ${activeSelectionType === 'java' ? 'bg-orange-500/5 border-orange-500/20' : ''}`}>
             <TooltipProvider delay={400}>
-            <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-950 border border-slate-800 shrink-0">
-                    {activeSelectionType === 'java' ? (
-                        <Coffee size={12} className="text-orange-400" />
-                    ) : (
-                        <Terminal size={12} className="text-nexus-neon" />
-                    )}
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                        {activeSelectionType || 'General'}
-                    </span>
-                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-950 border border-slate-800 shrink-0">
+                        {activeSelectionType === 'java' ? (
+                            <Coffee size={12} className="text-orange-400" />
+                        ) : (
+                            <Terminal size={12} className="text-microtermix-neon" />
+                        )}
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                            {activeSelectionType || 'General'}
+                        </span>
+                    </div>
 
-                <Select value={multiScript || undefined} onValueChange={(v) => v != null && onScriptChange(v)}>
-                    <SelectTrigger size="sm" className={`w-56 ${activeSelectionType === 'java' ? 'border-orange-500/30 text-orange-400' : ''}`}>
-                        <SelectValue placeholder="Comando por lote" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {extendedScripts.map((s: string) => (
-                            <SelectItem key={s} value={s} className="font-mono text-[11px]">{s}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                    <Select value={multiScript || undefined} onValueChange={(v) => v != null && onScriptChange(v)}>
+                        <SelectTrigger size="sm" className={`w-56 ${activeSelectionType === 'java' ? 'border-orange-500/30 text-orange-400' : ''}`}>
+                            <SelectValue placeholder="Comando por lote" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {extendedScripts.map((s: string) => (
+                                <SelectItem key={s} value={s} className="font-mono text-[11px]">{s}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
 
-                <Tooltip>
-                    <TooltipTrigger render={
-                        <Button variant="outline" size="icon-sm" onClick={() => setBuilderOpen(true)}
-                            className="text-slate-400 hover:text-nexus-neon hover:border-nexus-neon/50" />
-                    }>
-                        <Wand2 size={14} />
-                    </TooltipTrigger>
-                    <TooltipContent>Command Builder</TooltipContent>
-                </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button variant="outline" size="icon-sm" onClick={() => setBuilderOpen(true)}
+                                className="text-slate-400 hover:text-microtermix-neon hover:border-microtermix-neon/50" />
+                        }>
+                            <Wand2 size={14} />
+                        </TooltipTrigger>
+                        <TooltipContent>Command Builder</TooltipContent>
+                    </Tooltip>
 
-                <Select value={globalEnvName} onValueChange={(v) => v != null && onEnvChange(v)}>
-                    <SelectTrigger size="sm" className="w-24">
-                        <SelectValue placeholder="ENV" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {allEnvs.map(env => (
-                            <SelectItem key={env} value={env}>{env === 'none' ? 'None' : env}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                    <Select value={globalEnvName} onValueChange={(v) => v != null && onEnvChange(v)}>
+                        <SelectTrigger size="sm" className="w-24">
+                            <SelectValue placeholder="ENV" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {allEnvs.map(env => (
+                                <SelectItem key={env} value={env}>{env === 'none' ? 'None' : env}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
 
-                <Separator orientation="vertical" className="h-6 mx-1" />
+                    <Separator orientation="vertical" className="h-6 mx-1" />
 
-                <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1">
                         <Tooltip>
                             <TooltipTrigger render={
                                 <Button variant="ghost" size="sm" disabled={disabled} onClick={onPlay}
-                                    className="bg-nexus-neon/10 text-nexus-neon hover:bg-nexus-neon/20 border border-nexus-neon/30 hover:border-nexus-neon/60 gap-1.5" />
+                                    className="bg-microtermix-neon/10 text-microtermix-neon hover:bg-microtermix-neon/20 border border-microtermix-neon/30 hover:border-microtermix-neon/60 gap-1.5" />
                             }>
                                 <Play size={13} />
                                 <span>Run</span>
                                 {selectedCount > 0 && (
-                                    <span className="ml-0.5 bg-nexus-neon text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                                    <span className="ml-0.5 bg-microtermix-neon text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
                                         {selectedCount}
                                     </span>
                                 )}
@@ -163,14 +163,14 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
                         <Tooltip>
                             <TooltipTrigger render={
                                 <Button variant="ghost" size="icon-sm" onClick={onOpenViteWrapper}
-                                    className="text-slate-400 hover:text-nexus-neon" />
+                                    className="text-slate-400 hover:text-microtermix-neon" />
                             }>
                                 <FileCode size={13} />
                             </TooltipTrigger>
                             <TooltipContent>Vite wrapper (remotes MFE)</TooltipContent>
                         </Tooltip>
+                    </div>
                 </div>
-            </div>
             </TooltipProvider>
 
             <CommandBuilderModal

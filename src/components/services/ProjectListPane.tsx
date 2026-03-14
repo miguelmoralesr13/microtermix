@@ -21,7 +21,7 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
     onPlayScript,
 }) => {
     const [width, setWidth] = useState(() => {
-        const saved = localStorage.getItem('nexus-project-pane-width');
+        const saved = localStorage.getItem('microtermix-project-pane-width');
         return saved ? parseInt(saved, 10) : 352;
     });
 
@@ -42,7 +42,7 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
             if (isDragging.current) {
                 isDragging.current = false;
                 document.body.style.cursor = 'default';
-                localStorage.setItem('nexus-project-pane-width', widthRef.current.toString());
+                localStorage.setItem('microtermix-project-pane-width', widthRef.current.toString());
             }
         };
 
@@ -70,7 +70,7 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
                     </Button>
                 ) : (
                     <Button variant="ghost" size="xs" onClick={onSelectAll}
-                        className="text-nexus-neon hover:text-nexus-neon/80 hover:bg-nexus-neon/10 text-[10px] h-auto py-0.5">
+                        className="text-microtermix-neon hover:text-microtermix-neon/80 hover:bg-microtermix-neon/10 text-[10px] h-auto py-0.5">
                         Seleccionar todos
                     </Button>
                 )}
@@ -93,7 +93,7 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
 
             {/* Draggable handle */}
             <div
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-nexus-neon/50 transition-colors z-10"
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-microtermix-neon/50 transition-colors z-10"
                 onMouseDown={(e) => {
                     e.preventDefault();
                     isDragging.current = true;

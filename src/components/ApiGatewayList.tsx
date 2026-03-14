@@ -51,7 +51,7 @@ export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm, cred
     return (
         <div className="flex flex-col h-full w-full">
             <Tabs defaultValue="rest" className="flex flex-col h-full w-full">
-                
+
                 <div className="px-4 pt-3 pb-2 border-b border-slate-800 shrink-0">
                     <TabsList className="w-full bg-slate-950/50 border border-slate-800 h-9 p-1">
                         <TabsTrigger value="rest" className="flex-1 text-xs data-[state=active]:bg-slate-800">
@@ -72,14 +72,13 @@ export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm, cred
                                 const isSelected = selectedApi?.type === 'rest' && selectedApi.id === api.id;
                                 const isFav = favoriteApis.includes(api.id);
                                 return (
-                                    <div 
+                                    <div
                                         key={api.id}
                                         onClick={() => handleSelect({ type: 'rest', id: api.id, name: api.name })}
-                                        className={`flex flex-col p-3 rounded-md cursor-pointer border transition-colors ${
-                                            isSelected 
-                                                ? 'bg-nexus-neon/10 border-nexus-neon border-opacity-30'
+                                        className={`flex flex-col p-3 rounded-md cursor-pointer border transition-colors ${isSelected
+                                                ? 'bg-microtermix-neon/10 border-microtermix-neon border-opacity-30'
                                                 : 'bg-slate-900 border-slate-800/50 hover:bg-slate-800 hover:border-slate-700'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex items-center justify-between mb-1">
                                             <div className="font-semibold text-sm flex items-center gap-2 text-slate-200 truncate pr-2">
@@ -115,14 +114,13 @@ export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm, cred
                                 const isSelected = selectedApi?.type === 'http' && selectedApi.id === api.api_id;
                                 const isFav = favoriteApis.includes(api.api_id);
                                 return (
-                                    <div 
+                                    <div
                                         key={api.api_id}
                                         onClick={() => handleSelect({ type: 'http', id: api.api_id, name: api.name })}
-                                        className={`flex flex-col p-3 rounded-md cursor-pointer border transition-colors ${
-                                            isSelected 
-                                                ? 'bg-nexus-neon/10 border-nexus-neon border-opacity-30'
+                                        className={`flex flex-col p-3 rounded-md cursor-pointer border transition-colors ${isSelected
+                                                ? 'bg-microtermix-neon/10 border-microtermix-neon border-opacity-30'
                                                 : 'bg-slate-900 border-slate-800/50 hover:bg-slate-800 hover:border-slate-700'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex items-center justify-between mb-1">
                                             <div className="font-semibold text-sm flex items-center gap-2 text-slate-200 truncate pr-2">

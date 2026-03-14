@@ -367,7 +367,7 @@ export function StoriesView() {
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Business ({epics.length})</p>
                             <button
                                 onClick={() => setHideReleased(!hideReleased)}
-                                className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${hideReleased ? 'bg-nexus-neon/10 border-nexus-neon/30 text-nexus-neon' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}
+                                className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${hideReleased ? 'bg-microtermix-neon/10 border-microtermix-neon/30 text-microtermix-neon' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}
                                 title={hideReleased ? "Mostrando solo activos" : "Mostrando todo (incl. Released)"}
                             >
                                 {hideReleased ? 'ACTIVOS' : 'TODO'}
@@ -383,7 +383,7 @@ export function StoriesView() {
                                     if (e.key === 'Escape') { setEpicSearchInput(''); setEpicSearch(''); }
                                 }}
                                 placeholder="Título o clave... ↵"
-                                className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-6 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon"
+                                className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-6 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
                             />
                             {epicSearchInput && <button onClick={() => { setEpicSearchInput(''); setEpicSearch(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"><X size={10} /></button>}
                         </div>
@@ -426,7 +426,7 @@ export function StoriesView() {
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                             Business {selectedEpic ? `(${sortedBusinessStories.length})` : ''}
                         </p>
-                        {selectedEpic && <p className="text-[10px] text-nexus-neon/60 mt-0.5 truncate">{selectedEpic.key}</p>}
+                        {selectedEpic && <p className="text-[10px] text-microtermix-neon/60 mt-0.5 truncate">{selectedEpic.key}</p>}
                     </div>
                     <div className={colBodyCls}>
                         {!selectedEpic && <p className="text-xs text-slate-600 text-center py-8">← Selecciona un Epic</p>}
@@ -474,12 +474,12 @@ export function StoriesView() {
                                 <>
                                     {hasStoryFilters && (
                                         <button onClick={() => { setStorySearch(''); setStoryFilterAssignee(''); setStoryFilterStatus(''); }}
-                                            className="text-[9px] text-nexus-neon/70 hover:text-nexus-neon flex items-center gap-0.5" title="Limpiar filtros">
+                                            className="text-[9px] text-microtermix-neon/70 hover:text-microtermix-neon flex items-center gap-0.5" title="Limpiar filtros">
                                             <X size={9} /> {[storySearch, storyFilterAssignee, storyFilterStatus].filter(Boolean).length}
                                         </button>
                                     )}
                                     <button onClick={() => setShowStoryFilters(v => !v)}
-                                        className={`p-0.5 rounded transition-colors ${showStoryFilters ? 'text-nexus-neon' : 'text-slate-500 hover:text-slate-300'}`}
+                                        className={`p-0.5 rounded transition-colors ${showStoryFilters ? 'text-microtermix-neon' : 'text-slate-500 hover:text-slate-300'}`}
                                         title="Filtros">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
@@ -488,7 +488,7 @@ export function StoriesView() {
                                 </>
                             )}
                         </div>
-                        {selectedBusinessStory && <p className="text-[10px] text-nexus-neon/60 mb-1 truncate">{selectedBusinessStory.key}</p>}
+                        {selectedBusinessStory && <p className="text-[10px] text-microtermix-neon/60 mb-1 truncate">{selectedBusinessStory.key}</p>}
                         {/* Collapsible filter panel */}
                         {selectedBusinessStory && showStoryFilters && (
                             <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-2 space-y-1.5 mt-1">
@@ -497,14 +497,14 @@ export function StoriesView() {
                                     <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
                                     <input value={storySearch} onChange={e => setStorySearch(e.target.value)}
                                         placeholder="Título o clave..."
-                                        className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-6 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-nexus-neon" />
+                                        className="w-full bg-slate-950 border border-slate-800 rounded pl-6 pr-6 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon" />
                                     {storySearch && <button onClick={() => setStorySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"><X size={10} /></button>}
                                 </div>
                                 {/* Assignee */}
                                 <div>
                                     <label className="text-[9px] text-slate-600 uppercase tracking-wider font-bold block mb-0.5">Asignado</label>
                                     <select value={storyFilterAssignee} onChange={e => setStoryFilterAssignee(e.target.value)}
-                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-nexus-neon">
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-microtermix-neon">
                                         <option value="">Todos</option>
                                         <option value="me">👤 Yo</option>
                                         <option value="unassigned">Sin asignar</option>
@@ -514,7 +514,7 @@ export function StoriesView() {
                                 <div>
                                     <label className="text-[9px] text-slate-600 uppercase tracking-wider font-bold block mb-0.5">Estado</label>
                                     <select value={storyFilterStatus} onChange={e => setStoryFilterStatus(e.target.value)}
-                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-nexus-neon">
+                                        className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[10px] text-slate-300 focus:outline-none focus:border-microtermix-neon">
                                         <option value="">Todos</option>
                                         {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
@@ -557,7 +557,7 @@ export function StoriesView() {
                                 <button
                                     onClick={e => { e.stopPropagation(); setCreateForStory(story); }}
                                     title="Crear sub-tarea"
-                                    className="absolute right-2 bottom-2 opacity-0 group-hover/story:opacity-100 transition-opacity bg-nexus-neon text-nexus-darker rounded-full w-5 h-5 flex items-center justify-center shadow-lg hover:scale-110"
+                                    className="absolute right-2 bottom-2 opacity-0 group-hover/story:opacity-100 transition-opacity bg-microtermix-neon text-microtermix-darker rounded-full w-5 h-5 flex items-center justify-center shadow-lg hover:scale-110"
                                 >
                                     <Plus size={10} />
                                 </button>
@@ -572,7 +572,7 @@ export function StoriesView() {
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                             Tasks {selectedStory ? `(${filteredTasks.length})` : ''}
                         </p>
-                        {selectedStory && <p className="text-[10px] text-nexus-neon/60 mt-0.5 truncate">{selectedStory.key}</p>}
+                        {selectedStory && <p className="text-[10px] text-microtermix-neon/60 mt-0.5 truncate">{selectedStory.key}</p>}
                     </div>
                     <div className={colBodyCls}>
                         {!selectedStory && <p className="text-xs text-slate-600 text-center py-8">← Selecciona una Story</p>}
@@ -626,7 +626,7 @@ export function StoriesView() {
                         ) : (
                             <div className="space-y-3">
                                 <div className="bg-slate-900/60 rounded-lg p-3 border border-slate-800">
-                                    <p className="font-mono text-[10px] text-nexus-neon/60 mb-1">{selectedTask.key}</p>
+                                    <p className="font-mono text-[10px] text-microtermix-neon/60 mb-1">{selectedTask.key}</p>
                                     <p className="text-xs text-slate-200 leading-snug">{selectedTask.fields.summary}</p>
                                     <div className="mt-2 flex items-center gap-2 flex-wrap">
                                         <span
@@ -640,7 +640,7 @@ export function StoriesView() {
                                         {selectedTask.fields.status.name.toLowerCase() === 'working' && (
                                             <button
                                                 onClick={() => setShowTempoModal(true)}
-                                                className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold bg-nexus-accent/20 text-nexus-accent border border-nexus-accent/40 hover:bg-nexus-accent/30 rounded-full transition-colors"
+                                                className="flex items-center gap-1 px-2 py-0.5 text-[9px] font-bold bg-microtermix-accent/20 text-microtermix-accent border border-microtermix-accent/40 hover:bg-microtermix-accent/30 rounded-full transition-colors"
                                             >
                                                 <Timer size={10} />
                                                 Log Time
@@ -765,7 +765,7 @@ export function StoriesView() {
                                         )}
                                         <div>
                                             <p className="text-[9px] text-slate-600 uppercase font-bold mb-0.5">cURL</p>
-                                            <pre className="text-[10px] text-nexus-neon/80 font-mono bg-slate-900 rounded p-2 overflow-x-auto whitespace-pre-wrap select-all">{entry.curl}</pre>
+                                            <pre className="text-[10px] text-microtermix-neon/80 font-mono bg-slate-900 rounded p-2 overflow-x-auto whitespace-pre-wrap select-all">{entry.curl}</pre>
                                         </div>
                                     </div>
                                 )}

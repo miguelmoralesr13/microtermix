@@ -37,14 +37,14 @@ export const MockEditor: React.FC = () => {
                 <p className="text-xs text-center max-w-sm mb-6">
                     Selecciona una carpeta o un endpoint en el panel izquierdo para editar su configuración y respuesta.
                 </p>
-                
+
                 <div className="bg-slate-950/50 border border-slate-800 rounded-lg p-4 max-w-md text-left">
                     <h4 className="text-xs font-bold text-slate-300 mb-2 flex items-center gap-2">
                         <span className="text-amber-400">💡</span> Tip: Rutas Dinámicas
                     </h4>
                     <p className="text-[11px] text-slate-400 leading-relaxed">
-                        Puedes crear rutas dinámicas nombrando tus carpetas o endpoints con dos puntos iniciales. 
-                        Por ejemplo, nombrar una carpeta como <span className="text-amber-400 font-mono bg-amber-400/10 px-1 rounded">:id</span> hará que intercepte cualquier valor 
+                        Puedes crear rutas dinámicas nombrando tus carpetas o endpoints con dos puntos iniciales.
+                        Por ejemplo, nombrar una carpeta como <span className="text-amber-400 font-mono bg-amber-400/10 px-1 rounded">:id</span> hará que intercepte cualquier valor
                         dinámico en esa posición de la URL.
                     </p>
                 </div>
@@ -82,7 +82,7 @@ export const MockEditor: React.FC = () => {
                 <div>
                     <h2 className="text-xl font-bold text-slate-200 flex items-center gap-2">
                         {isFolder ? 'Carpeta' : 'Endpoint'}
-                        <span className={`text-sm px-2 py-0.5 rounded font-mono ${localNode.name.startsWith(':') ? 'text-amber-400 bg-amber-400/10 border border-amber-400/20' : 'text-nexus-neon bg-nexus-neon/10'}`}>
+                        <span className={`text-sm px-2 py-0.5 rounded font-mono ${localNode.name.startsWith(':') ? 'text-amber-400 bg-amber-400/10 border border-amber-400/20' : 'text-microtermix-neon bg-microtermix-neon/10'}`}>
                             {localNode.name}
                         </span>
                         {localNode.name.startsWith(':') && (
@@ -91,14 +91,14 @@ export const MockEditor: React.FC = () => {
                     </h2>
                     {isEndpoint && (
                         <p className="text-xs text-slate-500 mt-1 flex items-center gap-1 font-mono">
-                            <Link size={10} /> 
+                            <Link size={10} />
                             <span className={methodColors[endpoint.method]}>{endpoint.method}</span>
                             <span className="text-slate-400">{getFullPath(nodes, localNode.id)}</span>
                         </p>
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={handleSave} className="gap-2 border-nexus-neon text-nexus-neon hover:bg-nexus-neon/10">
+                    <Button variant="outline" size="sm" onClick={handleSave} className="gap-2 border-microtermix-neon text-microtermix-neon hover:bg-microtermix-neon/10">
                         <Save size={14} /> Guardar Cambios
                     </Button>
                     <Button variant="ghost" size="sm" onClick={handleDelete} className="text-slate-500 hover:text-red-400">
@@ -111,7 +111,7 @@ export const MockEditor: React.FC = () => {
             <div className="max-w-3xl space-y-6">
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Nombre</label>
-                    <Input 
+                    <Input
                         value={localNode.name}
                         onChange={(e) => setLocalNode({ ...localNode, name: e.target.value })}
                         className={`bg-slate-950 ${localNode.name.startsWith(':') ? 'border-amber-500/50 focus-visible:ring-amber-500 text-amber-400 font-mono' : 'border-slate-700'}`}
@@ -132,8 +132,8 @@ export const MockEditor: React.FC = () => {
                         <div className="grid grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Método</label>
-                                <Select 
-                                    value={endpoint.method} 
+                                <Select
+                                    value={endpoint.method}
                                     onValueChange={(v) => setLocalNode({ ...localNode, method: v as HttpMethod })}
                                 >
                                     <SelectTrigger className="bg-slate-950 border-slate-700">
@@ -151,7 +151,7 @@ export const MockEditor: React.FC = () => {
 
                             <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Status Code</label>
-                                <Input 
+                                <Input
                                     type="number"
                                     value={endpoint.statusCode}
                                     onChange={(e) => setLocalNode({ ...localNode, statusCode: parseInt(e.target.value) || 200 })}
@@ -161,7 +161,7 @@ export const MockEditor: React.FC = () => {
 
                             <div>
                                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Retraso (ms)</label>
-                                <Input 
+                                <Input
                                     type="number"
                                     value={endpoint.delayMs}
                                     onChange={(e) => setLocalNode({ ...localNode, delayMs: parseInt(e.target.value) || 0 })}
@@ -172,7 +172,7 @@ export const MockEditor: React.FC = () => {
 
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Segmento de Ruta URL</label>
-                            <Input 
+                            <Input
                                 value={endpoint.route}
                                 onChange={(e) => setLocalNode({ ...localNode, route: e.target.value })}
                                 className="bg-slate-950 border-slate-700 font-mono text-sm"
@@ -187,7 +187,7 @@ export const MockEditor: React.FC = () => {
                                 </label>
                                 {!isValidJson && <span className="text-red-400 text-xs font-medium">JSON Inválido</span>}
                             </div>
-                            <Textarea 
+                            <Textarea
                                 value={endpoint.responseBody}
                                 onChange={(e) => {
                                     const val = e.target.value;

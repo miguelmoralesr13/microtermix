@@ -116,7 +116,7 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
             <DialogContent className="sm:max-w-[550px] select-none p-0 overflow-hidden flex flex-col gap-0 border-slate-700 bg-slate-900" showCloseButton={false}>
                 <DialogHeader className="px-5 py-4 border-b border-slate-800 bg-slate-900 flex flex-row items-center justify-between w-full m-0 space-y-0 relative text-left">
                     <DialogTitle className="flex items-center justify-between w-full m-0 gap-2 text-white text-base font-bold">
-                        <span className="flex items-center gap-2"><GitMerge className="text-nexus-accent" size={18} /> Merge Branch</span>
+                        <span className="flex items-center gap-2"><GitMerge className="text-microtermix-accent" size={18} /> Merge Branch</span>
                         <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors bg-slate-800 hover:bg-slate-700 rounded-full p-1" disabled={isMerging}>
                             <X size={16} />
                         </button>
@@ -129,7 +129,7 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
                     <div className="flex items-center justify-center gap-4 bg-slate-800/50 rounded-lg p-4 border border-slate-700">
                         <div className="text-center min-w-0 flex-1">
                             <span className="text-xs text-slate-500 block mb-1 uppercase tracking-wider font-semibold">Rama origen</span>
-                            <span className="text-sm font-mono text-nexus-neon truncate block bg-slate-950 px-2 py-1 rounded inline-block max-w-full">{sourceBranch}</span>
+                            <span className="text-sm font-mono text-microtermix-neon truncate block bg-slate-950 px-2 py-1 rounded inline-block max-w-full">{sourceBranch}</span>
                         </div>
                         <div className="text-slate-500 flex flex-col items-center shrink-0">
                             <GitMerge size={20} className="text-slate-600 mb-1" />
@@ -186,7 +186,7 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
                                 <div className="flex-1 py-1 w-full">
                                     {commits.map(c => (
                                         <div key={c.hash} className="px-3 py-2 flex items-start gap-3 hover:bg-slate-800/50 transition-colors border-b border-transparent hover:border-slate-800 group">
-                                            <GitCommit size={14} className="text-slate-600 mt-1 shrink-0 group-hover:text-nexus-neon" />
+                                            <GitCommit size={14} className="text-slate-600 mt-1 shrink-0 group-hover:text-microtermix-neon" />
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm text-slate-200 truncate font-medium">{c.message}</p>
                                                 <div className="flex items-center gap-2 mt-1 opacity-70">
@@ -224,7 +224,7 @@ export const MergeConfirmModal: React.FC<MergeConfirmModalProps> = ({
                     <Button
                         onClick={handleMerge}
                         disabled={isMerging || (commits.length === 0 && !loading)}
-                        className="flex items-center gap-2 bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/90 transition-all font-bold"
+                        className="flex items-center gap-2 bg-microtermix-neon text-microtermix-darker hover:bg-microtermix-neon/90 transition-all font-bold"
                     >
                         {isMerging ? (
                             <><Loader2 size={16} className="animate-spin" /> Merging...</>

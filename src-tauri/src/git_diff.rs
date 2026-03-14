@@ -335,7 +335,7 @@ pub async fn git_reword_commit_impl(
         GitResult { stdout: "[amended] commit updated".into(), stderr: String::new(), success: true }
     } else {
         // Non-HEAD: use CLI interactive rebase with temp scripts
-        let msg_path = format!("{}/.nexus_msg.txt", project_path);
+        let msg_path = format!("{}/.microtermix_msg.txt", project_path);
         fs::write(&msg_path, &new_message).map_err(|e| e.to_string())?;
 
         // Platform-specific sequence editor
@@ -350,7 +350,7 @@ pub async fn git_reword_commit_impl(
             ".sh",
         );
 
-        let seq_editor_path = format!("{}/.nexus_seq_editor{}", project_path, seq_editor_ext);
+        let seq_editor_path = format!("{}/.microtermix_seq_editor{}", project_path, seq_editor_ext);
         fs::write(&seq_editor_path, &seq_editor_script).map_err(|e| e.to_string())?;
 
         // Make executable on Unix
@@ -369,7 +369,7 @@ pub async fn git_reword_commit_impl(
         #[cfg(not(target_os = "windows"))]
         let editor_script = format!("#!/bin/sh\ncp '{}' \"$1\"\n", msg_path);
 
-        let editor_path = format!("{}/.nexus_editor{}", project_path, seq_editor_ext);
+        let editor_path = format!("{}/.microtermix_editor{}", project_path, seq_editor_ext);
         fs::write(&editor_path, &editor_script).map_err(|e| e.to_string())?;
         #[cfg(not(target_os = "windows"))]
         {
@@ -425,7 +425,7 @@ pub async fn git_apply_patch_impl(
     reverse: bool,
     target: Option<String>,
 ) -> Result<GitResult, String> {
-    let patch_path = format!("{}/.nexus_temp.patch", project_path);
+    let patch_path = format!("{}/.microtermix_temp.patch", project_path);
     fs::write(&patch_path, &patch_content).map_err(|e| e.to_string())?;
 
     let mut args = vec!["apply".to_string()];
@@ -437,7 +437,7 @@ pub async fn git_apply_patch_impl(
     }
 
     if reverse { args.push("--reverse".to_string()); }
-    args.push(".nexus_temp.patch".to_string());
+    args.push(".microtermix_temp.patch".to_string());
 
     let result = git_execute_impl(app_handle, project_path.clone(), args).await;
     let _ = fs::remove_file(&patch_path);

@@ -19,7 +19,7 @@ export function EpicDetailModal({ epic, onClose }: { epic: JiraIssue; onClose: (
                     {fields.issuetype?.iconUrl && <img src={fields.issuetype.iconUrl} alt="" className="w-5 h-5 mt-0.5 shrink-0" />}
                     <div className="flex-1 min-w-0">
                         <a href={`${cfg.baseUrl}/browse/${epic.key}`} target="_blank" rel="noopener noreferrer"
-                            className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1">
+                            className="text-xs font-mono text-microtermix-neon hover:underline flex items-center gap-1">
                             {epic.key} <ExternalLink size={10} />
                         </a>
                         <h2 className="text-sm font-bold text-white mt-0.5 leading-snug">{fields.summary}</h2>

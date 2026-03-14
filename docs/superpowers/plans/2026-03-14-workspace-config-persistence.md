@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Mover las credenciales/cuentas de Jira, Git (`repoAccounts`) y Sonar fuera del `persist` de Zustand (localStorage) y consolidarlas en `nexus-workspace.json`, siguiendo el patrón ya establecido para `gitAccounts`.
+**Goal:** Mover las credenciales/cuentas de Jira, Git (`repoAccounts`) y Sonar fuera del `persist` de Zustand (localStorage) y consolidarlas en `microtermix.json`, siguiendo el patrón ya establecido para `gitAccounts`.
 
-**Architecture:** Extender `NexusWorkspaceConfig` con los nuevos campos, actualizar `buildWorkspaceConfigFromCurrentState` para leer de los stores, actualizar `applyWorkspaceConfig` en WorkspaceContext para hidratar los stores al cargar, y crear `sonarStore.ts` sin middleware `persist`. Los stores siguen siendo la fuente de verdad en memoria; el archivo JSON es la única persistencia para estas configs.
+**Architecture:** Extender `MicrotermixConfig` con los nuevos campos, actualizar `buildWorkspaceConfigFromCurrentState` para leer de los stores, actualizar `applyWorkspaceConfig` en WorkspaceContext para hidratar los stores al cargar, y crear `sonarStore.ts` sin middleware `persist`. Los stores siguen siendo la fuente de verdad en memoria; el archivo JSON es la única persistencia para estas configs.
 
 **Tech Stack:** TypeScript, Zustand (create sin persist para sonarStore), Tauri invoke (`write_workspace_config_in_folder`), React 19.
 
@@ -14,7 +14,7 @@
 
 | Archivo | Acción | Qué cambia |
 |---------|--------|------------|
-| `src/types/workspaceConfig.ts` | Modificar | Añadir `jiraAccounts`, `jiraActiveAccountId`, `sonarConfig` a `NexusWorkspaceConfig`; actualizar `buildWorkspaceConfigFromCurrentState` para leer jira y sonar |
+| `src/types/workspaceConfig.ts` | Modificar | Añadir `jiraAccounts`, `jiraActiveAccountId`, `sonarConfig` a `MicrotermixConfig`; actualizar `buildWorkspaceConfigFromCurrentState` para leer jira y sonar |
 | `src/context/WorkspaceContext.tsx` | Modificar | `applyWorkspaceConfig`: hidratar jiraStore y sonarStore al cargar workspace |
 | `src/stores/jiraStore.ts` | Modificar | Quitar `accounts` y `activeAccountId` del `partialize`; añadir acción `hydrate` |
 | `src/stores/gitStore.ts` | Modificar | Quitar `repoAccounts` del `partialize` (ya se persiste en workspace JSON) |
@@ -74,7 +74,7 @@ cd /mnt/datos/projects/microtermix && npx tsc --noEmit 2>&1 | head -30
 
 ---
 
-### Task 2: Extender `NexusWorkspaceConfig` con los nuevos campos
+### Task 2: Extender `MicrotermixConfig` con los nuevos campos
 
 **Files:**
 - Modify: `src/types/workspaceConfig.ts`
@@ -83,7 +83,7 @@ cd /mnt/datos/projects/microtermix && npx tsc --noEmit 2>&1 | head -30
 
 En `src/types/workspaceConfig.ts`, añadir import de `JiraAccount` desde `'../stores/jiraStore'` y el import de `SonarConfig` desde `'../stores/sonarStore'`.
 
-Añadir al interface `NexusWorkspaceConfig`:
+Añadir al interface `MicrotermixConfig`:
 ```typescript
 jiraAccounts?: JiraAccount[];
 jiraActiveAccountId?: string | null;
@@ -207,8 +207,8 @@ hydrate: (accounts, activeAccountId) => {
 
 ### Task 8: Prueba manual del flujo completo
 
-- [ ] **Step 1: Limpiar localStorage (nexus-jira-store, nexus-sonar-global-config, nexus-git-store:repoAccounts)**
+- [ ] **Step 1: Limpiar localStorage (microtermix-jira-store, microtermix-sonar-global-config, microtermix-git-store:repoAccounts)**
 
-- [ ] **Step 2: Ejecutar la app y verificar que los datos se guardan en `nexus-workspace.json`**
+- [ ] **Step 2: Ejecutar la app y verificar que los datos se guardan en `microtermix.json`**
 
 - [ ] **Step 3: Reiniciar la app y confirmar que se cargan correctamente desde el JSON**

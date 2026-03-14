@@ -14,7 +14,7 @@ export const TerminalArea: React.FC<TerminalAreaProps> = ({
     activeTerminalTab,
 }) => {
     return (
-        <div className="flex-1 flex flex-col p-2 overflow-hidden bg-nexus-darker relative">
+        <div className="flex-1 flex flex-col p-2 overflow-hidden bg-microtermix-darker relative">
             {processIds.map(serviceId => (
                 <div
                     key={`${serviceId}-${activeProcesses[serviceId]?.restarts || 0}`}

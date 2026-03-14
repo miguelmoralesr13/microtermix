@@ -330,7 +330,7 @@ export const GitConflictModal: React.FC<GitConflictModalProps> = ({
                                         onClick={() => setSelectedFile(f)}
                                         className={`w-full text-left px-3 py-2 flex items-start gap-2 transition-colors ${
                                             isActive
-                                                ? 'bg-slate-800 border-l-2 border-nexus-accent'
+                                                ? 'bg-slate-800 border-l-2 border-microtermix-accent'
                                                 : 'hover:bg-slate-800/50 border-l-2 border-transparent'
                                         }`}
                                     >

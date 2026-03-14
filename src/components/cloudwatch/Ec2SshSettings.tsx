@@ -19,7 +19,7 @@ export function Ec2SshSettings({ ssh, setSsh }: Ec2SshSettingsProps) {
                 <input
                     value={ssh.username}
                     onChange={e => handleUpdate({ username: e.target.value })}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon w-28"
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon w-28"
                 />
             </div>
             <div className="flex flex-col gap-0.5 flex-1 min-w-40">
@@ -28,7 +28,7 @@ export function Ec2SshSettings({ ssh, setSsh }: Ec2SshSettingsProps) {
                     value={ssh.keyPath}
                     onChange={e => handleUpdate({ keyPath: e.target.value })}
                     placeholder="/path/to/key.pem"
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-nexus-neon placeholder-slate-600"
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-microtermix-neon placeholder-slate-600"
                 />
             </div>
             <div className="flex flex-col gap-0.5">
@@ -37,7 +37,7 @@ export function Ec2SshSettings({ ssh, setSsh }: Ec2SshSettingsProps) {
                     type="number"
                     value={ssh.port}
                     onChange={e => handleUpdate({ port: parseInt(e.target.value) || 22 })}
-                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-nexus-neon w-20"
+                    className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon w-20"
                 />
             </div>
         </div>

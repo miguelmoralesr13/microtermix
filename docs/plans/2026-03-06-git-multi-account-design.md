@@ -39,9 +39,9 @@ getActiveAccount: (repoPath: string) => GitAccount | undefined;
 ```
 
 > `accounts` y `repoAccounts` se excluyen del `partialize` de Zustand.
-> La única fuente de verdad es `nexus-workspace.json`.
+> La única fuente de verdad es `microtermix.json`.
 
-### `NexusWorkspaceConfig` — campos añadidos
+### `MicrotermixConfig` — campos añadidos
 
 ```ts
 gitAccounts?:  GitAccount[];
@@ -54,7 +54,7 @@ El campo legacy `gitConfig` se elimina del output de `buildWorkspaceConfigFromCu
 
 ## Persistencia
 
-**Una sola fuente de verdad: `nexus-workspace.json`.**
+**Una sola fuente de verdad: `microtermix.json`.**
 
 - `accounts` y `repoAccounts` NO van al `partialize` de Zustand (sin doble persistencia).
 - Al guardar: `buildWorkspaceConfigFromCurrentState` lee `gitStore.getState().accounts` y `.repoAccounts`.
@@ -66,7 +66,7 @@ El campo legacy `gitConfig` se elimina del output de `buildWorkspaceConfigFromCu
 Al arrancar, una sola vez en `WorkspaceContext` init:
 
 ```ts
-const legacy = localStorage.getItem('nexus-git-settings');
+const legacy = localStorage.getItem('microtermix-git-settings');
 const store = useGitStore.getState();
 if (legacy && store.accounts.length === 0) {
   const cfg = JSON.parse(legacy);
@@ -77,7 +77,7 @@ if (legacy && store.accounts.length === 0) {
       url: cfg.url,
       token: cfg.token,
     });
-    localStorage.removeItem('nexus-git-settings');
+    localStorage.removeItem('microtermix-git-settings');
   }
 }
 ```
