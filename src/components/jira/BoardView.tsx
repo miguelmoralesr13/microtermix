@@ -9,7 +9,6 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
-import { cn } from '../../lib/utils';
 import { useJiraProjects, useJiraMetadata, useJiraIssues } from '../../hooks/useJira';
 
 export function BoardView() {
@@ -39,13 +38,12 @@ export function BoardView() {
     const [searchInput, setSearchInput] = useState(filter.text ?? '');
 
     // ── TanStack Queries ──────────────────────────────────────────────────────
-    const { data: projects = [], isLoading: loadingProjects } = useJiraProjects();
+    const { data: projects = [], isLoading: _ } = useJiraProjects();
     const {
         issueTypes: { data: issueTypesRaw = [] },
         statuses: { data: projectStatuses = [] },
         epics: { data: projectEpics = [] },
         users: { data: usersRaw = [] },
-        isLoading: loadingMetadata
     } = useJiraMetadata(projectKey);
 
     const {
@@ -90,7 +88,6 @@ export function BoardView() {
         </div>
     );
 
-    const isLoading = loadingProjects || (!!projectKey && loadingIssues && !issues.length);
 
     return (
         <div className="flex flex-col h-full min-h-0">

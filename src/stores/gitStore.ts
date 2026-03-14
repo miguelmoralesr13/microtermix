@@ -123,7 +123,7 @@ interface GitStore {
     fetchAheadBehind: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
     fetchAll: (path: string, force?: boolean, silent?: boolean) => Promise<void>;
     invalidate: (path: string, slice?: 'branches' | 'status' | 'timeline' | 'aheadBehind') => void;
-    initWatchers: (projectPaths: string[]) => Promise<() => void>;
+    initWatchers: (projectPaths: string[]) => Promise<() => Promise<void>>;
 }
 
 // ── Stale times (ms) ──────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ export const DEFAULT_SONAR_CONFIG: SonarConfig = {
     organization: '',
 };
 
-interface SonarStore {
+export interface SonarStore {
     config: SonarConfig;
     setConfig: (patch: Partial<SonarConfig>) => void;
     hydrate: (cfg: SonarConfig) => void;

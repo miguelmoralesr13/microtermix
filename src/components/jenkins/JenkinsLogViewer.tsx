@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Terminal, Search, X, CheckCircle2, Copy, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -62,7 +62,6 @@ export function JenkinsLogViewer({
             fontSize: 12,
             scrollback: 10000,
             convertEol: true,
-            readonly: true,
         });
 
         const fitAddon = new FitAddon();

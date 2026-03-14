@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { DiffEditor, Monaco } from '@monaco-editor/react';
+import { DiffEditor } from '@monaco-editor/react';
 import {
-    X, RefreshCw, GitCompare, CheckSquare, FilePlus, FileMinus,
-    Maximize2, Minimize2, RotateCcw, Zap, Loader2, ChevronRight, Check
+    X, RefreshCw, GitCompare, FilePlus, FileMinus,
+    Maximize2, Minimize2, Zap, Loader2
 } from 'lucide-react';
 import { useMonacoTheme } from '../hooks/useMonacoTheme';
 import { cn } from '../lib/utils';
@@ -97,7 +97,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         };
     }, [loadContent]);
 
-    const handleEditorDidMount = (editor: any, monaco: Monaco) => {
+    const handleEditorDidMount = (editor: any) => {
         editorRef.current = editor;
         editor.updateOptions({
             renderSideBySide: true,

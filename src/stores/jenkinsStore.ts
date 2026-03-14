@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { JenkinsConfig, JenkinsFavorite, normalizeUrl } from '../services/jenkinsApi';
 
-interface JenkinsState {
+export interface JenkinsStore {
   accounts: JenkinsConfig[];
   activeAccountId: string | null;
   favorites: Record<string, JenkinsFavorite>;
@@ -43,7 +43,7 @@ function getLegacyFavorites(): Record<string, JenkinsFavorite> {
   return {};
 }
 
-export const useJenkinsStore = create<JenkinsState>()(
+export const useJenkinsStore = create<JenkinsStore>()(
   persist(
     (set) => ({
       accounts: [],
@@ -119,7 +119,7 @@ export const useJenkinsStore = create<JenkinsState>()(
             favorites: state.favorites || {},
           };
         }
-        return persistedState as JenkinsState;
+        return persistedState as JenkinsStore;
       },
       onRehydrateStorage: () => (state) => {
         // If state is completely empty (no accounts) check legacy localStorage

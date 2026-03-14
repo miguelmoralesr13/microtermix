@@ -77,6 +77,46 @@ pub(crate) fn repo_open(project_path: &str) -> Result<Repository, String> {
     Repository::discover(project_path).map_err(|e| e.to_string())
 }
 
+/// Remove from the index every tracked file that no longer exists on disk.
+///
+/// libgit2 calls `git_path_lstat()` (strict — throws on ENOENT) when it diffs
+/// HEAD↔workdir during stash_save, checkout_head, checkout_tree, and statuses.
+/// If a tracked file was deleted from the workdir without `git rm`, libgit2 throws
+/// "could not find '<path>' to stat" instead of treating it as deleted.
+///
+/// This helper bypasses libgit2's workdir scanner entirely: `index.iter()` reads
+/// index entries without touching disk, and `Path::exists()` handles ENOENT silently.
+/// After calling this, the index accurately reflects the deletions and libgit2 no
+/// longer needs to stat the missing files.
+pub(crate) fn stage_workdir_deletions(repo: &Repository) -> Result<(), String> {
+    let workdir = match repo.workdir() {
+        Some(w) => w.to_path_buf(),
+        None => return Ok(()), // bare repo, nothing to do
+    };
+    let mut index = repo.index().map_err(|e| format!("index open: {}", e))?;
+
+    let missing: Vec<Vec<u8>> = index
+        .iter()
+        .filter(|e| {
+            let p = match std::str::from_utf8(&e.path) { Ok(s) => s, Err(_) => return false };
+            !workdir.join(p).exists()
+        })
+        .map(|e| e.path.clone())
+        .collect();
+
+    if missing.is_empty() {
+        return Ok(());
+    }
+
+    for path_bytes in &missing {
+        if let Ok(p) = std::str::from_utf8(path_bytes) {
+            index.remove_path(std::path::Path::new(p)).ok();
+        }
+    }
+    index.write().map_err(|e| format!("index write: {}", e))?;
+    Ok(())
+}
+
 /// Format seconds since epoch as a relative time string (e.g. "3 days ago").
 fn format_relative(secs: i64) -> String {
     let now = std::time::SystemTime::now()
@@ -213,7 +253,7 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
         .recurse_untracked_dirs(true)
         .include_ignored(false);
 
-    let statuses = repo.statuses(Some(&mut opts)).map_err(|e| e.to_string())?;
+    let statuses = repo.statuses(Some(&mut opts)).map_err(|e| format!("statuses: {}", e))?;
 
     let mut files: Vec<StatusEntry> = Vec::new();
     let mut status_output = String::new();
@@ -250,10 +290,29 @@ pub fn git_add_native_impl(project_path: String, path_to_add: String) -> Result<
     let mut index = repo.index().map_err(|e| e.to_string())?;
 
     if path_to_add == "." {
+        // Pre-remove deleted tracked files from the index so add_all never calls
+        // git_path_lstat on them (libgit2 bug: throws ENOENT as a fatal error).
+        stage_workdir_deletions(&repo).ok();
+        // Re-open index after stage_workdir_deletions wrote it.
+        index = repo.index().map_err(|e| e.to_string())?;
         index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("add all: {}", e))?;
     } else {
-        index.add_path(Path::new(&path_to_add)).map_err(|e| e.to_string())?;
+        let full = Path::new(&project_path).join(&path_to_add);
+        if full.is_dir() {
+            // Directories must use add_all with a pathspec — add_path only works for files.
+            // Also pre-remove deleted tracked files so add_all doesn't lstat them.
+            stage_workdir_deletions(&repo).ok();
+            index = repo.index().map_err(|e| e.to_string())?;
+            index.add_all([path_to_add.as_str()].iter(), git2::IndexAddOption::DEFAULT, None)
+                .map_err(|e| format!("add dir: {}", e))?;
+        } else if full.exists() {
+            index.add_path(Path::new(&path_to_add)).map_err(|e| format!("add_path: {}", e))?;
+        } else {
+            // File deleted from workdir — stage the deletion (git rm --cached equivalent).
+            // add_path on a missing file triggers git_path_lstat → ENOENT.
+            index.remove_path(Path::new(&path_to_add)).map_err(|e| format!("remove_path: {}", e))?;
+        }
     }
 
     index.write().map_err(|e| e.to_string())?;
@@ -262,54 +321,33 @@ pub fn git_add_native_impl(project_path: String, path_to_add: String) -> Result<
 
 pub fn git_reset_native_impl(project_path: String, path_to_reset: String) -> Result<(), String> {
     let repo = repo_open(&project_path)?;
-    
-    let head = repo.head();
-    if let Ok(head_ref) = head {
-        let commit = head_ref.peel_to_commit().map_err(|e| e.to_string())?;
-        let tree = commit.tree().map_err(|e| e.to_string())?;
-        
-        if path_to_reset == "." {
-            repo.reset(tree.as_object(), git2::ResetType::Soft, None).map_err(|e| e.to_string())?;
-        } else {
-            // Reset individual file from HEAD
-            let mut index = repo.index().map_err(|e| e.to_string())?;
-            if let Ok(entry) = tree.get_path(Path::new(&path_to_reset)) {
-                // The correct way in git2 to unstage a single file is to replace its index entry with the one from the tree
-                let blob = repo.find_blob(entry.id()).map_err(|e| e.to_string())?;
-                
-                // Construct a new entry for the index based on the HEAD state
-                let index_entry = git2::IndexEntry {
-                    ctime: git2::IndexTime::new(0,0),
-                    mtime: git2::IndexTime::new(0,0),
-                    dev: 0,
-                    ino: 0,
-                    mode: entry.filemode() as u32,
-                    uid: 0,
-                    gid: 0,
-                    file_size: blob.size() as u32,
-                    id: entry.id(),
-                    flags: 0,
-                    flags_extended: 0,
-                    path: path_to_reset.as_bytes().to_vec(),
-                };
-                index.add(&index_entry).map_err(|e| e.to_string())?;
+
+    match repo.head() {
+        Ok(head_ref) => {
+            let commit = head_ref.peel_to_commit().map_err(|e| e.to_string())?;
+            if path_to_reset == "." {
+                // Unstage everything: mixed reset to HEAD.
+                repo.reset(commit.as_object(), git2::ResetType::Mixed, None)
+                    .map_err(|e| format!("reset mixed: {}", e))?;
             } else {
-                // If it's not in HEAD, it was a new file (Added), so we just remove it from the index
+                // reset_default handles both files and directories via pathspec —
+                // equivalent to `git restore --staged <path>`.
+                // Avoids the manual blob-lookup that fails when the entry is a Tree.
+                repo.reset_default(Some(commit.as_object()), [Path::new(&path_to_reset)])
+                    .map_err(|e| format!("reset_default: {}", e))?;
+            }
+        }
+        Err(_) => {
+            // Empty repo (no HEAD) — unstage by removing from index.
+            let mut index = repo.index().map_err(|e| e.to_string())?;
+            if path_to_reset == "." {
+                index.clear().map_err(|e| e.to_string())?;
+            } else {
                 index.remove_path(Path::new(&path_to_reset)).map_err(|e| e.to_string())?;
             }
             index.write().map_err(|e| e.to_string())?;
         }
-    } else {
-        // No HEAD yet (Empty repo), unstage means remove from index
-        let mut index = repo.index().map_err(|e| e.to_string())?;
-        if path_to_reset == "." {
-            index.clear().map_err(|e| e.to_string())?;
-        } else {
-            index.remove_path(Path::new(&path_to_reset)).map_err(|e| e.to_string())?;
-        }
-        index.write().map_err(|e| e.to_string())?;
     }
-    
     Ok(())
 }
 
@@ -414,9 +452,13 @@ pub async fn git_pull_native_impl(project_path: String) -> Result<String, String
         }
 
         if analysis.contains(MergeAnalysis::ANALYSIS_FASTFORWARD) {
+            // Stage workdir deletions before checkout to prevent libgit2 lstat bug
+            // on tracked files that were deleted from disk (e.g. .env).
+            stage_workdir_deletions(&repo).ok();
             let mut co = git2::build::CheckoutBuilder::new();
             co.safe();
-            repo.checkout_tree(upstream_commit.as_object(), Some(&mut co)).map_err(|e| e.to_string())?;
+            repo.checkout_tree(upstream_commit.as_object(), Some(&mut co))
+                .map_err(|e| format!("checkout_tree: {}", e))?;
             
             let mut head_ref = repo.find_reference(&format!("refs/heads/{}", branch_name)).map_err(|e| e.to_string())?;
             head_ref.set_target(upstream_commit.id(), "pull: fast-forward").map_err(|e| e.to_string())?;
@@ -741,16 +783,9 @@ pub fn git_stash_save_impl(
 ) -> Result<crate::git_diff::GitResult, String> {
     let mut repo = repo_open(&project_path)?;
 
-    // Robustness: Before stashing, we should update the index to reflect any deletions 
-    // in the working directory. libgit2's stash_save can fail with 'stat' errors 
-    // if a file is in the index but missing on disk.
-    {
-        let mut index = repo.index().map_err(|e| format!("index open: {}", e))?;
-        // This removes entries from the index that no longer exist on disk
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
-            .map_err(|e| format!("index sync: {}", e))?;
-        index.write().map_err(|e| format!("index write: {}", e))?;
-    }
+    // Pre-remove deleted tracked files from the index so stash_save never calls
+    // git_path_lstat on missing files (libgit2 ENOENT-as-fatal bug).
+    stage_workdir_deletions(&repo).ok();
 
     let config = repo.config().map_err(|e| e.to_string())?;
     let name = config.get_string("user.name").unwrap_or_else(|_| "Unknown".into());
@@ -773,6 +808,8 @@ pub fn git_stash_pop_impl(
     index: usize,
 ) -> Result<crate::git_diff::GitResult, String> {
     let mut repo = repo_open(&project_path)?;
+    // stash_pop calls checkout_tree internally — pre-remove missing tracked files.
+    stage_workdir_deletions(&repo).ok();
     let mut opts = git2::StashApplyOptions::new();
     opts.checkout_options({
         let mut co = git2::build::CheckoutBuilder::new();
@@ -844,6 +881,9 @@ pub fn git_checkout_branch_impl(
             ));
         }
     }
+
+    // Stage workdir deletions before checkout to prevent libgit2 lstat bug.
+    stage_workdir_deletions(&repo).ok();
 
     // Move HEAD and update workdir
     repo.set_head(&local_ref).map_err(|e| format!("set_head: {}", e))?;

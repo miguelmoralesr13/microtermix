@@ -5,7 +5,6 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
-import { cn } from '../../lib/utils';
 
 export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => void }) {
     const cfg = loadConfig();

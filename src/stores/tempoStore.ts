@@ -105,7 +105,7 @@ async function enrichWorklogs(
   });
 }
 
-export interface TempoStoreState {
+export interface TempoStore {
   worklogs: TempoWorklog[];
   issueWorklogs: TempoWorklog[];
   period: Period;
@@ -119,7 +119,7 @@ export interface TempoStoreState {
   upsertWorklog: (worklog: TempoWorklog) => void;
 }
 
-export const useTempoStore = create<TempoStoreState>()(
+export const useTempoStore = create<TempoStore>()(
   devtools(
     persist(
       (set, get) => ({

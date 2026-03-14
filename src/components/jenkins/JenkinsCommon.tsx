@@ -1,10 +1,8 @@
-import React from 'react';
-import { colorFromResult, colorFromJobColor, BuildResult, StageStatus } from '../../services/jenkinsApi';
-import { CheckCircle2, AlertCircle, Loader2, AlertTriangle, Square, Play, XCircle, MinusCircle } from 'lucide-react';
+import {  colorFromJobColor, BuildResult, StageStatus } from '../../services/jenkinsApi';
+import { CheckCircle2, AlertCircle, Loader2, AlertTriangle, Square, XCircle, MinusCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export function ResultBadge({ result, building }: { result: BuildResult; building: boolean }) {
-    const color = colorFromResult(result, building);
     
     // Mapeo de estilos tipo shadcn
     const variants: Record<string, string> = {

@@ -8,7 +8,7 @@ export interface JdkInfo {
     version: string;
 }
 
-interface ToolStore {
+export interface ToolStore {
     jdks: JdkInfo[];
     downloading: boolean;
     error: string | null;

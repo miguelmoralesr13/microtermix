@@ -171,6 +171,7 @@ export function JenkinsSettings({ onSaved }: { onSaved?: () => void }) {
                         onSave={(draft) => {
                             addAccount(draft);
                             setEditingId(null);
+                            onSaved?.();
                         }}
                         onCancel={() => setEditingId(null)}
                     />
@@ -199,6 +200,7 @@ export function JenkinsSettings({ onSaved }: { onSaved?: () => void }) {
                                 onSave={(draft) => {
                                     updateAccount(acc.id!, draft);
                                     setEditingId(null);
+                                    onSaved?.();
                                 }}
                                 onCancel={() => setEditingId(null)}
                                 onDelete={() => {

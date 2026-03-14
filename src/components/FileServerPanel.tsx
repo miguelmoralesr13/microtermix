@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { Power, PowerOff, ChevronDown, ChevronUp, Plus, Trash2, Upload, Pencil, ExternalLink, FileCode, FolderOpen, QrCode, Activity, Info } from 'lucide-react';
+import { Power, PowerOff, Plus, Trash2, Upload, Pencil, ExternalLink, FileCode, FolderOpen, QrCode, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -349,7 +349,6 @@ export const FileServerPanel: React.FC = () => {
                                 const contentType = contentTypeFromPath(r.path).split(';')[0];
                                 const isJson = contentType.includes('json');
                                 const isHtml = contentType.includes('html');
-                                const isText = contentType.includes('plain');
 
                                 return (
                                     <div

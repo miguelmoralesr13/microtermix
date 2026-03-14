@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { RefreshCw, Trash2, Globe, ExternalLink, Activity, Info, Loader2 } from 'lucide-react';
+import { RefreshCw, Trash2, Globe, Activity, Info, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';

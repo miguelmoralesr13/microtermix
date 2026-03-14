@@ -173,7 +173,7 @@ async fn git_cli_fallback(
     
     // Safety check: ensure migrated commands don't reach CLI fallback
     match command {
-        "show" | "stash" | "checkout" | "config" => {
+        "show" | "checkout" | "config" => {
              return Err(format!("Command 'git {}' is now handled natively and should not reach CLI fallback. Check router logic.", command));
         },
         "restore" if !args.contains(&"--staged".to_string()) => {
@@ -329,7 +329,7 @@ pub async fn git_execute_impl(
             let sub = args.get(1).map(|s| s.as_str()).unwrap_or("");
             match sub {
                 "save" => {
-                    let msg = args.get(2).cloned().unwrap_or_else(|| "WIP".into());
+                    let msg = args.get(2).cloned().unwrap_or_else(|| "WIP on stash".into());
                     tokio::task::spawn_blocking({
                         let p = project_path.clone();
                         move || crate::git_native::git_stash_save_impl(p, msg)

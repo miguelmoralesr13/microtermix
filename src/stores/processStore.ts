@@ -11,7 +11,7 @@ export interface ProcessState {
     restarts: number;
 }
 
-interface ProcessStore {
+export interface ProcessStore {
     activeProcesses: Record<string, ProcessState>;
     activeTerminalTab: string | null;
     

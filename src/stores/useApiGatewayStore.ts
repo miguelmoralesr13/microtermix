@@ -78,7 +78,7 @@ const loadFavorites = (): string[] => {
     }
 };
 
-interface ApiGatewayState {
+export interface ApiGatewayState {
     restApis: RestApiInfo[];
     httpApis: HttpApiInfo[];
     selectedApi: SelectedApi;

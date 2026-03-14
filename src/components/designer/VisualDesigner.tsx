@@ -28,17 +28,14 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
-    Download, Trash2, LayoutGrid, Type, Database, Diamond, Code, Users, ArrowRightLeft,
-    GitGraph, MessageSquare, StickyNote, Zap, Circle, PlayCircle, Settings2, HardDrive,
-    Terminal, Eye, EyeOff, Copy, Share, Box, X as XIcon, Save, FolderSearch, FileText, Plus,
-    FolderOpen, AlertTriangle
+    Download, Trash2, LayoutGrid, Type,  Diamond, Code, Users,
+     StickyNote, PlayCircle, Settings2, HardDrive,
+    Terminal, Eye, EyeOff, Copy, Share, Box, X as XIcon, Save, FolderSearch, FileText, Plus
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const generateId = () => `id_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -127,7 +124,7 @@ export const VisualDesigner: React.FC = () => {
     const [newDiagramName, setNewDiagramName] = useState('');
 
     // Default folder is always .mmd inside the workspace
-    const [diagFolder, setDiagFolder] = useState('.mmd');
+    const [diagFolder, _] = useState('.mmd');
 
     const mermaidCode = useMemo(() => MermaidConverter.convert({ nodes, edges, mode }), [nodes, edges, mode]);
 
@@ -263,6 +260,25 @@ export const VisualDesigner: React.FC = () => {
         const position = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
         const newNode: Node = {
             id: generateId(), type, position, data: { label: label || 'Nuevo' },
+            ...(type === 'group' ? { zIndex: -1, style: { width: 300, height: 200 } } : {})
+        };
+        setNodes((nds) => nds.concat(newNode));
+    }, [reactFlowInstance]);
+
+    const addNodeViaClick = useCallback((type: string, label: string) => {
+        if (!reactFlowInstance) return;
+        
+        // Colocar el nodo en el centro de la vista actual
+        const centerPosition = reactFlowInstance.screenToFlowPosition({
+            x: window.innerWidth / 2,
+            y: window.innerHeight / 2,
+        });
+
+        const newNode: Node = {
+            id: generateId(),
+            type,
+            position: centerPosition,
+            data: { label: label || 'Nuevo' },
             ...(type === 'group' ? { zIndex: -1, style: { width: 300, height: 200 } } : {})
         };
         setNodes((nds) => nds.concat(newNode));
@@ -457,7 +473,7 @@ function DraggableTool({ icon, label, type, onClick }: any) {
     };
     return (
         <div draggable onDragStart={(e) => onDragStart(e, type, label)} className="cursor-grab active:cursor-grabbing">
-            <Button variant="outline" size="sm" onClick={onClick} className="flex flex-col h-16 w-full gap-1 bg-slate-900 border-slate-800 hover:border-blue-500 transition-all pointer-events-none text-[9px] uppercase font-bold">
+            <Button variant="outline" size="sm" onClick={onClick} className="flex flex-col h-16 w-full gap-1 bg-slate-900 border-slate-800 hover:border-blue-500 transition-all text-[9px] uppercase font-bold">
                 <div className="text-slate-400">{icon}</div> {label}
             </Button>
         </div>
