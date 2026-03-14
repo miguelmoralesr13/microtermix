@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { CommandStep } from '../types/commands';
 
 import { listen } from '@tauri-apps/api/event';
@@ -21,7 +22,7 @@ export interface Project {
     scripts?: string[];
 }
 
-export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests' | 'sonar' | 'cloudwatch' | 'http' | 'jenkins' | 'lib-cipher' | 'mocks' | 'json-processor' | 'notes' | 'swagger' | 'pipelines';
+export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'commands' | 'tests' | 'sonar' | 'cloudwatch' | 'http' | 'jenkins' | 'lib-cipher' | 'mocks' | 'json-processor' | 'notes' | 'swagger' | 'pipelines' | 'designer';
 
 export interface WorkspaceState {
     currentPath: string;
@@ -31,7 +32,7 @@ export interface WorkspaceState {
     configAppliedTrigger: number;
     savedCommands: Record<string, string>;
     savedCommandSteps: Record<string, CommandStep[]>;
-    savedCommandTypes: Record<string, string>; // name -> project_type
+    savedCommandTypes: Record<string, string>; 
     pipelines: PipelineConfig[];
 }
 
@@ -60,24 +61,48 @@ interface WorkspaceContextType {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
+// Helper to create a stable ID from a path
+const getPathHash = (path: string) => {
+    if (!path) return 'default';
+    return path.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+};
+
 export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const updateProcessStatusStore = useProcessStore(s => s.updateProcessStatus);
+    
+    // We'll use a temporary state during boot until path is confirmed
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    // Initial Path Recovery from Backend (Tauri)
+    useEffect(() => {
+        const init = async () => {
+            const label = getCurrentWindow().label;
+            try {
+                // If this is a new window, the backend has a path pending for us
+                const initialPath = await invoke<string | null>('get_initial_workspace_for_window', { windowLabel: label });
+                if (initialPath) {
+                    console.log("[Workspace] Initialized with backend path:", initialPath);
+                    setWorkspacePath(initialPath);
+                    await scanWorkspace(initialPath);
+                } else if (state.currentPath) {
+                    // Fallback to last used path if it's the main window
+                    await scanWorkspace(state.currentPath);
+                }
+            } catch (e) {
+                console.error("[Workspace] Boot recovery failed", e);
+            } finally {
+                setIsInitialized(true);
+            }
+        };
+        init();
+    }, []);
 
     const [state, setState] = useState<WorkspaceState>(() => {
-        const savedSettings = localStorage.getItem('nexus-workspace-settings');
+        // Initial boot: try to get path from current window metadata or default
+        const savedGlobal = localStorage.getItem('nexus-workspace-settings');
         let currentPath = '';
-        let savedCommands: Record<string, string> = {};
-        let savedCommandSteps: Record<string, CommandStep[]> = {};
-        let savedCommandTypes: Record<string, string> = {};
-
-        if (savedSettings) {
-            try {
-                const parsed = JSON.parse(savedSettings);
-                if (parsed.currentPath) currentPath = parsed.currentPath;
-                if (parsed.savedCommands) savedCommands = parsed.savedCommands;
-                if (parsed.savedCommandSteps) savedCommandSteps = parsed.savedCommandSteps;
-                if (parsed.savedCommandTypes) savedCommandTypes = parsed.savedCommandTypes;
-            } catch (e) { }
+        if (savedGlobal) {
+            try { currentPath = JSON.parse(savedGlobal).currentPath || ''; } catch(e) {}
         }
 
         return {
@@ -85,33 +110,50 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             projects: [],
             activeView: 'services',
             targetTerminalTab: null,
-            savedCommands,
-            savedCommandSteps,
-            savedCommandTypes,
+            savedCommands: {},
+            savedCommandSteps: {},
+            savedCommandTypes: {},
             pipelines: [],
             configAppliedTrigger: 0
         };
     });
 
-    React.useEffect(() => {
-        try {
-            const current = localStorage.getItem('nexus-workspace-settings');
-            const parsed = current ? JSON.parse(current) : {};
-            parsed.savedCommands = state.savedCommands;
-            parsed.savedCommandSteps = state.savedCommandSteps;
-            parsed.savedCommandTypes = state.savedCommandTypes;
-            localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
-        } catch (_) { }
-    }, [state.savedCommands, state.savedCommandSteps, state.savedCommandTypes]);
+    // Dynamic storage key based on the project path itself
+    const STORAGE_KEY = useMemo(() => `nexus-ws-data-${getPathHash(state.currentPath)}`, [state.currentPath]);
 
-    React.useEffect(() => {
-        try {
-            const current = localStorage.getItem('nexus-workspace-settings');
-            const parsed = current ? JSON.parse(current) : {};
-            parsed.currentPath = state.currentPath;
-            localStorage.setItem('nexus-workspace-settings', JSON.stringify(parsed));
-        } catch (_) { }
-    }, [state.currentPath]);
+    // Effect to load project-specific settings when path changes
+    useEffect(() => {
+        if (!state.currentPath) return;
+        
+        const projectSettings = localStorage.getItem(STORAGE_KEY);
+        if (projectSettings) {
+            try {
+                const parsed = JSON.parse(projectSettings);
+                setState(prev => ({
+                    ...prev,
+                    savedCommands: parsed.savedCommands || {},
+                    savedCommandSteps: parsed.savedCommandSteps || {},
+                    savedCommandTypes: parsed.savedCommandTypes || {},
+                }));
+            } catch (e) { }
+        }
+        setIsInitialized(true);
+    }, [STORAGE_KEY]);
+
+    // Save project-specific settings
+    useEffect(() => {
+        if (!isInitialized || !state.currentPath) return;
+        
+        const data = {
+            savedCommands: state.savedCommands,
+            savedCommandSteps: state.savedCommandSteps,
+            savedCommandTypes: state.savedCommandTypes,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        
+        // Also update the "last used path" globally
+        localStorage.setItem('nexus-workspace-settings', JSON.stringify({ currentPath: state.currentPath }));
+    }, [STORAGE_KEY, state.savedCommands, state.savedCommandSteps, state.savedCommandTypes, isInitialized]);
 
     const setWorkspacePath = (path: string) => {
         setState(prev => ({ ...prev, currentPath: path }));
@@ -164,21 +206,30 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta del workspace' });
             if (selected !== null && !Array.isArray(selected)) {
-                await scanWorkspace(selected);
+                // Save the new path to our window-specific storage before reloading
+                const current = localStorage.getItem(STORAGE_KEY);
+                const parsed = current ? JSON.parse(current) : {};
+                parsed.currentPath = selected;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+                
+                // Hard reload to clear all stores and re-initialize with the new path
+                window.location.reload();
             }
         } catch (e) {
             console.error('Open folder failed', e);
         }
-    }, []);
+    }, [STORAGE_KEY]);
 
     const openFolderInNewWindow = useCallback(async () => {
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta para nueva ventana' });
             if (selected !== null && !Array.isArray(selected)) {
+                console.log("[Workspace] Opening in new window:", selected);
                 await invoke('open_new_workspace', { path: selected });
             }
         } catch (e) {
             console.error('Open in new window failed', e);
+            toast.error("Error al abrir nueva ventana");
         }
     }, []);
 
@@ -348,7 +399,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error(`Execution failed for ${compositeServiceId}`, e);
             updateProcessStatusStore(compositeServiceId, 'error');
         }
-    }, [updateProcessStatusStore, state.savedCommands]);
+    }, [updateProcessStatusStore, state.savedCommands, state.projects]);
 
     const executePipeline = useCallback(async (pipeline: PipelineConfig) => {
         try {

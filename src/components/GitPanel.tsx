@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Settings, RefreshCw, Github, Gitlab, Download } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
@@ -116,11 +117,12 @@ export const GitPanel: React.FC = () => {
 
     // Focus background fetch worker on the current active project
     useEffect(() => {
+        const label = getCurrentWindow().label;
         if (activeTab) {
-            invoke('set_active_git_project', { projectPath: activeTab }).catch(console.error);
+            invoke('set_active_git_project', { windowLabel: label, projectPath: activeTab }).catch(console.error);
         }
         return () => {
-            invoke('set_active_git_project', { projectPath: null }).catch(console.error);
+            invoke('set_active_git_project', { windowLabel: label, projectPath: null }).catch(console.error);
         };
     }, [activeTab]);
 

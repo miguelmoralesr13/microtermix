@@ -49,9 +49,8 @@ pub struct AppState {
     pub coverage_server_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
     pub pending_workspace_by_label: Arc<AsyncMutex<HashMap<String, String>>>,
     pub git_watchers: Arc<AsyncMutex<HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>,
-    pub git_fetch_list: Arc<AsyncMutex<std::collections::HashSet<String>>>,
     pub git_fetch_worker_started: Arc<AsyncMutex<bool>>,
-    pub active_git_project: Arc<AsyncMutex<Option<String>>>,
+    pub active_git_projects: Arc<AsyncMutex<HashMap<String, String>>>,
 }
 
 impl AppState {
@@ -67,9 +66,8 @@ impl AppState {
             coverage_server_abort: Arc::new(AsyncMutex::new(None)),
             pending_workspace_by_label: Arc::new(AsyncMutex::new(HashMap::new())),
             git_watchers: Arc::new(AsyncMutex::new(HashMap::new())),
-            git_fetch_list: Arc::new(AsyncMutex::new(std::collections::HashSet::new())),
             git_fetch_worker_started: Arc::new(AsyncMutex::new(false)),
-            active_git_project: Arc::new(AsyncMutex::new(None)),
+            active_git_projects: Arc::new(AsyncMutex::new(HashMap::new())),
         }
     }
 }

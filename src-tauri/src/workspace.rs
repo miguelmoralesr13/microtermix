@@ -12,7 +12,10 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let window_label = format!("workspace-{}", timestamp);
+    // More robust window label
+    let window_label = format!("nexus-ws-{}", timestamp);
+
+    println!("[open_new_workspace] Registering path for window {}: {}", window_label, path);
 
     {
         let state = app.state::<AppState>();
@@ -24,17 +27,29 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or(path.as_str());
-    let _window = tauri::WebviewWindowBuilder::new(
+    
+    println!("[open_new_workspace] Building window...");
+
+    let res = tauri::WebviewWindowBuilder::new(
         &app,
         &window_label,
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title(format!("DevFlow Nexus — {}", title))
-    .inner_size(800.0, 600.0)
-    .build()
-    .map_err(|e| e.to_string())?;
+    .title(format!("Nexus — {}", title))
+    .inner_size(1280.0, 800.0) // Bigger default size
+    .build();
 
-    Ok(())
+    match res {
+        Ok(_) => {
+            println!("[open_new_workspace] Window created successfully");
+            Ok(())
+        },
+        Err(e) => {
+            let err_msg = format!("Failed to build window: {}", e);
+            eprintln!("[open_new_workspace] Error: {}", err_msg);
+            Err(err_msg)
+        }
+    }
 }
 
 /// La nueva ventana llama esto al cargar para obtener el path del workspace asociado.

@@ -38,6 +38,7 @@ import { toast } from 'sonner';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const generateId = () => `id_${Math.random().toString(36).substr(2, 9)}`;
 

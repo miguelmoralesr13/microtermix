@@ -2,21 +2,23 @@ use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config, Event};
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager};
 use crate::state::AppState;
+use std::collections::{HashSet, HashMap};
 
-// ── Focus-Based Fetch Worker ─────────────────────────────────────────────────
+// ── Multi-Window Fetch Worker ────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn set_active_git_project(
     state: tauri::State<'_, AppState>,
+    window_label: String,
     project_path: Option<String>
 ) -> Result<(), String> {
-    let mut p = state.active_git_project.lock().await;
-    *p = project_path.clone();
-    
+    let mut projects = state.active_git_projects.lock().await;
     if let Some(path) = project_path {
-        println!("[Git Worker] Focus shifted to: {}", path);
+        projects.insert(window_label.clone(), path.clone());
+        println!("[Git Worker] Window '{}' focused on: {}", window_label, path);
     } else {
-        println!("[Git Worker] No active project (IDLE)");
+        projects.remove(&window_label);
+        println!("[Git Worker] Window '{}' is IDLE", window_label);
     }
     Ok(())
 }
@@ -27,42 +29,42 @@ async fn ensure_fetch_worker(app_handle: AppHandle) {
     if *started { return; }
     *started = true;
 
-    let active_project = state.active_git_project.clone();
+    let active_projects_map = state.active_git_projects.clone();
 
     tauri::async_runtime::spawn(async move {
-        // Initial wait to let the app start up
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         
         loop {
-            // Get the current active project
-            let current_active = {
-                let p = active_project.lock().await;
-                p.clone()
+            // Get unique set of paths currently active in any window
+            let paths_to_fetch: HashSet<String> = {
+                let map = active_projects_map.lock().await;
+                map.values().cloned().collect()
             };
 
-            if let Some(path) = current_active {
-                println!("[Git Worker] Fetching active project: {}", path);
+            if !paths_to_fetch.is_empty() {
+                println!("[Git Worker] Starting fetch cycle for {} unique active projects...", paths_to_fetch.len());
                 
-                let p = path.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    if let Ok(repo) = git2::Repository::discover(&p) {
-                        let remote_names = repo.remotes().ok();
-                        let origin = remote_names.as_ref().and_then(|r| {
-                            r.iter().flatten()
-                                .find(|&name| name == "origin")
-                                .or_else(|| r.iter().flatten().next())
-                        });
+                for path in paths_to_fetch {
+                    let p = path.clone();
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if let Ok(repo) = git2::Repository::discover(&p) {
+                            let remote_names = repo.remotes().ok();
+                            let origin = remote_names.as_ref().and_then(|r| {
+                                r.iter().flatten()
+                                    .find(|&name| name == "origin")
+                                    .or_else(|| r.iter().flatten().next())
+                            });
 
-                        if let Some(remote_name) = origin {
-                            let _ = crate::git_native::fetch_remote_native(&repo, remote_name);
+                            if let Some(remote_name) = origin {
+                                let _ = crate::git_native::fetch_remote_native(&repo, remote_name);
+                            }
                         }
-                    }
-                }).await;
+                    }).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
                 
-                // Active polling frequency: every 5 minutes while focused
                 tokio::time::sleep(std::time::Duration::from_secs(300)).await;
             } else {
-                // If no project is active, check again more frequently but do nothing
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
             }
         }
@@ -78,9 +80,9 @@ pub fn start_watching_repo(
     
     let state = app_handle.state::<AppState>();
     let git_watchers = state.git_watchers.clone();
-    let active_git_project = state.active_git_project.clone();
+    let active_projects_map = state.active_git_projects.clone();
 
-    // 1. Ensure worker is running (it will automatically pick up the active project)
+    // Ensure worker is running
     let app_for_worker = app_handle.clone();
     tauri::async_runtime::spawn(async move {
         ensure_fetch_worker(app_for_worker).await;
@@ -123,23 +125,21 @@ pub fn start_watching_repo(
         watchers.insert(project_path_for_store, Box::new(watcher));
     });
 
-    let active_project_for_notify = active_git_project.clone();
+    let active_projects_for_notify = active_projects_map.clone();
     let path_to_watch = project_path.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(_) = rx.recv().await {
             tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
             while let Ok(_) = rx.try_recv() {}
             
-            // Only emit if this repository is the one currently in FOCUS
-            let current_active = {
-                let p = active_project_for_notify.lock().await;
-                p.clone()
+            // Check if this project is active in ANY window
+            let is_active = {
+                let map = active_projects_for_notify.lock().await;
+                map.values().any(|v| v == &path_to_watch)
             };
 
-            if let Some(active_path) = current_active {
-                if active_path == path_to_watch {
-                    let _ = app_handle_clone.emit("git-changed", project_path_clone.clone());
-                }
+            if is_active {
+                let _ = app_handle_clone.emit("git-changed", project_path_clone.clone());
             }
         }
     });
