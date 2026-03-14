@@ -20,6 +20,7 @@ import { JsonProcessorPanel } from './json-processor/JsonProcessorPanel';
 import { NotesPanel } from './notes/NotesPanel';
 import { SwaggerPanel } from './swagger/SwaggerPanel';
 import { PipelinesPanel } from './PipelinesPanel';
+import { VisualDesigner } from './designer/VisualDesigner';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
@@ -379,6 +380,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'swagger' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <SwaggerPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'designer' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <VisualDesigner />
                         </div>
                     )}
 

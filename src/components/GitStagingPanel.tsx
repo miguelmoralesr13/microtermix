@@ -5,6 +5,9 @@ import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquar
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
+import { Badge } from './ui/badge';
+import { cn } from '../lib/utils';
+import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 interface GitStatusEntry {
     file: string;
@@ -70,41 +73,70 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
         return (
             <div className="min-w-0">
                 <div
-                    className={`flex items-center justify-between group py-1 hover:bg-slate-800 transition-colors text-sm ${isSelectedForRollback ? 'bg-nexus-danger/10' : ''}`}
+                    className={cn(
+                        "flex items-center justify-between group py-0.5 hover:bg-slate-800/50 transition-colors text-sm",
+                        isSelectedForRollback && "bg-nexus-danger/10"
+                    )}
                     style={{ paddingLeft: `${level * 12 + 8}px`, paddingRight: '8px' }}
                 >
                     <div
                         className="flex items-center space-x-2 overflow-hidden cursor-pointer flex-1 min-w-0"
                         onClick={() => onDiffRequest && onDiffRequest(f.file, defaultDiffMode)}
                     >
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onToggleNode(node); }}
-                            className={`${checkColor} hover:text-white shrink-0 z-10 transition-colors`}
-                            disabled={f.isConflicted}
-                            title={f.isConflicted ? "Cannot stage directly. Resolve conflicts first." : ""}
+                        <Tooltip>
+                            <TooltipTrigger render={
+                                <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    onClick={(e) => { e.stopPropagation(); onToggleNode(node); }}
+                                    className={cn("shrink-0 h-6 w-6 p-0", checkColor)}
+                                    disabled={f.isConflicted}
+                                >
+                                    <CheckIcon size={14} className={f.isConflicted ? 'opacity-30' : ''} />
+                                </Button>
+                            } />
+                            {f.isConflicted && (
+                                <TooltipContent>Cannot stage directly. Resolve conflicts first.</TooltipContent>
+                            )}
+                        </Tooltip>
+
+                        <Badge 
+                            variant="outline" 
+                            className={cn("font-mono text-[9px] px-1 py-0 h-4 border-none bg-transparent", colorClass)}
                         >
-                            <CheckIcon size={14} className={f.isConflicted ? 'opacity-30' : ''} />
-                        </button>
-                        <span className={`font-mono text-[10px] w-4 shrink-0 ${colorClass} font-bold`}>{f.stateCode.trim()}</span>
-                        <StatusIcon size={12} className={`${colorClass} shrink-0`} />
-                        <span className={`truncate transition-colors text-xs ${node.checkState === 'checked' ? 'text-white' : 'text-slate-300 group-hover:text-white'}`}>{node.name}</span>
+                            {f.stateCode.trim()}
+                        </Badge>
+                        <StatusIcon size={12} className={cn(colorClass, "shrink-0")} />
+                        <span className={cn(
+                            "truncate transition-colors text-xs",
+                            node.checkState === 'checked' ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'
+                        )}>
+                            {node.name}
+                        </span>
                     </div>
 
                     <div className="flex items-center shrink-0 ml-2 gap-0.5">
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
                             onClick={(e) => { e.stopPropagation(); onRollbackToggle(node.fullPath); }}
-                            className={`p-1 rounded transition-colors ${isSelectedForRollback ? 'text-nexus-danger bg-nexus-danger/20' : 'opacity-0 group-hover:opacity-100 text-slate-500 hover:text-nexus-danger hover:bg-slate-700'}`}
+                            className={cn(
+                                "h-6 w-6 p-0 transition-opacity",
+                                isSelectedForRollback ? "text-nexus-danger bg-nexus-danger/20 opacity-100" : "opacity-0 group-hover:opacity-100 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50"
+                            )}
                             title="Select for rollback"
                         >
                             {isSelectedForRollback ? <CheckSquare size={12} /> : <Square size={12} />}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
                             onClick={(e) => { e.stopPropagation(); onDiscardNode(node); }}
-                            className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-danger hover:bg-slate-700 rounded transition-all"
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50 transition-all"
                             title="Discard this file"
                         >
                             <Trash2 size={12} />
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -113,27 +145,31 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
 
     return (
         <div>
-            <div className="flex items-center justify-between group py-1 hover:bg-slate-800 transition-colors" style={{ paddingLeft: `${level * 12 + 4}px`, paddingRight: '8px' }}>
+            <div className="flex items-center justify-between group py-1 hover:bg-slate-800/50 transition-colors" style={{ paddingLeft: `${level * 12 + 4}px`, paddingRight: '8px' }}>
                 <div className="flex items-center cursor-pointer flex-1 overflow-hidden" onClick={() => setExpanded(!expanded)}>
                     <span className="w-4 h-4 flex items-center justify-center text-slate-500 shrink-0 mr-1">
                         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </span>
-                    <button
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
                         onClick={(e) => { e.stopPropagation(); onToggleNode(node); }}
-                        className={`${checkColor} hover:text-white shrink-0 z-10 mr-2 transition-colors`}
+                        className={cn("h-6 w-6 p-0 mr-1", checkColor)}
                     >
                         <CheckIcon size={14} />
-                    </button>
+                    </Button>
                     <Folder size={12} className="text-slate-500 mr-2 shrink-0" />
                     <span className="text-slate-400 text-xs font-medium truncate group-hover:text-slate-200">{node.name}</span>
                 </div>
-                <button
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={(e) => { e.stopPropagation(); onDiscardNode(node); }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-danger hover:bg-slate-700 rounded transition-all shrink-0 ml-2"
+                    className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50 transition-all shrink-0 ml-2"
                     title="Discard All Changes in Folder"
                 >
                     <Trash2 size={12} />
-                </button>
+                </Button>
             </div>
             {expanded && (
                 <div>
@@ -417,12 +453,14 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                             <span className="text-xs font-bold text-orange-400 flex items-center gap-1">
                                 <AlertTriangle size={12} /> Merge in Progress
                             </span>
-                            <button
+                            <Button
+                                variant="destructive"
+                                size="xs"
                                 onClick={handleAbortMerge}
-                                className="text-[10px] font-bold px-2 py-1 bg-red-950 text-red-400 border border-red-900 rounded hover:bg-red-900 transition-colors"
+                                className="h-6 px-2 text-[10px] font-bold"
                             >
                                 Abort
-                            </button>
+                            </Button>
                         </div>
                         {conflictedFilesCount > 0 && (
                             <Button

@@ -160,249 +160,7 @@ pub struct GitLogPayload {
     pub stderr: String,
 }
 
-// ── Credential helper (shared by push / fetch) ─────────────────────────────────
-
-/// Build an `auth_git2` authenticator that reads from the system credential store
-/// (git config credential.helper, SSH agent, etc.).
-fn make_auth() -> auth_git2::GitAuthenticator {
-    auth_git2::GitAuthenticator::new_empty()
-        .add_default_username()
-        .try_cred_helper(true)
-        .try_ssh_agent(true)
-        .add_default_ssh_keys()
-}
-
 // ── Native git2 handlers ───────────────────────────────────────────────────────
-
-fn git2_commit(project_path: &str, args: &[String]) -> Result<GitResult, String> {
-    use git2::Repository;
-
-    // Parse args: expect ["commit", "-m", "<message>"] or ["commit", "--amend", "-m", "<message>"]
-    let mut message = String::new();
-    let mut amend = false;
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "commit" => {}
-            "--amend" => { amend = true; }
-            "-m" | "--message" => {
-                i += 1;
-                if i < args.len() { message = args[i].clone(); }
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    if message.is_empty() {
-        return Err("commit: no message provided".into());
-    }
-
-    let repo = Repository::discover(project_path).map_err(|e| e.to_string())?;
-    let config = repo.config().map_err(|e| e.to_string())?;
-
-    let name = config.get_string("user.name").unwrap_or_else(|_| "Unknown".into());
-    let email = config.get_string("user.email").unwrap_or_else(|_| "unknown@example.com".into());
-    let sig = git2::Signature::now(&name, &email).map_err(|e| e.to_string())?;
-
-    let mut index = repo.index().map_err(|e| e.to_string())?;
-    let tree_id = index.write_tree().map_err(|e| e.to_string())?;
-    let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
-
-    if amend {
-        let head_commit = repo.head().map_err(|e| e.to_string())?
-            .peel_to_commit().map_err(|e| e.to_string())?;
-        head_commit.amend(Some("HEAD"), Some(&sig), Some(&sig), None, Some(&message), Some(&tree))
-            .map_err(|e| e.to_string())?;
-        return Ok(GitResult {
-            stdout: "[amended] commit updated".into(),
-            stderr: String::new(),
-            success: true,
-        });
-    }
-
-    let parent_commit = if let Ok(head) = repo.head() {
-        Some(head.peel_to_commit().map_err(|e| e.to_string())?)
-    } else {
-        None
-    };
-
-    let parents: Vec<&git2::Commit> = parent_commit.iter().collect();
-    repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parents)
-        .map_err(|e| e.to_string())?;
-
-    Ok(GitResult {
-        stdout: format!("[{}] {}", repo.head().map(|h| h.shorthand().unwrap_or("HEAD").to_string()).unwrap_or_default(), &message),
-        stderr: String::new(),
-        success: true,
-    })
-}
-
-
-fn git2_branch_delete(project_path: &str, args: &[String]) -> Result<GitResult, String> {
-    use git2::{Repository, BranchType};
-
-    let repo = Repository::discover(project_path).map_err(|e| e.to_string())?;
-    let force = args.contains(&"-D".to_string());
-    let branch_name = args.iter().rev().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
-
-    let mut branch = repo.find_branch(&branch_name, BranchType::Local).map_err(|e| e.to_string())?;
-    if force {
-        branch.delete().map_err(|e| e.to_string())?;
-    } else {
-        // Check if fully merged before deleting
-        let upstream = branch.upstream();
-        let is_merged = if let Ok(up) = upstream {
-            let up_id = up.get().peel_to_commit().map_err(|e| e.to_string())?.id();
-            let local_id = branch.get().peel_to_commit().map_err(|e| e.to_string())?.id();
-            let (ahead, _) = repo.graph_ahead_behind(local_id, up_id).unwrap_or((1, 0));
-            ahead == 0
-        } else { false };
-
-        if !is_merged {
-            return Ok(GitResult {
-                stdout: String::new(),
-                stderr: format!("error: The branch '{}' is not fully merged. Use -D to force delete.", branch_name),
-                success: false,
-            });
-        }
-        branch.delete().map_err(|e| e.to_string())?;
-    }
-
-    Ok(GitResult {
-        stdout: format!("Deleted branch {}.", branch_name),
-        stderr: String::new(),
-        success: true,
-    })
-}
-
-async fn git2_fetch_native(project_path: &str) -> Result<GitResult, String> {
-    let path = project_path.to_string();
-    tokio::task::spawn_blocking(move || {
-        use git2::Repository;
-        let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
-        let auth = make_auth();
-
-        let remote_names = repo.remotes().map_err(|e| e.to_string())?;
-        let origin = remote_names.iter().flatten()
-            .find(|&r| r == "origin")
-            .or_else(|| remote_names.iter().flatten().next());
-
-        let remote_name = match origin {
-            Some(r) => r.to_string(),
-            None => return Ok(GitResult { stdout: String::new(), stderr: "No remotes configured".into(), success: false }),
-        };
-
-        let mut remote = repo.find_remote(&remote_name).map_err(|e| e.to_string())?;
-
-        // auth.fetch is synchronous network I/O — safe inside spawn_blocking
-        match auth.fetch(&repo, &mut remote, &[] as &[&str], None) {
-            Ok(_) => Ok(GitResult {
-                stdout: "Fetched from remote".into(),
-                stderr: String::new(),
-                success: true,
-            }),
-            Err(e) => Ok(GitResult {
-                stdout: String::new(),
-                stderr: format!("{}", e),
-                success: false,
-            }),
-        }
-    }).await.map_err(|e| e.to_string())?
-}
-
-// async fn git2_pull_native(project_path: &str) -> Result<GitResult, String> {
-//     // Phase 1: network fetch (blocking — runs in spawn_blocking inside git2_fetch_native)
-//     let fetch_result = git2_fetch_native(project_path).await?;
-//     if !fetch_result.success {
-//         return Ok(fetch_result);
-//     }
-
-//     // Phase 2: merge analysis + fast-forward (pure git2, blocking but fast — no network)
-//     let path = project_path.to_string();
-//     tokio::task::spawn_blocking(move || {
-//         use git2::{Repository, BranchType, MergeAnalysis};
-//         let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
-
-//         let head = repo.head().map_err(|e| e.to_string())?;
-//         if !head.is_branch() {
-//             return Ok(GitResult { stdout: String::new(), stderr: "HEAD is not on a branch".into(), success: false });
-//         }
-//         let branch_name = head.shorthand().ok_or("no branch name")?.to_string();
-//         let branch = repo.find_branch(&branch_name, BranchType::Local).map_err(|e| e.to_string())?;
-
-//         let upstream = match branch.upstream() {
-//             Ok(u) => u,
-//             Err(_) => return Ok(GitResult {
-//                 stdout: String::new(),
-//                 stderr: format!("Branch '{}' has no upstream configured", branch_name),
-//                 success: false,
-//             }),
-//         };
-
-//         let upstream_commit = upstream.get().peel_to_commit().map_err(|e| e.to_string())?;
-//         let fetch_head = repo.find_annotated_commit(upstream_commit.id()).map_err(|e| e.to_string())?;
-//         let (analysis, _) = repo.merge_analysis(&[&fetch_head]).map_err(|e| e.to_string())?;
-
-//         if analysis.contains(MergeAnalysis::ANALYSIS_UP_TO_DATE) {
-//             return Ok(GitResult { stdout: "Already up to date.".into(), stderr: String::new(), success: true });
-//         }
-
-//         if analysis.contains(MergeAnalysis::ANALYSIS_FASTFORWARD) {
-//             let upstream_oid = upstream_commit.id();
-//             let new_obj = repo.find_object(upstream_oid, None).map_err(|e| e.to_string())?;
-//             let mut co = git2::build::CheckoutBuilder::new();
-//             co.safe();
-//             repo.checkout_tree(&new_obj, Some(&mut co)).map_err(|e| e.to_string())?;
-//             // Update HEAD reference to new tip
-//             let head_ref = repo.find_reference("HEAD").map_err(|e| e.to_string())?;
-//             // resolve to the actual branch ref (e.g. refs/heads/main)
-//             let mut target_ref = head_ref.resolve().map_err(|e| e.to_string())?;
-//             target_ref.set_target(upstream_oid, "pull: fast-forward").map_err(|e| e.to_string())?;
-//             return Ok(GitResult {
-//                 stdout: format!("Fast-forward to {}", &upstream_oid.to_string()[..7]),
-//                 stderr: String::new(),
-//                 success: true,
-//             });
-//         }
-
-//         // Non-fast-forward: tell the UI to show the stash/rebase dialog
-//         Ok(GitResult {
-//             stdout: String::new(),
-//             stderr: "Pull would create a merge commit. Please stash your changes or use rebase.".into(),
-//             success: false,
-//         })
-//     }).await.map_err(|e| e.to_string())?
-// }
-
-async fn git2_push_native(project_path: &str, args: &[String]) -> Result<GitResult, String> {
-    let path = project_path.to_string();
-    let force = args.contains(&"--force".to_string()) || args.contains(&"-f".to_string());
-    tokio::task::spawn_blocking(move || {
-        use git2::Repository;
-        let repo = Repository::discover(&path).map_err(|e| e.to_string())?;
-        let auth = make_auth();
-
-        let head = repo.head().map_err(|e| e.to_string())?;
-        let branch_name = head.shorthand().ok_or("HEAD is detached")?.to_string();
-        let refspec = format!("{}refs/heads/{}:refs/heads/{}",
-            if force { "+" } else { "" }, branch_name, branch_name);
-        let remote_name = "origin";
-        let mut remote = repo.find_remote(remote_name).map_err(|e| e.to_string())?;
-
-        match auth.push(&repo, &mut remote, &[&refspec]) {
-            Ok(_) => Ok(GitResult {
-                stdout: format!("Pushed '{}' to {}", branch_name, remote_name),
-                stderr: String::new(),
-                success: true,
-            }),
-            Err(e) => Ok(GitResult {
-                stdout: String::new(),
-                stderr: format!("{}", e),
-                success: false,
-            }),
-        }
-    }).await.map_err(|e| e.to_string())?
-}
 
 // ── Fallback CLI helper ────────────────────────────────────────────────────────
 
@@ -460,26 +218,79 @@ pub async fn git_execute_impl(
 
     let result = match command {
         // ── Native git2: writes & reads that need correctness ──────────────────
-        "commit" => {
+        "add" => {
+            let path = args.get(1).cloned().unwrap_or_else(|| ".".into());
             tokio::task::spawn_blocking({
                 let p = project_path.clone();
-                let a = args.clone();
-                move || git2_commit(&p, &a)
+                move || crate::git_native::git_add_native_impl(p, path)
             }).await.map_err(|e| e.to_string())?
+            .map(|_| GitResult { stdout: "Added to index".into(), stderr: String::new(), success: true })
+        }
+        "restore" if args.contains(&"--staged".to_string()) => {
+            let path = args.iter().find(|&a| a != "restore" && a != "--staged").cloned().unwrap_or_else(|| ".".into());
+            tokio::task::spawn_blocking({
+                let p = project_path.clone();
+                move || crate::git_native::git_reset_native_impl(p, path)
+            }).await.map_err(|e| e.to_string())?
+            .map(|_| GitResult { stdout: "Restored from index".into(), stderr: String::new(), success: true })
+        }
+        "commit" => {
+            let mut message = String::new();
+            let mut amend = false;
+            let mut i = 0;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--amend" => { amend = true; }
+                    "-m" | "--message" => {
+                        i += 1;
+                        if i < args.len() { message = args[i].clone(); }
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            tokio::task::spawn_blocking({
+                let p = project_path.clone();
+                move || crate::git_native::git_commit_native_impl(p, message, amend)
+            }).await.map_err(|e| e.to_string())?
+            .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
         }
         "checkout" => git_cli_fallback(&app_handle, &project_path, &args).await,
         "branch" if args.iter().any(|a| a == "-d" || a == "-D") => {
+            let force = args.contains(&"-D".to_string());
+            let branch_name = args.iter().rev().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
             tokio::task::spawn_blocking({
                 let p = project_path.clone();
-                let a = args.clone();
-                move || git2_branch_delete(&p, &a)
+                move || crate::git_native::git_branch_delete_native_impl(p, branch_name, force)
             }).await.map_err(|e| e.to_string())?
+            .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
         }
-        "fetch" => git2_fetch_native(&project_path).await,
-        "pull" => git_cli_fallback(&app_handle, &project_path, &args).await,
-        "push" => git2_push_native(&project_path, &args).await,
+        "fetch" => {
+            tokio::task::spawn_blocking({
+                let p = project_path.clone();
+                move || {
+                    let repo = crate::git_native::repo_open(&p)?;
+                    let remote_names = repo.remotes().map_err(|e| e.to_string())?;
+                    let remote_name = remote_names.iter().flatten()
+                        .find(|&r| r == "origin")
+                        .or_else(|| remote_names.iter().flatten().next())
+                        .ok_or("No remotes configured")?;
+                    crate::git_native::fetch_remote_native(&repo, remote_name)
+                }
+            }).await.map_err(|e| e.to_string())?
+            .map(|_| GitResult { stdout: "Fetched from remote".into(), stderr: String::new(), success: true })
+        }
+        "pull" => {
+            crate::git_native::git_pull_native_impl(project_path.clone()).await
+            .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
+        }
+        "push" => {
+            let force = args.contains(&"--force".to_string()) || args.contains(&"-f".to_string());
+            crate::git_native::git_push_native_impl(project_path.clone(), force).await
+            .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
+        }
 
-        // ── Fallback for everything else (add, reset, stash, rebase, merge…) ──
+        // ── Fallback for everything else (reset, stash, rebase, merge…) ──
         _ => git_cli_fallback(&app_handle, &project_path, &args).await,
     }?;
 
@@ -492,67 +303,6 @@ pub async fn git_execute_impl(
     });
 
     Ok(result)
-}
-
-// ─── Git Status (parallel, CLI) ────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct GitStatusResult {
-    pub status_output: String,
-    pub status_success: bool,
-    pub status_stderr: String,
-    pub current_branch: String,
-    pub is_merge_in_progress: bool,
-}
-
-pub async fn git_get_status_impl(project_path: String) -> Result<GitStatusResult, String> {
-    let path1 = project_path.clone();
-    let path2 = project_path.clone();
-    let path3 = project_path.clone();
-
-    let status_fut = tokio::spawn(async move {
-        let mut cmd = AsyncCommand::new("git");
-        cmd.args(&["status", "-s", "-u"]);
-        cmd.current_dir(&path1);
-        cmd.env("GIT_TERMINAL_PROMPT", "0");
-        #[cfg(target_os = "windows")]
-        { cmd.creation_flags(0x08000000); }
-        cmd.output().await
-    });
-
-    let branch_fut = tokio::spawn(async move {
-        let mut cmd = AsyncCommand::new("git");
-        cmd.args(&["branch", "--show-current"]);
-        cmd.current_dir(&path2);
-        cmd.env("GIT_TERMINAL_PROMPT", "0");
-        #[cfg(target_os = "windows")]
-        { cmd.creation_flags(0x08000000); }
-        cmd.output().await
-    });
-
-    let merge_fut = tokio::spawn(async move {
-        let mut cmd = AsyncCommand::new("git");
-        cmd.args(&["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
-        cmd.current_dir(&path3);
-        cmd.env("GIT_TERMINAL_PROMPT", "0");
-        #[cfg(target_os = "windows")]
-        { cmd.creation_flags(0x08000000); }
-        cmd.output().await
-    });
-
-    let (status_res, branch_res, merge_res) = tokio::join!(status_fut, branch_fut, merge_fut);
-
-    let status_out = status_res.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
-    let branch_out = branch_res.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
-    let merge_out  = merge_res.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
-
-    Ok(GitStatusResult {
-        status_output: String::from_utf8_lossy(&status_out.stdout).to_string(),
-        status_success: status_out.status.success(),
-        status_stderr:  String::from_utf8_lossy(&status_out.stderr).to_string(),
-        current_branch: String::from_utf8_lossy(&branch_out.stdout).trim().to_string(),
-        is_merge_in_progress: merge_out.status.success(),
-    })
 }
 
 // ─── Reword commit (git2 amend for HEAD, CLI rebase for older) ────────────────
@@ -577,16 +327,12 @@ pub async fn git_reword_commit_impl(
 
     let result = if is_head {
         // Fast path: git2 amend — no subprocess needed
-        let args = vec![
-            "commit".to_string(),
-            "--amend".to_string(),
-            "-m".to_string(),
-            new_message.clone(),
-        ];
+        let msg = new_message.clone();
         tokio::task::spawn_blocking({
             let p = project_path.clone();
-            move || git2_commit(&p, &args)
-        }).await.map_err(|e| e.to_string())??
+            move || crate::git_native::git_commit_native_impl(p, msg, true)
+        }).await.map_err(|e| e.to_string())??;
+        GitResult { stdout: "[amended] commit updated".into(), stderr: String::new(), success: true }
     } else {
         // Non-HEAD: use CLI interactive rebase with temp scripts
         let msg_path = format!("{}/.nexus_msg.txt", project_path);

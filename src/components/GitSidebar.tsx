@@ -9,6 +9,9 @@ import { PRSection } from './PRSection';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
+import { cn } from '../lib/utils';
 import {
     DndContext,
     useDraggable,
@@ -60,8 +63,10 @@ const DraggableBranchItem = ({
             {...listeners}
             {...attributes}
             onDoubleClick={() => handleCheckout(branchName, !!isRemote)}
-            style={{ opacity: isDragging ? 0.4 : 1 }}
-            className="flex items-center justify-between px-4 py-1.5 text-xs cursor-grab active:cursor-grabbing group transition-all text-slate-300 hover:bg-slate-800 hover:text-white"
+            className={cn(
+                "flex items-center justify-between px-3 py-1 text-xs cursor-grab active:cursor-grabbing group transition-all text-slate-400 hover:bg-slate-800/50 hover:text-slate-200",
+                isDragging && "opacity-40"
+            )}
         >
             <div className="flex items-center overflow-hidden min-w-0 flex-1">
                 {isRemote
@@ -70,38 +75,65 @@ const DraggableBranchItem = ({
                 }
                 <span className="truncate">{branchName}</span>
             </div>
-            <div className="flex items-center shrink-0 ml-1" onPointerDown={(e) => e.stopPropagation()}>
-                <button
-                    onClick={(e) => { e.stopPropagation(); setShowMergeModal(branchName); }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-accent transition-opacity"
-                    title="Merge into current branch"
-                >
-                    <GitMerge size={10} />
-                </button>
+            <div className="flex items-center shrink-0 ml-1 gap-0.5" onPointerDown={(e) => e.stopPropagation()}>
+                <Tooltip>
+                    <TooltipTrigger render={
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={(e) => { e.stopPropagation(); setShowMergeModal(branchName); }}
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-accent hover:bg-slate-700/50 transition-opacity"
+                        >
+                            <GitMerge size={12} />
+                        </Button>
+                    } />
+                    <TooltipContent>Merge into current branch</TooltipContent>
+                </Tooltip>
+
                 {showViewCode && onViewCode && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onViewCode(branchName); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity"
-                        title="Ver código en GitLab (remoto)"
-                    >
-                        <Eye size={12} />
-                    </button>
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={(e) => { e.stopPropagation(); onViewCode(branchName); }}
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-neon hover:bg-slate-700/50 transition-opacity"
+                            >
+                                <Eye size={12} />
+                            </Button>
+                        } />
+                        <TooltipContent>Ver código en GitLab (remoto)</TooltipContent>
+                    </Tooltip>
                 )}
-                <button
-                    onClick={(e) => { e.stopPropagation(); handleCheckout(branchName, !!isRemote); }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-neon transition-opacity"
-                    title={isRemote ? 'Checkout Remote' : 'Checkout'}
-                >
-                    <Play size={10} />
-                </button>
+
+                <Tooltip>
+                    <TooltipTrigger render={
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            onClick={(e) => { e.stopPropagation(); handleCheckout(branchName, !!isRemote); }}
+                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-neon hover:bg-slate-700/50 transition-opacity"
+                        >
+                            <Play size={12} />
+                        </Button>
+                    } />
+                    <TooltipContent>{isRemote ? 'Checkout Remote' : 'Checkout'}</TooltipContent>
+                </Tooltip>
+
                 {!isRemote && handleDeleteLocalBranch && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteLocalBranch(branchName); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-nexus-danger transition-opacity"
-                        title="Delete local branch"
-                    >
-                        <Trash2 size={10} />
-                    </button>
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteLocalBranch(branchName); }}
+                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-nexus-danger hover:bg-slate-700/50 transition-opacity"
+                            >
+                                <Trash2 size={12} />
+                            </Button>
+                        } />
+                        <TooltipContent>Delete local branch</TooltipContent>
+                    </Tooltip>
                 )}
             </div>
         </div>
@@ -554,26 +586,38 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                     <div
                                         key={stash}
                                         onDoubleClick={() => handleStashPop(stash)}
-                                        className="flex items-center px-4 py-1.5 text-xs cursor-pointer text-slate-400 hover:bg-slate-800 hover:text-white group"
-                                        title="Double-click to Pop"
+                                        className="flex items-center px-3 py-1 text-xs cursor-pointer text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 group transition-colors"
                                     >
                                         <Archive size={12} className="mr-2 text-slate-500 shrink-0" />
                                         <span className="truncate flex-1">{stash.split(': ').slice(1).join(': ') || stash}</span>
                                         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleStashPop(stash); }}
-                                                className="p-1 hover:bg-slate-700 text-nexus-accent rounded"
-                                                title="Stash Pop (Apply & Delete)"
-                                            >
-                                                <PackageOpen size={12} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleStashDrop(stash); }}
-                                                className="p-1 hover:bg-slate-700 text-nexus-danger rounded"
-                                                title="Stash Drop (Delete)"
-                                            >
-                                                <Trash2 size={12} />
-                                            </button>
+                                            <Tooltip>
+                                                <TooltipTrigger render={
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-xs"
+                                                        onClick={(e) => { e.stopPropagation(); handleStashPop(stash); }}
+                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-nexus-accent rounded"
+                                                    >
+                                                        <PackageOpen size={12} />
+                                                    </Button>
+                                                } />
+                                                <TooltipContent>Stash Pop (Apply & Delete)</TooltipContent>
+                                            </Tooltip>
+
+                                            <Tooltip>
+                                                <TooltipTrigger render={
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon-xs"
+                                                        onClick={(e) => { e.stopPropagation(); handleStashDrop(stash); }}
+                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-nexus-danger rounded"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </Button>
+                                                } />
+                                                <TooltipContent>Stash Drop (Delete)</TooltipContent>
+                                            </Tooltip>
                                         </div>
                                     </div>
                                 ))

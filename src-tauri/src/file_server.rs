@@ -13,12 +13,23 @@ use crate::state::{AppState, ServerHandle};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileServerRoute {
-    /// Ruta en la URL (ej. "/config.json", "/api/datos")
     pub path: String,
-    /// Contenido a servir (texto: JSON, etc.)
     pub content: String,
-    /// Content-Type (ej. "application/json")
     pub content_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileServerConfig {
+    pub port: u16,
+    pub routes: Vec<FileServerRoute>,
+    pub bind_host: Option<String>,
+    pub base_directory: Option<String>,
+}
+
+#[derive(Clone)]
+struct RouteResponse {
+    content: String,
+    content_type: String,
 }
 
 /// Normaliza path de la URL: siempre con / al inicio, sin fragment/query.
@@ -33,31 +44,82 @@ fn normalize_url_path(path: &str) -> String {
     }
 }
 
-#[derive(Clone)]
-struct RouteResponse {
-    content: String,
-    content_type: String,
+async fn directory_listing_handler(dir_path: PathBuf, url_path: String) -> Response {
+    let mut html = format!("<html><head><title>Index of {}</title>", url_path);
+    html.push_str("<style>body{background:#020617;color:#94a3b8;font-family:sans-serif;padding:2rem;}a{color:#38bdf8;text-decoration:none;}a:hover{text-decoration:underline;}ul{list-style:none;padding:0;}li{padding:0.5rem 0;border-bottom:1px solid #1e293b; display:flex; gap: 1rem;}</style></head><body>");
+    html.push_str(&format!("<h1>Index of {}</h1><hr><ul>", url_path));
+    html.push_str("<li><a href=\"..\">.. (Parent Directory)</a></li>");
+
+    if let Ok(entries) = std::fs::read_dir(&dir_path) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = entry.path().is_dir();
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            let size_str = if is_dir { "-".to_string() } else { format!("{} B", size) };
+            let icon = if is_dir { "📁" } else { "📄" };
+            html.push_str(&format!("<li><span>{}</span> <a href=\"{}{}\">{}{}</a> <span style=\"margin-left:auto; opacity:0.5; font-family:monospace;\">{}</span></li>", 
+                icon, if url_path.ends_with('/') { "" } else { "/" }, name, name, if is_dir { "/" } else { "" }, size_str));
+        }
+    }
+
+    html.push_str("</ul><hr><p style=\"opacity:0.3; font-size:0.8rem;\">Served by Microtermix File Server</p></body></html>");
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/html; charset=utf-8")
+        .body(Body::from(html))
+        .unwrap()
 }
 
 async fn file_server_handler(
     routes: std::sync::Arc<HashMap<String, RouteResponse>>,
+    base_dir: Option<PathBuf>,
     req: Request,
 ) -> Response {
-    let path = normalize_url_path(req.uri().path());
-    let resp = match routes.get(&path) {
-        Some(r) => r.clone(),
-        None => {
-            return Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Not found"))
-                .unwrap();
+    let url_path = normalize_url_path(req.uri().path());
+    
+    // 1. Try virtual routes first
+    if let Some(resp) = routes.get(&url_path) {
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", &resp.content_type)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(Body::from(resp.content.clone()))
+            .unwrap();
+    }
+
+    // 2. Try physical directory if configured
+    if let Some(dir) = base_dir {
+        let rel = url_path.trim_start_matches('/');
+        let mut full_path = dir.join(rel);
+
+        // If it's a directory, look for index.html
+        if full_path.is_dir() {
+            let index_path = full_path.join("index.html");
+            if index_path.exists() {
+                full_path = index_path;
+            } else {
+                return directory_listing_handler(full_path, url_path).await;
+            }
         }
-    };
+
+        if full_path.exists() && full_path.is_file() {
+            if let Ok(bytes) = tokio::fs::read(&full_path).await {
+                let ct = content_type_from_path(&full_path.to_string_lossy());
+                return Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", ct)
+                    .header("Access-Control-Allow-Origin", "*")
+                    .body(Body::from(bytes))
+                    .unwrap();
+            }
+        }
+    }
+
     Response::builder()
-        .status(StatusCode::OK)
-        .header("Content-Type", resp.content_type)
-        .header("Access-Control-Allow-Origin", "*")
-        .body(Body::from(resp.content))
+        .status(StatusCode::NOT_FOUND)
+        .header("Content-Type", "text/plain")
+        .body(Body::from(format!("404 Not Found: {}", url_path)))
         .unwrap()
 }
 
@@ -65,19 +127,15 @@ async fn file_server_handler(
 pub async fn start_file_server(
     app: AppHandle,
     state: State<'_, AppState>,
-    port: u16,
-    routes: Vec<FileServerRoute>,
-    bind_host: Option<String>,
+    config: FileServerConfig,
 ) -> Result<(), String> {
     let mut guard = state.file_server_abort.lock().await;
     if guard.is_some() {
         return Err("File server already running".to_string());
     }
-    if routes.is_empty() {
-        return Err("Add at least one route (path + content)".to_string());
-    }
+
     let mut map: HashMap<String, RouteResponse> = HashMap::new();
-    for r in &routes {
+    for r in &config.routes {
         let path = normalize_url_path(&r.path);
         let ct = if r.content_type.is_empty() {
             content_type_from_path(&r.path)
@@ -92,30 +150,46 @@ pub async fn start_file_server(
             },
         );
     }
-    let host = bind_host
+
+    let host = config.bind_host
         .filter(|h| !h.is_empty())
         .unwrap_or_else(|| "127.0.0.1".to_string());
-    let bind_addr = format!("{}:{}", host, port);
+    let bind_addr = format!("{}:{}", host, config.port);
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .map_err(|e| e.to_string())?;
+
     let routes_arc = std::sync::Arc::new(map);
-    let _ = app.emit(
-        "file-server-logs",
-        format!("File server listening on http://{}", bind_addr),
-    );
+    let base_dir = config.base_directory.map(PathBuf::from);
+    let app_log = app.clone();
+
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let join = tokio::spawn(async move {
         let r = routes_arc.clone();
+        let d = base_dir.clone();
+        let app_for_router = app_log.clone();
+        
         let router = Router::new().fallback(move |req: Request| {
             let routes = r.clone();
-            async move { file_server_handler(routes, req).await }
+            let dir = d.clone();
+            let app_inner = app_for_router.clone();
+            async move { 
+                let path = req.uri().path().to_string();
+                let method = req.method().to_string();
+                let res = file_server_handler(routes, dir, req).await;
+                let _ = app_inner.emit("file-server-logs", format!("[{}] {} -> {}", method, path, res.status()));
+                res
+            }
         });
+
+        let _ = app_log.emit("file-server-logs", format!("▶ Servidor iniciado en http://{}", bind_addr));
+        
         let shutdown = async { let _ = shutdown_rx.await; };
         if let Err(e) = axum::serve(listener, router).with_graceful_shutdown(shutdown).await {
             eprintln!("File server error: {}", e);
         }
     });
+
     *guard = Some(ServerHandle { shutdown_tx, join });
     Ok(())
 }
@@ -145,17 +219,14 @@ pub async fn stop_file_server(state: State<'_, AppState>) -> Result<(), String> 
     let mut guard = state.file_server_abort.lock().await;
     if let Some(h) = guard.take() {
         let _ = h.shutdown_tx.send(());
-        // Wait up to 5 s for graceful shutdown, then abort.
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), h.join).await;
     }
     Ok(())
 }
 
-/// Returns true if the file server task is currently running.
 #[tauri::command]
 pub async fn is_file_server_running(state: State<'_, AppState>) -> Result<bool, String> {
     let mut guard = state.file_server_abort.lock().await;
-    // Clean up if the task finished on its own (e.g. bind error).
     if let Some(h) = guard.as_ref() {
         if h.join.is_finished() {
             *guard = None;
@@ -163,8 +234,6 @@ pub async fn is_file_server_running(state: State<'_, AppState>) -> Result<bool, 
     }
     Ok(guard.is_some())
 }
-
-// ─── Coverage HTML server ─────────────────────────────────────────────────────
 
 async fn coverage_file_handler(base_dir: PathBuf, req: Request) -> Response {
     let url_path = req.uri().path();
@@ -192,8 +261,6 @@ async fn coverage_file_handler(base_dir: PathBuf, req: Request) -> Response {
     }
 }
 
-/// Starts a temporary HTTP server serving `html_dir` on an OS-assigned port.
-/// Returns the assigned port number.
 #[tauri::command]
 pub async fn start_coverage_server(
     state: State<'_, AppState>,
@@ -236,4 +303,3 @@ pub async fn stop_coverage_server(state: State<'_, AppState>) -> Result<(), Stri
     }
     Ok(())
 }
-

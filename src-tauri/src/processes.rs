@@ -271,16 +271,84 @@ fn kill_tree_unix(pid: u32, sig: nix::sys::signal::Signal) {
 
 /// Entrada de proceso en escucha (netstat).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ListeningProcess {
     pub proto: String,
     pub local_address: String,
     pub foreign_address: String,
     pub state: String,
     pub pid: u32,
+    pub name: String,
+    pub path: String,
+    pub service_id: Option<String>,
+}
+
+/// Helper to get process name and executable path from a PID.
+fn resolve_process_info(pid: u32) -> (String, String) {
+    if pid == 0 { return ("System".to_string(), "kernel".to_string()); }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Try to get name from comm first
+        let mut name = fs::read_to_string(format!("/proc/{}/comm", pid))
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+        
+        // If name is unknown or generic, try cmdline
+        if name == "unknown" || name == "node" || name == "java" || name == "python" || name == "sh" || name == "bash" {
+            if let Ok(cmdline) = fs::read_to_string(format!("/proc/{}/cmdline", pid)) {
+                let parts: Vec<&str> = cmdline.split('\0').filter(|s| !s.is_empty()).collect();
+                if let Some(first) = parts.first() {
+                    // Extract basename of the executable
+                    let p = Path::new(first);
+                    if let Some(fname) = p.file_name() {
+                        name = fname.to_string_lossy().to_string();
+                    }
+                }
+            }
+        }
+
+        let exe = fs::read_link(format!("/proc/{}/exe", pid))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
+            
+        (name, exe)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Use tasklist to get the name
+        let output = StdCommand::new("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid), "/NH", "/FO", "CSV"])
+            .output();
+            
+        if let Ok(out) = output {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if let Some(line) = stdout.lines().next() {
+                let parts: Vec<&str> = line.split(',').map(|s| s.trim_matches('"')).collect();
+                if parts.len() > 0 && !parts[0].is_empty() && !parts[0].starts_with("INFO:") {
+                    return (parts[0].to_string(), "unknown".to_string());
+                }
+            }
+        }
+        ("unknown".to_string(), "unknown".to_string())
+    }
 }
 
 #[tauri::command]
-pub fn get_listening_processes() -> Result<Vec<ListeningProcess>, String> {
+pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<ListeningProcess>, String> {
+    let service_pids = if let Ok(pids) = state.process_pids.lock() {
+        pids.clone()
+    } else {
+        HashMap::new()
+    };
+
+    // Create a reverse map for faster lookup: pid -> service_id
+    let mut pid_to_service = HashMap::new();
+    for (sid, pid) in service_pids {
+        pid_to_service.insert(pid, sid);
+    }
+
     #[cfg(target_os = "windows")]
     {
         let mut cmd = StdCommand::new("netstat");
@@ -300,16 +368,21 @@ pub fn get_listening_processes() -> Result<Vec<ListeningProcess>, String> {
             }
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 5 {
-                let state = parts[3].to_uppercase();
-                if state == "LISTENING" {
+                let state_str = parts[3].to_uppercase();
+                if state_str == "LISTENING" {
                     let pid: u32 = parts[4].parse().unwrap_or(0);
                     if pid > 0 {
+                        let (name, path) = resolve_process_info(pid);
+                        let service_id = pid_to_service.get(&pid).cloned();
                         rows.push(ListeningProcess {
                             proto: parts[0].to_string(),
                             local_address: parts[1].to_string(),
                             foreign_address: parts[2].to_string(),
                             state: parts[3].to_string(),
                             pid,
+                            name,
+                            path,
+                            service_id,
                         });
                     }
                 }
@@ -386,12 +459,23 @@ pub fn get_listening_processes() -> Result<Vec<ListeningProcess>, String> {
                 (parts[0].to_string(), parts[3].to_string(), foreign, pid)
             };
 
+            let (name, path) = if pid > 0 {
+                resolve_process_info(pid)
+            } else {
+                ("unknown".to_string(), "unknown".to_string())
+            };
+
+            let service_id = if pid > 0 { pid_to_service.get(&pid).cloned() } else { None };
+
             rows.push(ListeningProcess {
                 proto,
                 local_address: local,
                 foreign_address: foreign,
                 state: "LISTEN".to_string(),
                 pid,
+                name,
+                path,
+                service_id,
             });
         }
         Ok(rows)

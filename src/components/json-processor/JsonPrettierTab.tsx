@@ -3,7 +3,7 @@ import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlignLeft, Minimize2, Copy, ShieldCheck, RotateCcw } from 'lucide-react';
+import { AlignLeft, Minimize2, Copy, ShieldCheck, RotateCcw, Quote, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 
@@ -16,11 +16,18 @@ export const JsonPrettierTab: React.FC = () => {
     const [indent, setIndent] = useState<Indent>('two');
     const [error, setError]   = useState<string | null>(null);
 
-    const run = async (cmd: 'format' | 'minify') => {
+    const run = async (cmd: 'format' | 'minify' | 'escape' | 'unescape') => {
         try {
-            const result = cmd === 'format'
-                ? await invoke<string>('json_format', { input, indent })
-                : await invoke<string>('json_minify', { input });
+            let result = '';
+            if (cmd === 'format') {
+                result = await invoke<string>('json_format', { input, indent });
+            } else if (cmd === 'minify') {
+                result = await invoke<string>('json_minify', { input });
+            } else if (cmd === 'escape') {
+                result = await invoke<string>('json_escape', { input });
+            } else if (cmd === 'unescape') {
+                result = await invoke<string>('json_unescape', { input });
+            }
             setOutput(result);
             setError(null);
         } catch (e) {
@@ -34,23 +41,29 @@ export const JsonPrettierTab: React.FC = () => {
             <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-emerald-950/30 border-b border-emerald-900/40 text-xs text-emerald-400">
                 <ShieldCheck size={13} /> Procesado localmente — tus datos no salen de tu equipo.
             </div>
-            <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-slate-800 bg-slate-950">
-                <span className="text-xs text-slate-500">Indentación:</span>
+            <div className="shrink-0 flex items-center gap-2 px-4 py-2 border-b border-slate-800 bg-slate-950 overflow-x-auto scrollbar-hide">
+                <span className="text-xs text-slate-500 whitespace-nowrap">Indentación:</span>
                 <Select value={indent} onValueChange={(v) => setIndent(v as Indent)}>
-                    <SelectTrigger className="h-7 w-28 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-7 w-28 text-xs shrink-0"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         <SelectItem value="two">2 espacios</SelectItem>
                         <SelectItem value="four">4 espacios</SelectItem>
                         <SelectItem value="tab">Tab</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button size="sm" onClick={() => run('format')} className="h-7 text-xs gap-1">
+                <Button size="sm" onClick={() => run('format')} className="h-7 text-xs gap-1 shrink-0">
                     <AlignLeft size={13} /> Formatear
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => run('minify')} className="h-7 text-xs gap-1">
+                <Button size="sm" variant="outline" onClick={() => run('minify')} className="h-7 text-xs gap-1 shrink-0">
                     <Minimize2 size={13} /> Minificar
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => { setInput(''); setOutput(''); setError(null); }} className="h-7 text-xs gap-1">
+                <Button size="sm" variant="secondary" onClick={() => run('escape')} className="h-7 text-xs gap-1 shrink-0">
+                    <Quote size={13} /> Escapar
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => run('unescape')} className="h-7 text-xs gap-1 shrink-0">
+                    <Unlock size={13} /> Unescapar (AWS)
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => { setInput(''); setOutput(''); setError(null); }} className="h-7 text-xs gap-1 shrink-0">
                     <RotateCcw size={13} /> Limpiar
                 </Button>
                 {output && (

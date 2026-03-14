@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -161,21 +162,24 @@ export const LogTimeModal: React.FC<LogTimeModalProps> = ({
             />
           </div>
         </div>
-        <DialogFooter className="gap-2">
-          <button
+        <DialogFooter className="gap-2 pt-2">
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onOpenChange(false)}
-            className="px-3 py-1.5 rounded text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-white"
           >
             Cancelar
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSave}
             disabled={saving || !issueInput.trim() || !timeInput.trim()}
-            className="px-4 py-1.5 rounded text-xs font-bold bg-nexus-neon text-slate-900 hover:bg-opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
+            className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold"
+            size="sm"
           >
-            {saving && <Loader2 size={12} className="animate-spin" />}
+            {saving && <Loader2 size={12} className="animate-spin mr-1.5" />}
             {isEditing ? 'Guardar cambios' : 'Registrar'}
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

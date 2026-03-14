@@ -168,13 +168,12 @@ async fn git_execute(
     }
 }
 
-/// Runs `git status -s -u`, `git branch --show-current`, and `git rev-parse MERGE_HEAD`
-/// in parallel in a single IPC call to minimize IPC overhead on Windows.
+/// Runs `git status` natively via git2 to minimize IPC overhead and CLI dependency.
 #[tauri::command]
 async fn git_get_status(
     project_path: String,
-) -> Result<git_diff::GitStatusResult, String> {
-    git_diff::git_get_status_impl(project_path).await
+) -> Result<git_native::StatusResult, String> {
+    git_native::git_status_native_impl(project_path)
 }
 
 /// Reword the message of any local commit (HEAD or older) non-interactively.
@@ -295,6 +294,7 @@ pub fn run() {
             git_get_diff_model_native,
             watch_repo,
             stop_watching_repo,
+            git_watcher::set_active_git_project,
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,
@@ -345,6 +345,8 @@ pub fn run() {
             stop_mock_server,
             json_processor::json_format,
             json_processor::json_minify,
+            json_processor::json_escape,
+            json_processor::json_unescape,
             json_processor::json_validate,
             json_processor::json_flatten,
             json_processor::json_generate_types,

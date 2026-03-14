@@ -7,6 +7,9 @@ import {
 } from 'lucide-react';
 import { useMonacoTheme } from '../hooks/useMonacoTheme';
 import { cn } from '../lib/utils';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 export interface GitDiffViewerProps {
     projectPath: string;
@@ -170,22 +173,55 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         )}>
             {/* Toolbar */}
             <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800 bg-slate-900/80 shrink-0">
-                <GitCompare size={15} className="text-nexus-neon" />
-                <span className="font-bold text-xs text-slate-200">Hunk Selector</span>
-                <span className="text-slate-600">/</span>
-                <span className="font-mono text-xs text-slate-400 truncate flex-1">{file}</span>
+                <GitCompare size={14} className="text-nexus-neon" />
+                <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">Diff Viewer</span>
+                <span className="text-slate-700">/</span>
+                <span className="font-mono text-xs text-slate-300 truncate flex-1">{file}</span>
                 
                 <div className="flex items-center gap-1 ml-auto">
-                    <button onClick={stageWholeFile} className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold hover:bg-emerald-500/20 transition-all">
-                        {mode === 'unstaged' ? <FilePlus size={12} /> : <FileMinus size={12} />}
-                        <span>{mode === 'unstaged' ? 'Stage All' : 'Unstage All'}</span>
-                    </button>
+                    <Button 
+                        variant="outline"
+                        size="xs"
+                        onClick={stageWholeFile} 
+                        className={cn(
+                            "h-7 gap-1.5 px-2.5 font-bold transition-all",
+                            mode === 'unstaged' 
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+                                : "bg-nexus-accent/10 text-nexus-accent border-nexus-accent/30 hover:bg-nexus-accent/20"
+                        )}
+                    >
+                        {mode === 'unstaged' ? <FilePlus size={13} /> : <FileMinus size={13} />}
+                        <span className="text-[10px]">{mode === 'unstaged' ? 'STAGE ALL' : 'UNSTAGE ALL'}</span>
+                    </Button>
+
                     <div className="h-4 w-px bg-slate-700 mx-1" />
-                    <button onClick={loadContent} className="p-1.5 text-slate-500 hover:text-white"><RefreshCw size={14} className={loading ? 'animate-spin' : ''}/></button>
-                    <button onClick={() => setIsFullScreen(v => !v)} className="p-1.5 text-slate-500 hover:text-nexus-neon">
-                        {isFullScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                    </button>
-                    <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-red-400"><X size={14} /></button>
+
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button variant="ghost" size="icon-xs" onClick={loadContent} className="text-slate-500 hover:text-white">
+                                <RefreshCw size={14} className={loading ? 'animate-spin' : ''}/>
+                            </Button>
+                        } />
+                        <TooltipContent>Recargar diferencias</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button variant="ghost" size="icon-xs" onClick={() => setIsFullScreen(v => !v)} className="text-slate-500 hover:text-nexus-neon">
+                                {isFullScreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                            </Button>
+                        } />
+                        <TooltipContent>{isFullScreen ? 'Salir de pantalla completa' : 'Pantalla completa'}</TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button variant="ghost" size="icon-xs" onClick={onClose} className="text-slate-500 hover:text-red-400">
+                                <X size={14} />
+                            </Button>
+                        } />
+                        <TooltipContent>Cerrar visor</TooltipContent>
+                    </Tooltip>
                 </div>
             </div>
 
@@ -197,32 +233,41 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
                         <span className="text-[9px] font-mono text-nexus-neon bg-nexus-neon/10 px-1.5 rounded">{hunks.length}</span>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto p-1.5 space-y-1">
+                    <div className="flex-1 overflow-y-auto p-1.5 space-y-2">
                         {loading ? (
-                            <div className="py-8 text-center"><Loader2 size={14} className="animate-spin mx-auto text-slate-700" /></div>
+                            <div className="py-8 text-center"><Loader2 size={16} className="animate-spin mx-auto text-slate-700" /></div>
                         ) : hunks.length === 0 ? (
-                            <div className="py-8 text-center text-[9px] text-slate-600 italic">No changes.</div>
+                            <div className="py-8 text-center text-[9px] text-slate-600 italic">No changes detected.</div>
                         ) : hunks.map((hunk) => (
                             <div 
                                 key={hunk.id}
                                 onClick={() => scrollToHunk(hunk)}
                                 className={cn(
-                                    "p-1.5 rounded-md border transition-all cursor-pointer group",
+                                    "p-1.5 rounded-lg border transition-all cursor-pointer group",
                                     selectedHunkId === hunk.id 
                                         ? "bg-sky-500/10 border-sky-500/40 shadow-sm" 
-                                        : "bg-slate-900 border-slate-800 hover:border-slate-700"
+                                        : "bg-slate-900 border-slate-800 hover:border-slate-700 hover:bg-slate-900/50"
                                 )}
                             >
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-[9px] font-bold text-slate-400">#{hunk.id + 1}</span>
-                                    <span className="text-[8px] font-mono text-slate-600">Line {hunk.new_start}</span>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <Badge variant="outline" className="text-[9px] px-1 h-3.5 border-slate-700 bg-transparent text-slate-500">
+                                        #{hunk.id + 1}
+                                    </Badge>
+                                    <span className="text-[8px] font-mono text-slate-600">L:{hunk.new_start}</span>
                                 </div>
-                                <button 
+                                <Button 
+                                    variant="outline"
+                                    size="xs"
                                     onClick={(e) => { e.stopPropagation(); stageHunk(hunk.id); }}
-                                    className="w-full flex items-center justify-center gap-1 py-0.5 rounded bg-nexus-neon/10 text-nexus-neon border border-nexus-neon/20 text-[9px] font-bold hover:bg-nexus-neon/20 transition-colors"
+                                    className={cn(
+                                        "w-full h-5 text-[8px] font-bold gap-1 transition-colors",
+                                        mode === 'unstaged'
+                                            ? "bg-nexus-neon/5 text-nexus-neon border-nexus-neon/20 hover:bg-nexus-neon/20"
+                                            : "bg-nexus-accent/5 text-nexus-accent border-nexus-accent/20 hover:bg-nexus-accent/20"
+                                    )}
                                 >
-                                    <Zap size={9} /> {mode === 'unstaged' ? 'STAGE' : 'UNSTAGE'}
-                                </button>
+                                    <Zap size={9} /> {mode === 'unstaged' ? 'STAGE BLOCK' : 'UNSTAGE BLOCK'}
+                                </Button>
                             </div>
                         ))}
                     </div>

@@ -49,6 +49,7 @@ pub struct StatusResult {
     pub current_branch: String,
     pub is_merge_in_progress: bool,
     pub is_rebase_in_progress: bool,
+    pub status_output: String, // Added for compatibility with CLI-based frontend expectations
 }
 
 #[derive(Serialize)]
@@ -72,7 +73,7 @@ pub struct LogResult {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn repo_open(project_path: &str) -> Result<Repository, String> {
+pub(crate) fn repo_open(project_path: &str) -> Result<Repository, String> {
     Repository::discover(project_path).map_err(|e| e.to_string())
 }
 
@@ -215,11 +216,15 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
     let statuses = repo.statuses(Some(&mut opts)).map_err(|e| e.to_string())?;
 
     let mut files: Vec<StatusEntry> = Vec::new();
+    let mut status_output = String::new();
     for entry in statuses.iter() {
         let path = entry.path().unwrap_or("").to_string();
         let s = entry.status();
         let (x, y) = status_to_xy(s);
         let state_code = format!("{}{}", x, y);
+        
+        // Build the status_output string (mimics git status -s -u)
+        status_output.push_str(&format!("{} {}\n", state_code, path));
 
         let is_conflicted = matches!(
             state_code.as_str(),
@@ -237,7 +242,212 @@ pub fn git_status_native_impl(project_path: String) -> Result<StatusResult, Stri
         });
     }
 
-    Ok(StatusResult { files, current_branch, is_merge_in_progress, is_rebase_in_progress })
+    Ok(StatusResult { files, current_branch, is_merge_in_progress, is_rebase_in_progress, status_output })
+}
+
+pub fn git_add_native_impl(project_path: String, path_to_add: String) -> Result<(), String> {
+    let repo = repo_open(&project_path)?;
+    let mut index = repo.index().map_err(|e| e.to_string())?;
+
+    if path_to_add == "." {
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+            .map_err(|e| e.to_string())?;
+    } else {
+        index.add_path(Path::new(&path_to_add)).map_err(|e| e.to_string())?;
+    }
+
+    index.write().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn git_reset_native_impl(project_path: String, path_to_reset: String) -> Result<(), String> {
+    let repo = repo_open(&project_path)?;
+    
+    let head = repo.head();
+    if let Ok(head_ref) = head {
+        let commit = head_ref.peel_to_commit().map_err(|e| e.to_string())?;
+        let tree = commit.tree().map_err(|e| e.to_string())?;
+        
+        if path_to_reset == "." {
+            repo.reset(tree.as_object(), git2::ResetType::Soft, None).map_err(|e| e.to_string())?;
+        } else {
+            // Reset individual file from HEAD
+            let mut index = repo.index().map_err(|e| e.to_string())?;
+            if let Ok(entry) = tree.get_path(Path::new(&path_to_reset)) {
+                // The correct way in git2 to unstage a single file is to replace its index entry with the one from the tree
+                let blob = repo.find_blob(entry.id()).map_err(|e| e.to_string())?;
+                
+                // Construct a new entry for the index based on the HEAD state
+                let index_entry = git2::IndexEntry {
+                    ctime: git2::IndexTime::new(0,0),
+                    mtime: git2::IndexTime::new(0,0),
+                    dev: 0,
+                    ino: 0,
+                    mode: entry.filemode() as u32,
+                    uid: 0,
+                    gid: 0,
+                    file_size: blob.size() as u32,
+                    id: entry.id(),
+                    flags: 0,
+                    flags_extended: 0,
+                    path: path_to_reset.as_bytes().to_vec(),
+                };
+                index.add(&index_entry).map_err(|e| e.to_string())?;
+            } else {
+                // If it's not in HEAD, it was a new file (Added), so we just remove it from the index
+                index.remove_path(Path::new(&path_to_reset)).map_err(|e| e.to_string())?;
+            }
+            index.write().map_err(|e| e.to_string())?;
+        }
+    } else {
+        // No HEAD yet (Empty repo), unstage means remove from index
+        let mut index = repo.index().map_err(|e| e.to_string())?;
+        if path_to_reset == "." {
+            index.clear().map_err(|e| e.to_string())?;
+        } else {
+            index.remove_path(Path::new(&path_to_reset)).map_err(|e| e.to_string())?;
+        }
+        index.write().map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
+pub fn git_commit_native_impl(
+    project_path: String,
+    message: String,
+    amend: bool,
+) -> Result<String, String> {
+    let repo = repo_open(&project_path)?;
+    let config = repo.config().map_err(|e| e.to_string())?;
+
+    let name = config.get_string("user.name").unwrap_or_else(|_| "Unknown".into());
+    let email = config.get_string("user.email").unwrap_or_else(|_| "unknown@example.com".into());
+    let sig = git2::Signature::now(&name, &email).map_err(|e| e.to_string())?;
+
+    let mut index = repo.index().map_err(|e| e.to_string())?;
+    let tree_id = index.write_tree().map_err(|e| e.to_string())?;
+    let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
+
+    if amend {
+        let head_commit = repo.head().map_err(|e| e.to_string())?
+            .peel_to_commit().map_err(|e| e.to_string())?;
+        let _ = head_commit.amend(Some("HEAD"), Some(&sig), Some(&sig), None, Some(&message), Some(&tree))
+            .map_err(|e| e.to_string())?;
+        return Ok("Commit amended successfully".into());
+    }
+
+    let parent_commit = if let Ok(head) = repo.head() {
+        Some(head.peel_to_commit().map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+
+    let parents: Vec<&git2::Commit> = parent_commit.iter().collect();
+    let commit_id = repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parents)
+        .map_err(|e| e.to_string())?;
+
+    Ok(format!("Commit created: {}", commit_id))
+}
+
+pub async fn git_push_native_impl(project_path: String, force: bool) -> Result<String, String> {
+    let path = project_path.clone();
+    tokio::task::spawn_blocking(move || {
+        let repo = repo_open(&path)?;
+        let auth = make_auth();
+
+        let head = repo.head().map_err(|e| e.to_string())?;
+        let branch_name = head.shorthand().ok_or("HEAD is detached")?.to_string();
+        
+        let remote_name = repo.branch_upstream_remote(&format!("refs/heads/{}", branch_name))
+            .ok()
+            .and_then(|buf| buf.as_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "origin".to_string());
+
+        let mut remote = repo.find_remote(&remote_name).map_err(|e| e.to_string())?;
+        let refspec = format!("{}refs/heads/{}:refs/heads/{}",
+            if force { "+" } else { "" }, branch_name, branch_name);
+
+        match auth.push(&repo, &mut remote, &[&refspec]) {
+            Ok(_) => Ok(format!("Pushed '{}' to {}", branch_name, remote_name)),
+            Err(e) => Err(format!("Push failed: {}", e)),
+        }
+    }).await.map_err(|e| e.to_string())?
+}
+
+pub async fn git_pull_native_impl(project_path: String) -> Result<String, String> {
+    let path = project_path.clone();
+    
+    // 1. Fetch
+    let _fetch_res = tokio::task::spawn_blocking({
+        let p = path.clone();
+        move || {
+            let repo = repo_open(&p)?;
+            let remote_names = repo.remotes().map_err(|e| e.to_string())?;
+            let remote_name = remote_names.iter().flatten()
+                .find(|&r| r == "origin")
+                .or_else(|| remote_names.iter().flatten().next())
+                .ok_or("No remotes configured")?;
+            
+            fetch_remote_native(&repo, remote_name)?;
+            Ok::<String, String>(remote_name.to_string())
+        }
+    }).await.map_err(|e| e.to_string())??;
+
+    // 2. Merge Analysis + Fast-Forward
+    tokio::task::spawn_blocking(move || {
+        use git2::MergeAnalysis;
+        let repo = repo_open(&path)?;
+
+        let head = repo.head().map_err(|e| e.to_string())?;
+        let branch_name = head.shorthand().ok_or("HEAD is detached")?.to_string();
+        
+        let branch = repo.find_branch(&branch_name, git2::BranchType::Local).map_err(|e| e.to_string())?;
+        let upstream = branch.upstream().map_err(|_| "No upstream configured for current branch")?;
+        let upstream_commit = upstream.get().peel_to_commit().map_err(|e| e.to_string())?;
+        
+        let annotated_upstream = repo.find_annotated_commit(upstream_commit.id()).map_err(|e| e.to_string())?;
+        let (analysis, _) = repo.merge_analysis(&[&annotated_upstream]).map_err(|e| e.to_string())?;
+
+        if analysis.contains(MergeAnalysis::ANALYSIS_UP_TO_DATE) {
+            return Ok("Already up to date.".into());
+        }
+
+        if analysis.contains(MergeAnalysis::ANALYSIS_FASTFORWARD) {
+            let mut co = git2::build::CheckoutBuilder::new();
+            co.safe();
+            repo.checkout_tree(upstream_commit.as_object(), Some(&mut co)).map_err(|e| e.to_string())?;
+            
+            let mut head_ref = repo.find_reference(&format!("refs/heads/{}", branch_name)).map_err(|e| e.to_string())?;
+            head_ref.set_target(upstream_commit.id(), "pull: fast-forward").map_err(|e| e.to_string())?;
+            
+            Ok(format!("Fast-forwarded to {}", &upstream_commit.id().to_string()[..7]))
+        } else {
+            Err("Pull failed: Non-fast-forward merge required. Please stash your changes or use manual merge/rebase.".into())
+        }
+    }).await.map_err(|e| e.to_string())?
+}
+
+pub fn git_branch_delete_native_impl(project_path: String, branch_name: String, force: bool) -> Result<String, String> {
+    let repo = repo_open(&project_path)?;
+    let mut branch = repo.find_branch(&branch_name, git2::BranchType::Local).map_err(|e| e.to_string())?;
+    
+    if !force {
+        let upstream = branch.upstream();
+        let is_merged = if let Ok(up) = upstream {
+            let up_id = up.get().peel_to_commit().map_err(|e| e.to_string())?.id();
+            let local_id = branch.get().peel_to_commit().map_err(|e| e.to_string())?.id();
+            let (ahead, _) = repo.graph_ahead_behind(local_id, up_id).unwrap_or((1, 0));
+            ahead == 0
+        } else { false };
+
+        if !is_merged {
+            return Err(format!("The branch '{}' is not fully merged. Use -D to force delete.", branch_name));
+        }
+    }
+    
+    branch.delete().map_err(|e| e.to_string())?;
+    Ok(format!("Deleted branch {}.", branch_name))
 }
 
 fn status_to_xy(s: git2::Status) -> (char, char) {
@@ -347,29 +557,27 @@ pub struct AheadBehindResult {
     pub has_upstream: bool,
 }
 
-/// Run `git fetch` (via tokio::process with GIT_TERMINAL_PROMPT=0) then compute
-/// ahead/behind using git2's graph API — no subprocess for the count itself.
-pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadBehindResult, String> {
-    // Fetch from remote — ignore errors (offline / no remote)
-    #[allow(unused_mut)]
-    let mut fetch_cmd = tokio::process::Command::new("git");
-    fetch_cmd.args(["fetch", "--quiet", "--no-tags"])
-        .current_dir(&project_path)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "echo")
-        .env("GIT_HTTP_LOW_SPEED_LIMIT", "100")
-        .env("GIT_HTTP_LOW_SPEED_TIME", "10")
-        .env("GIT_CONFIG_COUNT", "1")
-        .env("GIT_CONFIG_KEY_0", "http.connectTimeout")
-        .env("GIT_CONFIG_VALUE_0", "10")
-        .env("GIT_SSH_COMMAND", "ssh -o ConnectTimeout=10 -o BatchMode=yes");
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        fetch_cmd.creation_flags(0x08000000);
-    }
-    let _ = fetch_cmd.output().await;
+/// Build an `auth_git2` authenticator that reads from the system credential store
+/// (git config credential.helper, SSH agent, etc.).
+fn make_auth() -> auth_git2::GitAuthenticator {
+    auth_git2::GitAuthenticator::new_empty()
+        .add_default_username()
+        .try_cred_helper(true)
+        .try_ssh_agent(true)
+        .add_default_ssh_keys()
+}
 
+pub fn fetch_remote_native(repo: &git2::Repository, remote_name: &str) -> Result<(), String> {
+    let auth = make_auth();
+    let mut remote = repo.find_remote(remote_name).map_err(|e| e.to_string())?;
+    
+    // auth.fetch is synchronous network I/O
+    auth.fetch(repo, &mut remote, &[] as &[&str], None).map_err(|e| e.to_string())
+}
+
+/// Compute ahead/behind using git2's graph API based on local data.
+/// No network fetch is performed here (handled by the watcher).
+pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadBehindResult, String> {
     let repo = repo_open(&project_path)?;
 
     let head = repo.head().map_err(|e| e.to_string())?;
@@ -378,7 +586,7 @@ pub async fn git_ahead_behind_native_impl(project_path: String) -> Result<AheadB
     }
 
     let branch_name = head.shorthand().ok_or("no branch name")?.to_string();
-    let branch = repo.find_branch(&branch_name, BranchType::Local)
+    let branch = repo.find_branch(&branch_name, git2::BranchType::Local)
         .map_err(|e| e.to_string())?;
 
     let upstream = match branch.upstream() {

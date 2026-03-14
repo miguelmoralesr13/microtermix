@@ -1,13 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { Power, PowerOff, ChevronDown, ChevronUp, Plus, Trash2, Upload, Pencil, ExternalLink, FileCode } from 'lucide-react';
+import { Power, PowerOff, ChevronDown, ChevronUp, Plus, Trash2, Upload, Pencil, ExternalLink, FileCode, FolderOpen, QrCode, Activity, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import Editor from '@monaco-editor/react';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';
+import { open } from '@tauri-apps/plugin-dialog';
+import { cn } from '@/lib/utils';
 
 export interface FileServerRouteEntry {
     path: string;
@@ -66,7 +70,7 @@ function contentTypeFromPath(path: string): string {
 }
 
 const STORAGE_KEY = 'nexus-file-server';
-function loadSaved(): { port: number; bindHost: string; routes: FileServerRouteEntry[] } {
+function loadSaved(): { port: number; bindHost: string; routes: FileServerRouteEntry[]; baseDir?: string } {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
@@ -77,27 +81,26 @@ function loadSaved(): { port: number; bindHost: string; routes: FileServerRouteE
                         r &&
                         typeof r === 'object' &&
                         'path' in r &&
-                        'content' in r &&
-                        typeof (r as FileServerRouteEntry).path === 'string' &&
-                        typeof (r as FileServerRouteEntry).content === 'string'
+                        'content' in r
                 )
                 : [];
             return {
                 port: typeof parsed.port === 'number' ? parsed.port : DEFAULT_FILE_SERVER_PORT,
                 bindHost: typeof parsed.bindHost === 'string' ? parsed.bindHost : '127.0.0.1',
                 routes: routes as FileServerRouteEntry[],
+                baseDir: typeof parsed.baseDir === 'string' ? parsed.baseDir : undefined,
             };
         }
     } catch (_) { }
     return { port: DEFAULT_FILE_SERVER_PORT, bindHost: '127.0.0.1', routes: [] };
 }
 
-function save(port: number, bindHost: string, routes: FileServerRouteEntry[]) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ port, bindHost, routes }));
+function save(port: number, bindHost: string, routes: FileServerRouteEntry[], baseDir?: string) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ port, bindHost, routes, baseDir }));
 }
 
 export const FileServerPanel: React.FC = () => {
-    const saved = loadSaved();
+    const saved = useMemo(() => loadSaved(), []);
     const monacoTheme = useMonacoTheme();
     const [running, setRunning] = useState(false);
     const [port, setPort] = useState(saved.port);
@@ -105,12 +108,13 @@ export const FileServerPanel: React.FC = () => {
         saved.routes.length > 0 ? saved.routes : [{ path: '/config.json', content: '{\n  \n}' }]
     );
     const [bindHost, setBindHost] = useState(saved.bindHost);
+    const [baseDir, setBaseDir] = useState<string | undefined>(saved.baseDir);
     const [logs, setLogs] = useState<string[]>([]);
-    const [logsOpen, setLogsOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editDraft, setEditDraft] = useState('');
     const [editLang, setEditLang] = useState<MonacoLang>('json');
+    const [showQr, setShowQr] = useState(false);
     const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
     useEffect(() => {
@@ -120,17 +124,28 @@ export const FileServerPanel: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        save(port, bindHost, routes);
-    }, [port, bindHost, routes]);
+        save(port, bindHost, routes, baseDir);
+    }, [port, bindHost, routes, baseDir]);
 
     useEffect(() => {
         if (!running) return;
         const unlisten = listen<string>('file-server-logs', (event) => {
             const line = typeof event.payload === 'string' ? event.payload : String(event.payload);
-            setLogs(prev => [...prev.slice(-200), line]);
+            setLogs(prev => [...prev.slice(-500), line]);
         });
         return () => { unlisten.then(fn => fn()); };
     }, [running]);
+
+    const handleSelectFolder = async () => {
+        const selected = await open({
+            directory: true,
+            multiple: false,
+            title: 'Seleccionar carpeta para el servidor'
+        });
+        if (selected && !Array.isArray(selected)) {
+            setBaseDir(selected);
+        }
+    };
 
     const addRoute = useCallback(() => {
         setRoutes(prev => [...prev, { path: '/nuevo.json', content: '' }]);
@@ -191,23 +206,26 @@ export const FileServerPanel: React.FC = () => {
     const handleStart = useCallback(async () => {
         setError(null);
         const valid = routes.filter(r => r.path.trim() && (r.content?.trim?.()?.length ?? 0) > 0);
-        if (valid.length === 0) {
-            setError('Añade al menos una ruta con path y contenido.');
-            return;
-        }
-        const normalized = valid.map(r => ({
-            path: r.path.trim().startsWith('/') ? r.path.trim() : `/${r.path.trim()}`,
-            content: r.content,
-            content_type: r.content_type || contentTypeFromPath(r.path),
-        }));
+        
+        const config = {
+            port,
+            bindHost: bindHost || undefined,
+            base_directory: baseDir,
+            routes: valid.map(r => ({
+                path: r.path.trim().startsWith('/') ? r.path.trim() : `/${r.path.trim()}`,
+                content: r.content,
+                content_type: r.content_type || contentTypeFromPath(r.path),
+            }))
+        };
+
         try {
-            await invoke('start_file_server', { port, routes: normalized, bindHost: bindHost || undefined });
+            await invoke('start_file_server', { config });
             setRunning(true);
-            setLogs(prev => [...prev.slice(-200), `▶ Servidor iniciado en http://${bindHost}:${port}`]);
+            setLogs([]); 
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
-    }, [port, routes, bindHost]);
+    }, [port, routes, bindHost, baseDir]);
 
     const handleStop = useCallback(async () => {
         setError(null);
@@ -219,30 +237,27 @@ export const FileServerPanel: React.FC = () => {
         }
     }, []);
 
-    const baseUrl = `http://${bindHost}:${port}`;
-    const canStart = routes.some(r => r.path.trim() && (r.content?.trim?.()?.length ?? 0) > 0);
+    const baseUrl = `http://${bindHost === '0.0.0.0' ? 'localhost' : bindHost}:${port}`;
+    const canStart = baseDir || routes.some(r => r.path.trim() && (r.content?.trim?.()?.length ?? 0) > 0);
     const editingRoute = editingIndex !== null ? routes[editingIndex] : null;
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-slate-900">
+        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
             {/* Header bar */}
-            <div className="shrink-0 px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex flex-wrap items-center gap-3">
+            <div className="shrink-0 px-4 py-3 border-b border-slate-800 bg-slate-900/50 flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
-                    <label className="text-xs text-slate-500 font-medium">Puerto</label>
+                    <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Puerto</label>
                     <Input
-                        type="number"
-                        min={1}
-                        max={65535}
-                        value={port}
+                        type="number" min={1} max={65535} value={port}
                         onChange={e => setPort(parseInt(e.target.value, 10) || DEFAULT_FILE_SERVER_PORT)}
                         disabled={running}
-                        className="w-24 bg-slate-800 border-slate-700 text-slate-200 font-mono text-xs h-7 focus-visible:border-nexus-neon disabled:opacity-60"
+                        className="w-20 bg-slate-900 border-slate-800 text-slate-200 font-mono text-xs h-8 focus-visible:ring-nexus-neon disabled:opacity-60"
                     />
                 </div>
                 <div className="flex items-center gap-2">
-                    <label className="text-xs text-slate-500 font-medium">Bind</label>
+                    <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Host</label>
                     <Select value={bindHost} onValueChange={v => v && setBindHost(v)} disabled={running}>
-                        <SelectTrigger className="h-7 border-slate-700 bg-slate-800 text-slate-200 font-mono text-xs focus-visible:border-nexus-neon disabled:opacity-60">
+                        <SelectTrigger className="h-8 w-28 border-slate-800 bg-slate-900 text-slate-200 font-mono text-xs focus:ring-nexus-neon">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -253,239 +268,255 @@ export const FileServerPanel: React.FC = () => {
                     </Select>
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                <div className="h-6 w-px bg-slate-800 mx-1" />
+
+                <div className="flex items-center gap-2 flex-1">
+                    <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Carpeta Base</label>
+                    <div className="flex-1 flex gap-1">
+                        <Input
+                            readOnly
+                            value={baseDir || 'Sin carpeta física (solo rutas virtuales)'}
+                            className="flex-1 bg-slate-900 border-slate-800 text-slate-400 font-mono text-[10px] h-8 truncate"
+                        />
+                        {!running && (
+                            <Button variant="outline" size="icon-xs" onClick={handleSelectFolder} className="h-8 w-8 bg-slate-900 border-slate-800 hover:bg-slate-800">
+                                <FolderOpen size={14} className="text-nexus-accent" />
+                            </Button>
+                        )}
+                        {!running && baseDir && (
+                            <Button variant="ghost" size="icon-xs" onClick={() => setBaseDir(undefined)} className="h-8 w-8 text-slate-600 hover:text-red-400">
+                                <Trash2 size={14} />
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
                     {running ? (
                         <>
-                            <div className="flex items-center gap-2 mr-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-nexus-success animate-pulse" />
-                                <a
-                                    href={baseUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-xs font-mono text-nexus-neon hover:underline flex items-center gap-1"
-                                >
-                                    {baseUrl}
-                                    <ExternalLink size={10} />
+                            <div className="flex items-center gap-3 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mr-1">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <a href={baseUrl} target="_blank" rel="noreferrer" className="text-xs font-mono text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1.5">
+                                    {baseUrl} <ExternalLink size={12} />
                                 </a>
+                                <Button variant="ghost" size="icon-xs" onClick={() => setShowQr(true)} className="text-emerald-500 hover:text-emerald-300 h-6 w-6 p-0">
+                                    <QrCode size={14} />
+                                </Button>
                             </div>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleStop}
-                                className="text-nexus-danger hover:text-nexus-danger hover:bg-nexus-danger/10 gap-1.5 font-bold h-7 text-xs"
-                            >
-                                <PowerOff size={13} />
-                                Detener
+                            <Button variant="destructive" size="sm" onClick={handleStop} className="h-8 gap-1.5 font-bold text-xs">
+                                <PowerOff size={14} /> Detener
                             </Button>
                         </>
                     ) : (
-                        <Button
-                            onClick={handleStart}
-                            disabled={!canStart}
-                            className="bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/80 font-bold gap-1.5 h-7 text-xs"
-                        >
-                            <Power size={13} />
-                            Iniciar
+                        <Button onClick={handleStart} disabled={!canStart} className="bg-nexus-neon text-nexus-darker hover:bg-nexus-neon/80 font-black gap-1.5 h-8 text-xs uppercase">
+                            <Power size={14} /> Iniciar Servidor
                         </Button>
                     )}
                 </div>
             </div>
 
             {error && (
-                <div className="shrink-0 mx-4 mt-3 px-3 py-2 rounded-lg bg-nexus-danger/10 border border-nexus-danger/30 text-nexus-danger text-xs">
-                    {error}
+                <div className="shrink-0 mx-4 mt-3 px-3 py-2 rounded-lg bg-nexus-danger/10 border border-nexus-danger/30 text-nexus-danger text-xs flex items-center gap-2">
+                    <Activity size={14} /> <span>{error}</span>
                 </div>
             )}
 
-            {/* Routes list */}
-            <div className="flex-1 overflow-auto p-4">
-                <div className="rounded-lg border border-slate-700 overflow-hidden mb-3">
-                    {/* Column headers */}
-                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 px-3 py-2 bg-slate-800/80 border-b border-slate-700">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Path (URL)</span>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Content-Type</span>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tamaño</span>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Contenido</span>
-                        {!running && <span />}
+            <div className="flex-1 overflow-auto p-4 flex flex-col gap-6">
+                <div className="flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                            <FileCode size={12} /> Rutas Virtuales (en memoria)
+                        </h3>
+                        {!running && (
+                            <Button
+                                variant="outline"
+                                size="xs"
+                                onClick={addRoute}
+                                className="h-7 border-dashed border-slate-700 text-slate-500 hover:text-nexus-neon hover:border-nexus-neon/40 hover:bg-nexus-neon/5 gap-2"
+                            >
+                                <Plus size={14} /> Añadir Ruta
+                            </Button>
+                        )}
                     </div>
-
+                    
                     {routes.length === 0 ? (
-                        <div className="py-8 text-center text-slate-600 text-xs">
-                            Sin rutas. Añade una abajo.
+                        <div className="py-12 text-center text-slate-700 text-xs italic border border-dashed border-slate-800 rounded-xl bg-slate-900/20">
+                            No hay rutas virtuales configuradas.
                         </div>
                     ) : (
-                        <div className="divide-y divide-slate-800">
-                            {routes.map((r, i) => (
-                                <div
-                                    key={i}
-                                    className="grid grid-cols-[1fr_auto_auto_auto_auto] items-center gap-2 px-3 py-2 hover:bg-slate-800/30 transition-colors"
-                                >
-                                    {/* Path input */}
-                                    <Input
-                                        type="text"
-                                        value={r.path}
-                                        onChange={e => updateRoutePath(i, e.target.value)}
-                                        placeholder="/config.json"
-                                        disabled={running}
-                                        className="bg-transparent border-transparent hover:border-slate-700 focus-visible:border-nexus-neon text-nexus-neon font-mono text-xs h-7 px-2 disabled:opacity-70 disabled:cursor-default"
-                                    />
-
-                                    {/* Content-type */}
-                                    <span className="text-[10px] font-mono text-slate-500 whitespace-nowrap">
-                                        {contentTypeFromPath(r.path).split(';')[0]}
-                                    </span>
-
-                                    {/* Size */}
-                                    <span className="text-[10px] font-mono text-slate-600 w-16 text-right">
-                                        {r.content.length > 0
-                                            ? r.content.length < 1024
-                                                ? `${r.content.length} B`
-                                                : `${(r.content.length / 1024).toFixed(1)} KB`
-                                            : <span className="text-slate-700">vacío</span>
-                                        }
-                                    </span>
-
-                                    {/* Edit content button */}
-                                    <Button
-                                        variant="ghost"
-                                        size="icon-xs"
-                                        onClick={() => openEditor(i)}
-                                        className="text-slate-500 hover:text-nexus-neon"
-                                        title="Editar contenido"
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {routes.map((r, i) => {
+                                const contentType = contentTypeFromPath(r.path).split(';')[0];
+                                const isJson = contentType.includes('json');
+                                const isHtml = contentType.includes('html');
+                                const isText = contentType.includes('plain');
+                                
+                                return (
+                                    <div 
+                                        key={i} 
+                                        className={cn(
+                                            "flex flex-col rounded-xl border p-3 transition-all group relative",
+                                            running ? "bg-slate-900/20 border-slate-800 opacity-80" : "bg-slate-900/40 border-slate-800 hover:border-slate-600 hover:shadow-lg hover:shadow-nexus-neon/5"
+                                        )}
                                     >
-                                        {r.content.length > 0
-                                            ? <FileCode size={13} />
-                                            : <Pencil size={13} />
-                                        }
-                                    </Button>
-
-                                    {/* Upload + delete (edit mode only) */}
-                                    {!running ? (
-                                        <div className="flex items-center gap-0.5">
-                                            <input
-                                                type="file"
-                                                ref={el => { fileInputRefs.current[i] = el; }}
-                                                accept=".json,.txt,.xml,.yaml,.yml,.html,.csv,.js,.css"
-                                                className="hidden"
-                                                onChange={e => handleFileUpload(i, e)}
-                                            />
-                                            <Button
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                onClick={() => fileInputRefs.current[i]?.click()}
-                                                className="text-slate-500 hover:text-nexus-neon"
-                                                title="Subir archivo"
-                                            >
-                                                <Upload size={13} />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon-xs"
-                                                onClick={() => removeRoute(i)}
-                                                className="text-slate-500 hover:text-nexus-danger"
-                                                title="Eliminar ruta"
-                                            >
-                                                <Trash2 size={13} />
-                                            </Button>
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div className={cn(
+                                                "p-2 rounded-lg",
+                                                isJson ? "bg-amber-500/10 text-amber-500" :
+                                                isHtml ? "bg-blue-500/10 text-blue-500" :
+                                                "bg-slate-500/10 text-slate-500"
+                                            )}>
+                                                <FileCode size={16} />
+                                            </div>
+                                            <Badge variant="outline" className="text-[9px] font-mono border-slate-800 bg-slate-950 text-slate-500 h-5">
+                                                {contentType.split('/').pop()}
+                                            </Badge>
                                         </div>
-                                    ) : <span />}
-                                </div>
-                            ))}
+
+                                        <div className="flex-1 space-y-2">
+                                            <div className="relative group/input">
+                                                <Input
+                                                    type="text" 
+                                                    value={r.path} 
+                                                    onChange={e => updateRoutePath(i, e.target.value)}
+                                                    placeholder="/config.json" 
+                                                    disabled={running}
+                                                    className="bg-slate-950/50 border-slate-800 text-nexus-neon font-mono text-[11px] h-8 px-2 pr-8 focus-visible:ring-1 focus-visible:ring-nexus-neon disabled:opacity-100 disabled:border-transparent"
+                                                />
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-700 group-hover/input:text-slate-500">
+                                                    <ExternalLink size={10} />
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between px-1">
+                                                <span className="text-[10px] font-mono text-slate-600">
+                                                    {r.content.length > 0 ? (r.content.length < 1024 ? `${r.content.length} B` : `${(r.content.length / 1024).toFixed(1)} KB`) : '0 B'}
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                    <Tooltip>
+                                                        <TooltipTrigger render={
+                                                            <Button 
+                                                                variant="ghost" 
+                                                                size="icon-xs" 
+                                                                onClick={() => openEditor(i)} 
+                                                                className="h-7 w-7 text-slate-500 hover:text-nexus-neon hover:bg-slate-800"
+                                                            >
+                                                                <Pencil size={12} />
+                                                            </Button>
+                                                        } />
+                                                        <TooltipContent>Editar contenido</TooltipContent>
+                                                    </Tooltip>
+
+                                                    {!running && (
+                                                        <>
+                                                            <input type="file" ref={el => { fileInputRefs.current[i] = el; }} className="hidden" onChange={e => handleFileUpload(i, e)} />
+                                                            <Tooltip>
+                                                                <TooltipTrigger render={
+                                                                    <Button 
+                                                                        variant="ghost" 
+                                                                        size="icon-xs" 
+                                                                        onClick={() => fileInputRefs.current[i]?.click()}
+                                                                        className="h-7 w-7 text-slate-500 hover:text-nexus-neon hover:bg-slate-800"
+                                                                    >
+                                                                        <Upload size={12} />
+                                                                    </Button>
+                                                                } />
+                                                                <TooltipContent>Subir archivo</TooltipContent>
+                                                            </Tooltip>
+
+                                                            <Tooltip>
+                                                                <TooltipTrigger render={
+                                                                    <Button 
+                                                                        variant="ghost" 
+                                                                        size="icon-xs" 
+                                                                        onClick={() => removeRoute(i)}
+                                                                        className="h-7 w-7 text-slate-500 hover:text-nexus-danger hover:bg-red-500/10"
+                                                                    >
+                                                                        <Trash2 size={12} />
+                                                                    </Button>
+                                                                } />
+                                                                <TooltipContent>Eliminar ruta</TooltipContent>
+                                                            </Tooltip>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
 
-                {!running && (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={addRoute}
-                        className="w-full border-dashed border-slate-700 text-slate-500 hover:text-nexus-neon hover:border-nexus-neon/50 hover:bg-nexus-neon/5 gap-2"
-                    >
-                        <Plus size={13} />
-                        Añadir ruta
-                    </Button>
-                )}
-
                 {/* Logs */}
                 {running && (
-                    <div className="mt-3 rounded-lg border border-slate-700 overflow-hidden">
-                        <button
-                            type="button"
-                            onClick={() => setLogsOpen(v => !v)}
-                            className="w-full flex items-center justify-between px-3 py-2 bg-slate-800/80 text-slate-400 hover:text-slate-200 text-xs font-medium transition-colors"
-                        >
-                            <span className="flex items-center gap-2">
-                                Logs
-                                {logs.length > 0 && (
-                                    <span className="text-[10px] text-slate-600">{logs.length}</span>
-                                )}
-                            </span>
-                            {logsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                        </button>
-                        {logsOpen && (
-                            <div className="h-48 overflow-y-auto bg-slate-950 p-3 font-mono text-[11px] text-slate-400 whitespace-pre-wrap break-all">
-                                {logs.length === 0 ? 'Sin actividad aún.' : logs.join('\n')}
-                            </div>
-                        )}
+                    <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden flex flex-col flex-1 min-h-[300px]">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/80 border-b border-slate-800">
+                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                <Activity size={12} className="text-emerald-500" /> Monitor de Tráfico
+                            </h3>
+                            <span className="text-[10px] font-mono text-slate-600">{logs.length} peticiones</span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto bg-slate-950/50 p-4 font-mono text-[11px] space-y-1">
+                            {logs.length === 0 ? (
+                                <div className="text-slate-700 italic">Esperando tráfico...</div>
+                            ) : (
+                                logs.map((log, i) => (
+                                    <div key={i} className={cn(
+                                        "py-0.5 border-l-2 pl-3 transition-colors",
+                                        log.includes('-> 200') ? "border-emerald-500/30 text-slate-400" : "border-red-500/30 text-red-400 bg-red-500/5"
+                                    )}>
+                                        {log}
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 )}
             </div>
 
+            {/* QR Modal */}
+            <Dialog open={showQr} onOpenChange={setShowQr}>
+                <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-[320px] flex flex-col items-center p-8">
+                    <DialogHeader className="items-center text-center pb-4">
+                        <DialogTitle className="text-lg font-bold">Acceso Remoto</DialogTitle>
+                        <DialogDescription className="text-slate-400 text-center">
+                            Escanea para abrir en tu móvil o tablet (asegúrate de estar en la misma red).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-4 bg-white rounded-2xl shadow-2xl shadow-nexus-neon/10">
+                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(baseUrl.replace('localhost', '127.0.0.1'))}`} alt="QR Code" className="w-48 h-48" />
+                    </div>
+                    <div className="mt-6 w-full p-3 bg-slate-950 rounded-lg border border-slate-800">
+                        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">URL Detectada</p>
+                        <p className="text-xs font-mono text-nexus-neon truncate">{baseUrl}</p>
+                    </div>
+                    <Button className="mt-6 w-full" variant="outline" onClick={() => setShowQr(false)}>Cerrar</Button>
+                </DialogContent>
+            </Dialog>
+
             {/* Content editor modal */}
             <Dialog open={editingIndex !== null} onOpenChange={open => !open && setEditingIndex(null)}>
-                <DialogContent
-                    className="!inset-4 !w-auto !h-auto !max-w-none !max-h-none !translate-x-0 !translate-y-0 rounded-xl flex flex-col bg-slate-900 border border-slate-700 p-0"
-                    showCloseButton={false}
-                >
+                <DialogContent className="!inset-4 !w-auto !h-auto !max-w-none !max-h-none !translate-x-0 !translate-y-0 rounded-xl flex flex-col bg-slate-900 border border-slate-700 p-0" showCloseButton={false}>
                     <DialogHeader className="flex flex-row items-center gap-2 px-4 py-2.5 border-b border-slate-700 shrink-0">
                         <FileCode size={14} className="text-nexus-neon shrink-0" />
-                        <DialogTitle className="text-slate-200 font-mono text-sm flex-1 truncate">
-                            {editingRoute?.path || ''}
-                        </DialogTitle>
+                        <DialogTitle className="text-slate-200 font-mono text-sm flex-1 truncate">{editingRoute?.path || ''}</DialogTitle>
                         <Select value={editLang} onValueChange={v => v && setEditLang(v as MonacoLang)}>
                             <SelectTrigger className="h-7 w-36 border-slate-700 bg-slate-800 text-slate-300 text-xs focus-visible:border-nexus-neon shrink-0">
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
-                                {LANGUAGES.map(l => (
-                                    <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
-                                ))}
-                            </SelectContent>
+                            <SelectContent>{LANGUAGES.map(l => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
                         </Select>
                     </DialogHeader>
-
                     <div className="flex-1 min-h-0" style={{ height: 0 }}>
-                        <Editor
-                            height="100%"
-                            language={editLang}
-                            value={editDraft}
-                            onChange={v => setEditDraft(v ?? '')}
-                            theme={monacoTheme}
-                            options={{
-                                fontSize: 13,
-                                minimap: { enabled: false },
-                                scrollBeyondLastLine: false,
-                                wordWrap: 'on',
-                                lineNumbers: 'on',
-                                tabSize: 2,
-                                automaticLayout: true,
-                                padding: { top: 12, bottom: 12 },
-                            }}
-                        />
+                        <Editor height="100%" language={editLang} value={editDraft} onChange={v => setEditDraft(v ?? '')} theme={monacoTheme} options={{ fontSize: 13, minimap: { enabled: false }, scrollBeyondLastLine: false, wordWrap: 'on', lineNumbers: 'on', tabSize: 2, automaticLayout: true, padding: { top: 12, bottom: 12 } }} />
                     </div>
-
                     <div className="shrink-0 flex items-center justify-between px-4 py-2.5 border-t border-slate-700 bg-slate-950/50">
-                        <span className="text-[10px] font-mono text-slate-600">
-                            {editDraft.length} chars · {editDraft.split('\n').length} líneas
-                        </span>
+                        <span className="text-[10px] font-mono text-slate-600">{editDraft.length} chars · {editDraft.split('\n').length} líneas</span>
                         <div className="flex gap-2">
-                            <Button variant="ghost" onClick={() => setEditingIndex(null)} className="text-slate-400">
-                                Cancelar
-                            </Button>
-                            <Button onClick={saveEditor} className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">
-                                Guardar
-                            </Button>
+                            <Button variant="ghost" onClick={() => setEditingIndex(null)} className="text-slate-400">Cancelar</Button>
+                            <Button onClick={saveEditor} className="bg-nexus-neon text-slate-900 hover:bg-nexus-neon/80 font-bold">Guardar</Button>
                         </div>
                     </div>
                 </DialogContent>

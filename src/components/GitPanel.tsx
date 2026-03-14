@@ -17,6 +17,10 @@ import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { AccountManagerModal } from './AccountManagerModal';
 import { CloneRepoModal } from './CloneRepoModal';
 import { cn } from '../lib/utils';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 
 function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
     if (!remoteUrl) return null;
@@ -110,6 +114,16 @@ export const GitPanel: React.FC = () => {
         }
     };
 
+    // Focus background fetch worker on the current active project
+    useEffect(() => {
+        if (activeTab) {
+            invoke('set_active_git_project', { projectPath: activeTab }).catch(console.error);
+        }
+        return () => {
+            invoke('set_active_git_project', { projectPath: null }).catch(console.error);
+        };
+    }, [activeTab]);
+
     useEffect(() => {
         if (!repoData.status.isMergeInProgress && !repoData.status.isRebaseInProgress) {
             setIsConflictModalOpen(false);
@@ -149,64 +163,97 @@ export const GitPanel: React.FC = () => {
     return (
         <div className="relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
             {/* Header / Tabs */}
-            <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4">
-                <div className="flex items-end overflow-x-auto scrollbar-hide">
-                    {state.projects.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-500 font-mono">No Repositories Discovered</div>
-                    ) : (
-                        state.projects.map(project => (
-                            <button
-                                key={project.path as string}
-                                onClick={() => handleTabChange(project.path as string)}
-                                className={`px-4 py-2 text-xs font-bold transition-colors border-r border-slate-800 ${activeTab === project.path ? 'bg-slate-900 text-nexus-accent border-t-2 border-t-nexus-accent' : 'bg-slate-950 text-slate-500 hover:bg-slate-900 hover:text-slate-300 border-t-2 border-transparent'}`}
-                            >
-                                {project.name}
-                            </button>
-                        ))
-                    )}
-                </div>
-                <div className="flex items-center space-x-1 pl-4">
+            <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4 h-11">
+                <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="h-full flex flex-col justify-end">
+                    <TabsList className="bg-transparent h-10 gap-0 p-0 rounded-none border-b-0">
+                        {state.projects.length === 0 ? (
+                            <div className="px-4 py-2.5 text-[10px] text-slate-500 font-mono uppercase tracking-widest">No Repositories</div>
+                        ) : (
+                            state.projects.map(project => (
+                                <TabsTrigger
+                                    key={project.path as string}
+                                    value={project.path as string}
+                                    className={cn(
+                                        "h-10 px-4 rounded-none border-t-2 border-transparent transition-all",
+                                        "data-[state=active]:bg-slate-900 data-[state=active]:text-nexus-accent data-[state=active]:border-t-nexus-accent",
+                                        "data-[state=inactive]:text-slate-500 hover:data-[state=inactive]:bg-slate-900 hover:data-[state=inactive]:text-slate-300",
+                                        "text-xs font-bold"
+                                    )}
+                                >
+                                    {project.name}
+                                </TabsTrigger>
+                            ))
+                        )}
+                    </TabsList>
+                </Tabs>
+
+                <div className="flex items-center space-x-1 pl-4 h-full">
                     {repoData && Object.values(repoData.loading).some(Boolean) && (
-                        <span className="flex items-center gap-1 text-[10px] text-slate-500 animate-pulse mr-2">
-                            <RefreshCw size={10} className="animate-spin" /> Actualizando...
-                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500 animate-pulse mr-3">
+                            <RefreshCw size={10} className="animate-spin" /> 
+                            <span className="font-mono uppercase tracking-tighter">Syncing...</span>
+                        </div>
                     )}
+                    
                     {/* Clone button */}
-                    <button
-                        onClick={() => setIsCloneModalOpen(true)}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 transition-colors mr-1 text-slate-300"
-                        title="Clonar repositorio"
-                    >
-                        <Download size={11} />
-                        <span>Clonar</span>
-                    </button>
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setIsCloneModalOpen(true)}
+                                className="h-7 gap-1.5 px-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-300 border border-slate-800/50"
+                            >
+                                <Download size={13} />
+                                <span className="text-[11px] font-bold">Clonar</span>
+                            </Button>
+                        } />
+                        <TooltipContent>Clonar repositorio desde URL</TooltipContent>
+                    </Tooltip>
+
                     {/* Badge de cuenta activa */}
                     {activeTab && (
-                        <button
-                            onClick={() => setIsAccountModalOpen(true)}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium bg-slate-800 hover:bg-slate-700 transition-colors mr-1 text-slate-300"
-                            title="Gestionar cuentas"
-                        >
-                            {activeAccount ? (
-                                <>
-                                    {activeAccount.provider === 'github'
-                                        ? <Github size={11} className="text-slate-400" />
-                                        : <Gitlab size={11} className="text-slate-400" />
-                                    }
-                                    <span>{activeAccount.alias}</span>
-                                </>
-                            ) : (
-                                <span className="text-slate-500">+ Cuenta</span>
-                            )}
-                        </button>
+                        <Tooltip>
+                            <TooltipTrigger render={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setIsAccountModalOpen(true)}
+                                    className="h-7 gap-1.5 px-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-300 border border-slate-800/50"
+                                >
+                                    {activeAccount ? (
+                                        <>
+                                            {activeAccount.provider === 'github'
+                                                ? <Github size={13} className="text-slate-400" />
+                                                : <Gitlab size={13} className="text-slate-400" />
+                                            }
+                                            <span className="text-[11px] font-bold">{activeAccount.alias}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Settings size={13} className="text-slate-500" />
+                                            <span className="text-[11px] font-bold text-slate-500">Configurar</span>
+                                        </>
+                                    )}
+                                </Button>
+                            } />
+                            <TooltipContent>Gestionar cuentas y configuración de Git</TooltipContent>
+                        </Tooltip>
                     )}
-                    <button
-                        onClick={() => setIsAccountModalOpen(true)}
-                        className="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors"
-                        title="Repository Settings"
-                    >
-                        <Settings size={14} />
-                    </button>
+
+                    <Tooltip>
+                        <TooltipTrigger render={
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={() => setIsAccountModalOpen(true)}
+                                className="h-7 w-7 text-slate-400 hover:text-white hover:bg-slate-800"
+                            >
+                                <Settings size={14} />
+                            </Button>
+                        } />
+                        <TooltipContent>Ajustes del Repositorio</TooltipContent>
+                    </Tooltip>
                 </div>
             </div>
 

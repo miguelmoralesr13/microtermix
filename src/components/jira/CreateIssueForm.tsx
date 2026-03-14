@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
 import { loadConfig, getProjects, getIssueTypes, getUsers, createIssue } from '../jiraApi';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Label } from '../ui/label';
+import { cn } from '../../lib/utils';
 
 export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => void }) {
     const cfg = loadConfig();
@@ -59,32 +64,47 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
         }
     };
 
-    const inputCls = "w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon transition-colors";
-    const labelCls = "block text-xs text-slate-400 mb-1";
+    const selectCls = "w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-nexus-neon transition-colors";
 
     return (
-        <form onSubmit={handleSubmit} className="max-w-2xl mx-auto py-6 px-4 space-y-4">
-            <h2 className="text-base font-bold text-slate-200 flex items-center gap-2"><Plus size={16} /> Crear Issue</h2>
+        <form onSubmit={handleSubmit} className="max-w-2xl mx-auto py-8 px-6 space-y-6 bg-slate-900/30 rounded-xl border border-slate-800 shadow-sm mt-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-800">
+                <div className="p-1.5 bg-nexus-accent/10 rounded-lg">
+                    <Plus size={18} className="text-nexus-accent" />
+                </div>
+                <h2 className="text-lg font-bold text-slate-100">Crear Nueva Tarea</h2>
+            </div>
 
             {error && (
-                <div className="p-3 bg-nexus-danger/10 border border-nexus-danger/30 rounded-lg text-nexus-danger text-xs">
-                    {error}
+                <div className="p-3 bg-nexus-danger/10 border border-nexus-danger/30 rounded-lg text-nexus-danger text-xs flex items-start gap-2">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                    <span>{error}</span>
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className={labelCls}>Proyecto</label>
-                    <select value={projectKey} onChange={e => setProjectKey(e.target.value)} className={inputCls}>
+            <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label htmlFor="project-select" className="text-slate-400">Proyecto</Label>
+                    <select 
+                        id="project-select"
+                        value={projectKey} 
+                        onChange={e => setProjectKey(e.target.value)} 
+                        className={selectCls}
+                    >
                         {projects.length > 0
                             ? projects.map(p => <option key={p.key} value={p.key}>{p.key} — {p.name}</option>)
                             : <option value={projectKey}>{projectKey}</option>
                         }
                     </select>
                 </div>
-                <div>
-                    <label className={labelCls}>Tipo</label>
-                    <select value={issueType} onChange={e => setIssueType(e.target.value)} className={inputCls}>
+                <div className="space-y-2">
+                    <Label htmlFor="type-select" className="text-slate-400">Tipo de Issue</Label>
+                    <select 
+                        id="type-select"
+                        value={issueType} 
+                        onChange={e => setIssueType(e.target.value)} 
+                        className={selectCls}
+                    >
                         {issueTypes.length > 0
                             ? issueTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)
                             : ['Story', 'Bug', 'Task'].map(t => <option key={t}>{t}</option>)
@@ -93,51 +113,80 @@ export function CreateIssueForm({ onCreated }: { onCreated: (key: string) => voi
                 </div>
             </div>
 
-            <div>
-                <label className={labelCls}>Resumen *</label>
-                <input value={summary} onChange={e => setSummary(e.target.value)} required placeholder="Resumen del issue..." className={inputCls} />
+
+            <div className="space-y-2">
+                <Label className="text-slate-400">Resumen <span className="text-nexus-danger">*</span></Label>
+                <Input 
+                    value={summary} 
+                    onChange={e => setSummary(e.target.value)} 
+                    required 
+                    placeholder="Escribe un resumen descriptivo..." 
+                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-nexus-neon h-10"
+                />
             </div>
 
-            <div>
-                <label className={labelCls}>Descripción</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
-                    placeholder="Descripción detallada..." className={`${inputCls} resize-none`} />
+            <div className="space-y-2">
+                <Label className="text-slate-400">Descripción</Label>
+                <Textarea 
+                    value={description} 
+                    onChange={e => setDescription(e.target.value)} 
+                    rows={5}
+                    placeholder="Proporciona detalles adicionales sobre la tarea..." 
+                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-nexus-neon resize-none min-h-[120px]"
+                />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <label className={labelCls}>Asignado a</label>
-                    <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className={inputCls}>
+            <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                    <Label className="text-slate-400">Asignado a</Label>
+                    <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)} className={selectCls}>
                         <option value="">— Sin asignar —</option>
                         {users.map(u => <option key={u.accountId} value={u.accountId}>{u.displayName}</option>)}
                         {users.length === 0 && assigneeId && <option value={assigneeId}>{assigneeId}</option>}
                     </select>
                 </div>
-                <div>
-                    <label className={labelCls}>Prioridad</label>
-                    <select value={priority} onChange={e => setPriority(e.target.value)} className={inputCls}>
+                <div className="space-y-2">
+                    <Label className="text-slate-400">Prioridad</Label>
+                    <select value={priority} onChange={e => setPriority(e.target.value)} className={selectCls}>
                         {['Highest', 'High', 'Medium', 'Low', 'Lowest'].map(p => <option key={p}>{p}</option>)}
                     </select>
                 </div>
             </div>
 
-            <div>
-                <label className={labelCls}>Labels (separados por coma)</label>
-                <input value={labels} onChange={e => setLabels(e.target.value)} placeholder="frontend, bug" className={inputCls} />
+            <div className="space-y-2">
+                <Label className="text-slate-400">Labels</Label>
+                <Input 
+                    value={labels} 
+                    onChange={e => setLabels(e.target.value)} 
+                    placeholder="Ej: frontend, bug, ui (separados por coma)" 
+                    className="bg-slate-950 border-slate-700 focus-visible:ring-1 focus-visible:ring-nexus-neon h-10 font-mono"
+                />
             </div>
 
             {Object.keys(cfg.customFields).length > 0 && (
-                <div className="p-3 bg-slate-800/40 rounded-lg text-xs text-slate-400">
-                    <span className="font-bold">Campos personalizados que se enviarán: </span>
+                <div className="p-3 bg-slate-800/40 rounded-lg text-[11px] text-slate-400 border border-slate-800 border-dashed">
+                    <span className="font-bold text-slate-300">Campos personalizados: </span>
                     {Object.keys(cfg.customFields).join(', ')}
                 </div>
             )}
 
-            <button type="submit" disabled={submitting || !summary.trim()}
-                className="w-full py-2.5 rounded-lg bg-nexus-accent hover:bg-opacity-80 text-white font-bold text-sm transition-colors disabled:opacity-50">
-                {submitting ? <RefreshCw size={14} className="inline animate-spin mr-2" /> : null}
-                {submitting ? 'Creando...' : 'Crear Issue'}
-            </button>
+            <Button 
+                type="submit" 
+                disabled={submitting || !summary.trim()}
+                className="w-full bg-nexus-accent hover:bg-nexus-accent/80 text-white font-bold h-11 text-base shadow-lg shadow-nexus-accent/10"
+            >
+                {submitting ? (
+                    <>
+                        <RefreshCw size={16} className="animate-spin mr-2" />
+                        Creando...
+                    </>
+                ) : (
+                    <>
+                        <Plus size={16} className="mr-2" />
+                        Crear Issue
+                    </>
+                )}
+            </Button>
         </form>
     );
 }

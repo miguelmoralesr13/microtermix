@@ -86,6 +86,38 @@ pub fn json_minify(input: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn json_escape(input: String) -> Result<String, String> {
+    let value = parse_json_with_line(&input)
+        .map_err(|e| format!("Línea {}: {}", e.line, e.message))?;
+    let minified = serde_json::to_string(&value).map_err(|e| e.to_string())?;
+    // serde_json::to_string of a String value handles the escaping
+    Ok(serde_json::to_string(&minified).unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn json_unescape(input: String) -> Result<String, String> {
+    // 1. Try to parse as a JSON value first (this handles if it's already a quoted escaped string)
+    let val: Value = match serde_json::from_str(&input) {
+        Ok(v) => v,
+        Err(_) => {
+            // If not a valid JSON literal, maybe it's just the raw escaped content without surrounding quotes
+            // Wrap in quotes and try again
+            let wrapped = format!("\"{}\"", input);
+            serde_json::from_str(&wrapped).map_err(|e| format!("No es un string escapado válido: {}", e))?
+        }
+    };
+
+    if let Some(inner_str) = val.as_str() {
+        // Now try to parse the inner string as JSON
+        let inner_val: Value = serde_json::from_str(inner_str)
+            .map_err(|e| format!("El contenido escapado no es un JSON válido: {}", e))?;
+        serde_json::to_string_pretty(&inner_val).map_err(|e| e.to_string())
+    } else {
+        Err("La entrada no es un string de JSON.".into())
+    }
+}
+
+#[tauri::command]
 pub fn json_validate(input: String) -> ValidateResult {
     match parse_json_with_line(&input) {
         Ok(_) => ValidateResult { valid: true, error: None },

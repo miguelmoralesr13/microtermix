@@ -41,6 +41,7 @@ export interface GitRepoData {
         currentBranch: string;
         isMergeInProgress: boolean;
         isRebaseInProgress?: boolean;
+        statusOutput: string;
     };
     timeline: {
         commits: RawCommit[];
@@ -139,7 +140,7 @@ const STALE: Record<'branches' | 'status' | 'timeline' | 'aheadBehind', number> 
 export const EMPTY_REPO_DATA: GitRepoData = {
     isGitRepo: null,
     branches: { local: [], remote: [], stashes: [] },
-    status: { files: [], currentBranch: '', isMergeInProgress: false, isRebaseInProgress: false },
+    status: { files: [], currentBranch: '', isMergeInProgress: false, isRebaseInProgress: false, statusOutput: '' },
     timeline: { commits: [], localHashes: [] },
     aheadBehind: null,
     loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
@@ -349,15 +350,18 @@ export const useGitStore = create<GitStore>()(
                             currentBranch: string;
                             isMergeInProgress: boolean;
                             isRebaseInProgress: boolean;
+                            statusOutput: string;
                         } = await invoke('git_status_native', { projectPath: path });
 
                         patchRepo(set, path, r => ({
-                            status: { 
-                                files: res.files, 
-                                currentBranch: res.currentBranch, 
+                            status: {
+                                files: res.files,
+                                currentBranch: res.currentBranch,
                                 isMergeInProgress: res.isMergeInProgress,
-                                isRebaseInProgress: res.isRebaseInProgress
+                                isRebaseInProgress: res.isRebaseInProgress,
+                                statusOutput: res.statusOutput
                             },
+
                             errors: { ...r.errors, status: undefined },
                             lastFetched: { ...r.lastFetched, status: Date.now() },
                         }));
