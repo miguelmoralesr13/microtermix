@@ -3,7 +3,6 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { listen } from '@tauri-apps/api/event';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
 import { GitDiffViewer } from './GitDiffViewer';
@@ -20,7 +19,6 @@ import { CloneRepoModal } from './CloneRepoModal';
 import { cn } from '../lib/utils';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { toast } from 'sonner';
 
@@ -44,6 +42,7 @@ export const GitPanel: React.FC = () => {
     const setUi = useGitStore(s => s.setUi);
 
     const fetchRepo = useGitStore(s => s.fetchRepo);
+    const fetchStatus = useGitStore(s => s.fetchStatus);
     const fetchAll = useGitStore(s => s.fetchAll);
     const fetchAheadBehind = useGitStore(s => s.fetchAheadBehind);
     const invalidate = useGitStore(s => s.invalidate);
