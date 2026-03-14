@@ -694,6 +694,38 @@ pub fn git_blob_at_revision_impl(
     })
 }
 
+pub fn git_show_name_status_impl(
+    project_path: String,
+    hash: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+    let obj = repo.revparse_single(&hash).map_err(|e| format!("revparse {}: {}", hash, e))?;
+    let commit = obj.as_commit().ok_or_else(|| format!("'{}' is not a commit", hash))?;
+    
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    let parent_tree = if commit.parent_count() > 0 {
+        Some(commit.parent(0).map_err(|e| e.to_string())?.tree().map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+
+    let mut opts = git2::DiffOptions::new();
+    let diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
+        .map_err(|e| e.to_string())?;
+
+    let mut output = String::new();
+    diff.print(git2::DiffFormat::NameStatus, |_delta, _hunk, line| {
+        output.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+        true
+    }).map_err(|e| e.to_string())?;
+
+    Ok(crate::git_diff::GitResult {
+        stdout: output,
+        stderr: String::new(),
+        success: true,
+    })
+}
+
 pub fn parse_stash_index_pub(stash_ref: &str) -> usize {
     // Parses "stash@{N}" -> N. Returns 0 as default.
     stash_ref

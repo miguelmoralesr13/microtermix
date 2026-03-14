@@ -304,12 +304,19 @@ pub async fn git_execute_impl(
             .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
         }
         "show" => {
-            // args[1] is "hash:path" or "hash^:path"
-            let rev_path = args.get(1).cloned().unwrap_or_default();
-            tokio::task::spawn_blocking({
-                let p = project_path.clone();
-                move || crate::git_native::git_blob_at_revision_impl(p, rev_path)
-            }).await.map_err(|e| e.to_string())?
+            if args.contains(&"--name-status".to_string()) {
+                let hash = args.iter().rev().find(|&a| !a.starts_with('-') && a != "show").cloned().unwrap_or_default();
+                tokio::task::spawn_blocking({
+                    let p = project_path.clone();
+                    move || crate::git_native::git_show_name_status_impl(p, hash)
+                }).await.map_err(|e| e.to_string())?
+            } else {
+                let rev_path = args.iter().find(|&a| !a.starts_with('-') && a != "show").cloned().unwrap_or_default();
+                tokio::task::spawn_blocking({
+                    let p = project_path.clone();
+                    move || crate::git_native::git_blob_at_revision_impl(p, rev_path)
+                }).await.map_err(|e| e.to_string())?
+            }
         }
         "config" if args.get(1).map(|a| !a.starts_with("--")).unwrap_or(false) => {
             let key = args.get(1).cloned().unwrap_or_default();
