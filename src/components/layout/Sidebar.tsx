@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2, ChevronUp, ChevronDown, Play, Palette } from 'lucide-react';
+import { GitBranch, Trello, Server, Activity, Globe, FolderOpen, FlaskConical, BarChart3, Cloud, Network, Workflow, Package, Ghost, Braces, NotebookPen, FileCode2, ChevronUp, ChevronDown,  Palette } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();

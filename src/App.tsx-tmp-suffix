@@ -1,0 +1,14 @@
+export default function App() {
+  useEscapeToCopyPaste();
+  return (
+    <QueryClientProvider client={queryClient}>
+      <WorkspaceProvider>
+        <StoreProvider>
+          <AppContent />
+          <Toaster position="bottom-right" theme="dark" richColors />
+        </StoreProvider>
+      </WorkspaceProvider>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  );
+}
