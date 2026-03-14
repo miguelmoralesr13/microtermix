@@ -437,7 +437,7 @@ export const useGitStore = create<GitStore>()(
                 },
 
                 initWatchers: async (projectPaths) => {
-                    const { fetchAll, fetchAheadBehind, invalidate } = get();
+                    const {  invalidate } = get();
                     
                     // Start watchers in backend for all projects
                     projectPaths.forEach(path => {
