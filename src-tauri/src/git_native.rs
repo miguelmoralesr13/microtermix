@@ -672,6 +672,238 @@ pub fn git_get_diff_model_native_impl(
     Ok(DiffModelResult { original, modified })
 }
 
+/// Read raw content of a file at any git revision.
+/// `rev_path` is a revspec like `"abc1234:src/foo.ts"` or `"HEAD~1:bar.rs"`.
+/// Returns the file bytes as UTF-8 text in `stdout` (same contract as `git show`).
+pub fn git_blob_at_revision_impl(
+    project_path: String,
+    rev_path: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+    let obj = repo.revparse_single(&rev_path).map_err(|e| {
+        format!("git show {}: {}", rev_path, e)
+    })?;
+    let blob = obj.peel_to_blob().map_err(|_| {
+        format!("'{}' is not a blob (it may be a tree/commit)", rev_path)
+    })?;
+    let content = String::from_utf8_lossy(blob.content()).into_owned();
+    Ok(crate::git_diff::GitResult {
+        stdout: content,
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn parse_stash_index_pub(stash_ref: &str) -> usize {
+    // Parses "stash@{N}" -> N. Returns 0 as default.
+    stash_ref
+        .trim_start_matches("stash@{")
+        .trim_end_matches('}')
+        .parse()
+        .unwrap_or(0)
+}
+
+pub fn git_stash_save_impl(
+    project_path: String,
+    message: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let mut repo = repo_open(&project_path)?;
+
+    // Robustness: Before stashing, we should update the index to reflect any deletions 
+    // in the working directory. libgit2's stash_save can fail with 'stat' errors 
+    // if a file is in the index but missing on disk.
+    {
+        let mut index = repo.index().map_err(|e| format!("index open: {}", e))?;
+        // This removes entries from the index that no longer exist on disk
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)
+            .map_err(|e| format!("index sync: {}", e))?;
+        index.write().map_err(|e| format!("index write: {}", e))?;
+    }
+
+    let config = repo.config().map_err(|e| e.to_string())?;
+    let name = config.get_string("user.name").unwrap_or_else(|_| "Unknown".into());
+    let email = config.get_string("user.email").unwrap_or_else(|_| "unknown@example.com".into());
+    let sig = git2::Signature::now(&name, &email).map_err(|e| e.to_string())?;
+
+    let oid = repo
+        .stash_save(&sig, &message, Some(git2::StashFlags::DEFAULT))
+        .map_err(|e| format!("stash save: {}", e))?;
+
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("Saved working directory and index state: {}", &oid.to_string()[..7]),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn git_stash_pop_impl(
+    project_path: String,
+    index: usize,
+) -> Result<crate::git_diff::GitResult, String> {
+    let mut repo = repo_open(&project_path)?;
+    let mut opts = git2::StashApplyOptions::new();
+    opts.checkout_options({
+        let mut co = git2::build::CheckoutBuilder::new();
+        co.safe();
+        co
+    });
+
+    repo.stash_pop(index, Some(&mut opts))
+        .map_err(|e| format!("stash pop: {}", e))?;
+
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("Dropped stash@{{{}}}", index),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn git_stash_drop_impl(
+    project_path: String,
+    index: usize,
+) -> Result<crate::git_diff::GitResult, String> {
+    let mut repo = repo_open(&project_path)?;
+    repo.stash_drop(index)
+        .map_err(|e| format!("stash drop: {}", e))?;
+
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("Dropped stash@{{{}}}", index),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn git_checkout_branch_impl(
+    project_path: String,
+    branch_name: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+
+    // If already on this branch, it's a no-op
+    if let Ok(head) = repo.head() {
+        if head.shorthand() == Some(branch_name.as_str()) {
+            return Ok(crate::git_diff::GitResult {
+                stdout: format!("Already on '{}'", branch_name),
+                stderr: String::new(),
+                success: true,
+            });
+        }
+    }
+
+    // Try to find a local branch first
+    let local_ref = format!("refs/heads/{}", branch_name);
+    let has_local = repo.find_reference(&local_ref).is_ok();
+
+    if !has_local {
+        // Check for remote tracking branch origin/<name> and create local tracking branch
+        let remote_ref = format!("refs/remotes/origin/{}", branch_name);
+        if let Ok(remote) = repo.find_reference(&remote_ref) {
+            let remote_commit = remote.peel_to_commit().map_err(|e| e.to_string())?;
+            let mut new_branch = repo.branch(&branch_name, &remote_commit, false)
+                .map_err(|e| format!("create branch: {}", e))?;
+            // Set upstream tracking
+            new_branch
+                .set_upstream(Some(&format!("origin/{}", branch_name)))
+                .ok(); // non-fatal if it fails
+        } else {
+            return Err(format!(
+                "Branch '{}' not found locally or at origin",
+                branch_name
+            ));
+        }
+    }
+
+    // Move HEAD and update workdir
+    repo.set_head(&local_ref).map_err(|e| format!("set_head: {}", e))?;
+    let mut co = git2::build::CheckoutBuilder::new();
+    co.safe();
+    repo.checkout_head(Some(&mut co))
+        .map_err(|e| format!("checkout_head: {}", e))?;
+
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("Switched to branch '{}'", branch_name),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn git_restore_workdir_impl(
+    project_path: String,
+    file_path: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+    let mut cb = git2::build::CheckoutBuilder::new();
+    cb.path(&file_path).force().update_index(false);
+    repo.checkout_index(None, Some(&mut cb))
+        .map_err(|e| format!("restore {}: {}", file_path, e))?;
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("Restored '{}'", file_path),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+fn resolve_to_commit_object<'a>(repo: &'a git2::Repository, target: &str) -> Result<git2::Object<'a>, String> {
+    repo.revparse_single(target)
+        .map_err(|e| format!("resolve '{}': {}", target, e))?
+        .peel(git2::ObjectType::Commit)
+        .map_err(|e| format!("peel to commit '{}': {}", target, e))
+}
+
+pub fn git_reset_soft_impl(
+    project_path: String,
+    target: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+    let obj = resolve_to_commit_object(&repo, &target)?;
+    repo.reset(&obj, git2::ResetType::Soft, None)
+        .map_err(|e| format!("reset --soft: {}", e))?;
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("HEAD is now at (soft reset to {})", &target),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn git_reset_hard_impl(
+    project_path: String,
+    target: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+    let obj = resolve_to_commit_object(&repo, &target)?;
+    let mut co = git2::build::CheckoutBuilder::new();
+    co.force();
+    repo.reset(&obj, git2::ResetType::Hard, Some(&mut co))
+        .map_err(|e| format!("reset --hard: {}", e))?;
+    Ok(crate::git_diff::GitResult {
+        stdout: format!("HEAD is now at (hard reset to {})", &target),
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+pub fn git_config_get_impl(
+
+    project_path: String,
+    key: String,
+) -> Result<crate::git_diff::GitResult, String> {
+    let repo = repo_open(&project_path)?;
+    let config = repo.config().map_err(|e| e.to_string())?;
+    match config.get_string(&key) {
+        Ok(value) => Ok(crate::git_diff::GitResult {
+            stdout: value,
+            stderr: String::new(),
+            success: true,
+        }),
+        Err(e) => Ok(crate::git_diff::GitResult {
+            stdout: String::new(),
+            stderr: e.to_string(),
+            success: false,
+        }),
+    }
+}
+
+
 // ── Internal helpers (git2) ───────────────────────────────────────────────────
 
 fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
@@ -700,3 +932,193 @@ fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
         .take(if upstream_oid.is_none() { 500 } else { usize::MAX })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn init_test_repo() -> (tempfile::TempDir, git2::Repository) {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = git2::Repository::init(dir.path()).unwrap();
+        {
+            let mut config = repo.config().unwrap();
+            config.set_str("user.name", "Test").unwrap();
+            config.set_str("user.email", "test@test.com").unwrap();
+        }
+        (dir, repo)
+    }
+
+    fn make_commit(repo: &git2::Repository, file: &str, content: &str, msg: &str) -> git2::Oid {
+        let path = repo.workdir().unwrap().join(file);
+        std::fs::write(&path, content).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new(file)).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let sig = repo.signature().unwrap();
+        let parent = repo.head().ok().map(|h| h.peel_to_commit().unwrap());
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents).unwrap()
+    }
+
+    #[test]
+    fn test_blob_at_revision_exact_hash() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        let oid = make_commit(&repo, "hello.txt", "hello world", "first commit");
+        // hash:path
+        let rev = format!("{}:hello.txt", oid);
+        let result = git_blob_at_revision_impl(project_path, rev).unwrap();
+        assert_eq!(result.stdout, "hello world");
+        assert!(result.success);
+    }
+
+    #[test]
+    fn test_blob_at_revision_parent_syntax() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "hello.txt", "v1", "first");
+        let oid2 = make_commit(&repo, "hello.txt", "v2", "second");
+        // hash^:path should give v1 (parent content)
+        let rev = format!("{}^:hello.txt", oid2);
+        let result = git_blob_at_revision_impl(project_path, rev).unwrap();
+        assert_eq!(result.stdout, "v1");
+    }
+
+    #[test]
+    fn test_config_get_user_name() {
+        let (dir, _repo) = init_test_repo(); // sets user.name = "Test"
+        let result = git_config_get_impl(
+            dir.path().to_str().unwrap().to_string(),
+            "user.name".to_string(),
+        ).unwrap();
+        assert_eq!(result.stdout.trim(), "Test");
+        assert!(result.success);
+    }
+
+    #[test]
+    fn test_stash_save_and_pop() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        // Create initial commit so HEAD exists
+        make_commit(&repo, "file.txt", "initial", "init");
+        // Make a dirty change
+        std::fs::write(dir.path().join("file.txt"), "dirty").unwrap();
+
+        // Save stash
+        let save_res = git_stash_save_impl(project_path.clone(), "my stash".to_string()).unwrap();
+        assert!(save_res.success, "stash save failed: {}", save_res.stderr);
+
+        // Workdir should be clean now
+        let content = std::fs::read_to_string(dir.path().join("file.txt")).unwrap();
+        assert_eq!(content, "initial");
+
+        // Pop stash (index 0)
+        let pop_res = git_stash_pop_impl(project_path.clone(), 0).unwrap();
+        assert!(pop_res.success, "stash pop failed: {}", pop_res.stderr);
+
+        // Workdir should have the dirty change back
+        let content = std::fs::read_to_string(dir.path().join("file.txt")).unwrap();
+        assert_eq!(content, "dirty");
+    }
+
+    #[test]
+    fn test_stash_save_with_deleted_file() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "to_delete.txt", "v1", "init");
+
+        // Physically delete the file without git rm
+        std::fs::remove_file(dir.path().join("to_delete.txt")).unwrap();
+
+        // Stash should now succeed because we sync the index before stashing
+        let res = git_stash_save_impl(project_path, "stash deleted file".to_string()).unwrap();
+        assert!(res.success, "Stash failed with deleted file: {}", res.stderr);
+    }
+
+    #[test]
+    fn test_checkout_existing_branch() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "a.txt", "hello", "init");
+
+        // Create a second branch from current HEAD
+        let head = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &head, false).unwrap();
+
+        // Now checkout feature
+        let res = git_checkout_branch_impl(project_path.clone(), "feature".to_string()).unwrap();
+        assert!(res.success, "checkout failed: {}", res.stderr);
+
+        // HEAD should now be on feature
+        let new_head = repo.head().unwrap();
+        assert_eq!(new_head.shorthand().unwrap(), "feature");
+    }
+
+    #[test]
+    fn test_checkout_current_branch_is_noop() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "a.txt", "hello", "init");
+        let branch = repo.head().unwrap().shorthand().unwrap().to_string();
+
+        // Checking out the current branch should succeed without error
+        let res = git_checkout_branch_impl(project_path, branch).unwrap();
+        assert!(res.success);
+    }
+
+    #[test]
+    fn test_restore_workdir() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "a.txt", "committed content", "init");
+
+        // Make a dirty workdir change
+        std::fs::write(dir.path().join("a.txt"), "dirty").unwrap();
+
+        // Restore the file
+        let res = git_restore_workdir_impl(project_path.clone(), "a.txt".to_string()).unwrap();
+        assert!(res.success, "{}", res.stderr);
+
+        // File should be back to committed content
+        let content = std::fs::read_to_string(dir.path().join("a.txt")).unwrap();
+        assert_eq!(content, "committed content");
+    }
+
+    #[test]
+    fn test_reset_soft() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "a.txt", "v1", "first");
+        make_commit(&repo, "a.txt", "v2", "second");
+
+        // Soft reset to HEAD~1 - keep changes staged
+        let res = git_reset_soft_impl(project_path.clone(), "HEAD~1".to_string()).unwrap();
+        assert!(res.success, "{}", res.stderr);
+
+        // HEAD should now point to first commit
+        let head_msg = repo.head().unwrap().peel_to_commit().unwrap().message().unwrap().to_string();
+        assert!(head_msg.contains("first"));
+    }
+
+    #[test]
+    fn test_reset_hard() {
+        let (dir, repo) = init_test_repo();
+        let project_path = dir.path().to_str().unwrap().to_string();
+        make_commit(&repo, "a.txt", "v1", "first");
+        make_commit(&repo, "a.txt", "v2", "second");
+
+        let first_hash = repo.revparse_single("HEAD~1").unwrap().id().to_string();
+        let res = git_reset_hard_impl(project_path.clone(), first_hash).unwrap();
+        assert!(res.success, "{}", res.stderr);
+
+        let content = std::fs::read_to_string(dir.path().join("a.txt")).unwrap();
+        assert_eq!(content, "v1");
+    }
+}
+
+
+
+

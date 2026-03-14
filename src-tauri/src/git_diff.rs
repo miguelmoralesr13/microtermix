@@ -169,6 +169,22 @@ async fn git_cli_fallback(
     project_path: &str,
     args: &[String],
 ) -> Result<GitResult, String> {
+    let command = args.first().map(|s| s.as_str()).unwrap_or("");
+    
+    // Safety check: ensure migrated commands don't reach CLI fallback
+    match command {
+        "show" | "stash" | "checkout" | "config" => {
+             return Err(format!("Command 'git {}' is now handled natively and should not reach CLI fallback. Check router logic.", command));
+        },
+        "restore" if !args.contains(&"--staged".to_string()) => {
+             return Err("Command 'git restore' (workdir) is now handled natively.".to_string());
+        },
+        "reset" if args.iter().any(|a| a == "--soft" || a == "--hard") => {
+             return Err("Command 'git reset' (soft/hard) is now handled natively.".to_string());
+        },
+        _ => {}
+    }
+
     let mut cmd = AsyncCommand::new("git");
     cmd.args(args);
     cmd.current_dir(project_path);
@@ -234,6 +250,38 @@ pub async fn git_execute_impl(
             }).await.map_err(|e| e.to_string())?
             .map(|_| GitResult { stdout: "Restored from index".into(), stderr: String::new(), success: true })
         }
+        "restore" => {
+            // workdir restore (no --staged flag)
+            let path = args.iter()
+                .find(|a| *a != "restore" && *a != "--" && !a.starts_with('-'))
+                .cloned()
+                .unwrap_or_else(|| ".".into());
+            tokio::task::spawn_blocking({
+                let p = project_path.clone();
+                move || crate::git_native::git_restore_workdir_impl(p, path)
+            }).await.map_err(|e| e.to_string())?
+        }
+        "reset" => {
+            let mode = args.iter().find(|a| a.starts_with("--")).cloned();
+            let target = args.iter()
+                .rev()
+                .find(|a| !a.starts_with('-'))
+                .cloned()
+                .unwrap_or_else(|| "HEAD".into());
+
+            match mode.as_deref() {
+                Some("--soft") => tokio::task::spawn_blocking({
+                    let p = project_path.clone();
+                    move || crate::git_native::git_reset_soft_impl(p, target)
+                }).await.map_err(|e| e.to_string())?,
+                Some("--hard") => tokio::task::spawn_blocking({
+                    let p = project_path.clone();
+                    move || crate::git_native::git_reset_hard_impl(p, target)
+                }).await.map_err(|e| e.to_string())?,
+                // --mixed and other modes -> CLI fallback
+                _ => git_cli_fallback(&app_handle, &project_path, &args).await,
+            }
+        }
         "commit" => {
             let mut message = String::new();
             let mut amend = false;
@@ -255,8 +303,66 @@ pub async fn git_execute_impl(
             }).await.map_err(|e| e.to_string())?
             .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
         }
-        "checkout" => git_cli_fallback(&app_handle, &project_path, &args).await,
+        "show" => {
+            // args[1] is "hash:path" or "hash^:path"
+            let rev_path = args.get(1).cloned().unwrap_or_default();
+            tokio::task::spawn_blocking({
+                let p = project_path.clone();
+                move || crate::git_native::git_blob_at_revision_impl(p, rev_path)
+            }).await.map_err(|e| e.to_string())?
+        }
+        "config" if args.get(1).map(|a| !a.starts_with("--")).unwrap_or(false) => {
+            let key = args.get(1).cloned().unwrap_or_default();
+            tokio::task::spawn_blocking({
+                let p = project_path.clone();
+                move || crate::git_native::git_config_get_impl(p, key)
+            }).await.map_err(|e| e.to_string())?
+        }
+        "stash" => {
+            let sub = args.get(1).map(|s| s.as_str()).unwrap_or("");
+            match sub {
+                "save" => {
+                    let msg = args.get(2).cloned().unwrap_or_else(|| "WIP".into());
+                    tokio::task::spawn_blocking({
+                        let p = project_path.clone();
+                        move || crate::git_native::git_stash_save_impl(p, msg)
+                    }).await.map_err(|e| e.to_string())?
+                }
+                "pop" => {
+                    let idx = args.get(2)
+                        .map(|s| crate::git_native::parse_stash_index_pub(s))
+                        .unwrap_or(0);
+                    tokio::task::spawn_blocking({
+                        let p = project_path.clone();
+                        move || crate::git_native::git_stash_pop_impl(p, idx)
+                    }).await.map_err(|e| e.to_string())?
+                }
+                "drop" => {
+                    let idx = args.get(2)
+                        .map(|s| crate::git_native::parse_stash_index_pub(s))
+                        .unwrap_or(0);
+                    tokio::task::spawn_blocking({
+                        let p = project_path.clone();
+                        move || crate::git_native::git_stash_drop_impl(p, idx)
+                    }).await.map_err(|e| e.to_string())?
+                }
+                _ => git_cli_fallback(&app_handle, &project_path, &args).await,
+            }
+        }
+        "checkout" => {
+            let branch = args.get(1).cloned().unwrap_or_default();
+            if branch.is_empty() || args.contains(&"-b".to_string()) {
+                // -b (create branch) or other flags -> fall back to CLI for now
+                git_cli_fallback(&app_handle, &project_path, &args).await
+            } else {
+                tokio::task::spawn_blocking({
+                    let p = project_path.clone();
+                    move || crate::git_native::git_checkout_branch_impl(p, branch)
+                }).await.map_err(|e| e.to_string())?
+            }
+        }
         "branch" if args.iter().any(|a| a == "-d" || a == "-D") => {
+
             let force = args.contains(&"-D".to_string());
             let branch_name = args.iter().rev().find(|a| !a.starts_with('-')).cloned().unwrap_or_default();
             tokio::task::spawn_blocking({

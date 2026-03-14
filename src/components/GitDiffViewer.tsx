@@ -82,7 +82,20 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         }
     }, [projectPath, file, mode]);
 
-    useEffect(() => { loadContent(); }, [loadContent]);
+    useEffect(() => { 
+        loadContent();
+        
+        // Cleanup function for Monaco models when component unmounts or inputs change
+        return () => {
+            if (editorRef.current) {
+                const model = editorRef.current.getModel();
+                if (model) {
+                    if (model.original) model.original.dispose();
+                    if (model.modified) model.modified.dispose();
+                }
+            }
+        };
+    }, [loadContent]);
 
     const handleEditorDidMount = (editor: any, monaco: Monaco) => {
         editorRef.current = editor;

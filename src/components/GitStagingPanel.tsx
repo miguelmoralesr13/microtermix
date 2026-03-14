@@ -291,32 +291,47 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     // which is triggered whenever the sidebar tab mounts or refresh is requested.
 
     const handleStageToggleAll = useCallback(async (stage: boolean) => {
-        if (stage) {
-            await invoke('git_execute', { projectPath, args: ['add', '.'] });
-        } else {
-            await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
+        setError(null);
+        try {
+            if (stage) {
+                await invoke('git_execute', { projectPath, args: ['add', '.'] });
+            } else {
+                await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
+            }
+            refreshStatus();
+        } catch (e: any) {
+            setError(e?.toString() || 'Failed to toggle stage all');
         }
-        refreshStatus();
     }, [projectPath, refreshStatus]);
 
     const handleToggleNode = useCallback(async (node: ArrayTreeNode) => {
-        if (node.checkState === 'checked') {
-            await invoke('git_execute', { projectPath, args: ['restore', '--staged', node.fullPath] });
-        } else {
-            await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
+        setError(null);
+        try {
+            if (node.checkState === 'checked') {
+                await invoke('git_execute', { projectPath, args: ['restore', '--staged', node.fullPath] });
+            } else {
+                await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
+            }
+            refreshStatus();
+        } catch (e: any) {
+            setError(e?.toString() || 'Failed to toggle stage');
         }
-        refreshStatus();
     }, [projectPath, refreshStatus]);
 
     const handleDiscardNode = useCallback(async (node: ArrayTreeNode) => {
-        await invoke('git_execute', { projectPath, args: ['restore', node.fullPath] });
-        await invoke('git_execute', { projectPath, args: ['clean', '-fd', node.fullPath] });
-        setSelectedForRollback((prev) => {
-            const next = new Set(prev);
-            next.delete(node.fullPath);
-            return next;
-        });
-        refreshStatus();
+        setError(null);
+        try {
+            await invoke('git_execute', { projectPath, args: ['restore', node.fullPath] });
+            await invoke('git_execute', { projectPath, args: ['clean', '-fd', node.fullPath] });
+            setSelectedForRollback((prev) => {
+                const next = new Set(prev);
+                next.delete(node.fullPath);
+                return next;
+            });
+            refreshStatus();
+        } catch (e: any) {
+            setError(e?.toString() || 'Failed to discard changes');
+        }
     }, [projectPath, refreshStatus]);
 
     const toggleSelectedForRollback = useCallback((path: string) => {
@@ -330,12 +345,17 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
 
     const handleDiscardSelected = useCallback(async () => {
         if (selectedForRollback.size === 0) return;
-        for (const path of selectedForRollback) {
-            await invoke('git_execute', { projectPath, args: ['restore', path] });
-            await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
+        setError(null);
+        try {
+            for (const path of selectedForRollback) {
+                await invoke('git_execute', { projectPath, args: ['restore', path] });
+                await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
+            }
+            setSelectedForRollback(new Set());
+            refreshStatus();
+        } catch (e: any) {
+            setError(e?.toString() || 'Failed to discard selected');
         }
-        setSelectedForRollback(new Set());
-        refreshStatus();
     }, [selectedForRollback, projectPath, refreshStatus]);
 
     const handleCommit = useCallback(async () => {

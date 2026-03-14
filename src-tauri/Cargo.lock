@@ -4290,6 +4290,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-http",
  "tauri-plugin-opener",
+ "tempfile",
  "tokio",
  "tower 0.4.13",
  "uuid",
