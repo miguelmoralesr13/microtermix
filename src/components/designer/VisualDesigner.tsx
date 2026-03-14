@@ -25,36 +25,20 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { 
-    Download, 
-    Trash2, 
-    LayoutGrid, 
-    Type, 
-    Database, 
-    Diamond,
-    Code,
-    Users,
-    ArrowRightLeft,
-    GitGraph,
-    MessageSquare,
-    StickyNote,
-    Zap,
-    Circle,
-    PlayCircle,
-    Settings2,
-    HardDrive,
-    Terminal,
-    Eye,
-    EyeOff,
-    Copy,
-    Share,
-    Box,
-    X as XIcon
+    Download, Trash2, LayoutGrid, Type, Database, Diamond, Code, Users, ArrowRightLeft,
+    GitGraph, MessageSquare, StickyNote, Zap, Circle, PlayCircle, Settings2, HardDrive,
+    Terminal, Eye, EyeOff, Copy, Share, Box, X as XIcon, Save, FolderSearch, FileText, Plus,
+    FolderOpen, AlertTriangle
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { useWorkspace } from '../../context/WorkspaceContext';
+import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-dialog';
 
-// ── ID Generator ─────────────────────────────────────────────────────────────
 const generateId = () => `id_${Math.random().toString(36).substr(2, 9)}`;
 
 // ── Custom Node Components ───────────────────────────────────────────────────
@@ -108,9 +92,7 @@ const GroupNode = ({ data, selected }: any) => (
 );
 
 const nodeTypes = {
-    actor: ActorNode,
-    decision: DecisionNode,
-    group: GroupNode,
+    actor: ActorNode, decision: DecisionNode, group: GroupNode,
     default: (props: any) => <BaseNode {...props} Icon={LayoutGrid} />,
     database: (props: any) => <BaseNode {...props} Icon={HardDrive} color="#fbbf24" />,
     terminal: (props: any) => <BaseNode {...props} Icon={Terminal} color="#10b981" shape="rounded-full" />,
@@ -121,6 +103,9 @@ const nodeTypes = {
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export const VisualDesigner: React.FC = () => {
+    const { state: workspaceState } = useWorkspace();
+    const projectPath = workspaceState.currentPath;
+
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
     
@@ -129,16 +114,19 @@ export const VisualDesigner: React.FC = () => {
     const [mode, setMode] = useState<DiagramMode>('flowchart');
     const [showCode, setShowCode] = useState(false);
     const [showPreview, setShowPreview] = useState(true);
-    
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
     const [debouncedMermaidCode, setDebouncedMermaidCode] = useState('');
 
-    const onNodesChange = useCallback((c: NodeChange[]) => setNodes((nds) => applyNodeChanges(c, nds)), []);
-    const onEdgesChange = useCallback((c: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(c, eds)), []);
-    const onConnect = useCallback((p: Connection) => setEdges((eds) => addEdge({ 
-        ...p, animated: mode === 'flowchart', label: mode === 'sequence' ? 'Mensaje' : ''
-    }, eds)), [mode]);
+    // Persistence State
+    const [diagramFiles, setDiagramFiles] = useState<string[]>([]);
+    const [activeFileName, setActiveFileName] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [newDiagramName, setNewDiagramName] = useState('');
+
+    // Default folder is always .mmd inside the workspace
+    const [diagFolder, setDiagFolder] = useState('.mmd');
 
     const mermaidCode = useMemo(() => MermaidConverter.convert({ nodes, edges, mode }), [nodes, edges, mode]);
 
@@ -147,10 +135,106 @@ export const VisualDesigner: React.FC = () => {
         return () => clearTimeout(handler);
     }, [mermaidCode]);
 
+    const onNodesChange = useCallback((c: NodeChange[]) => setNodes((nds) => applyNodeChanges(c, nds)), []);
+    const onEdgesChange = useCallback((c: EdgeChange[]) => setEdges((eds) => applyEdgeChanges(c, eds)), []);
+    const onConnect = useCallback((p: Connection) => setEdges((eds) => addEdge({ 
+        ...p, animated: mode === 'flowchart', label: mode === 'sequence' ? 'Mensaje' : ''
+    }, eds)), [mode]);
+
     const onSelectionChange = useCallback(({ nodes: selNodes, edges: selEdges }: any) => {
         setSelectedNodeId(selNodes[0]?.id || null);
         setSelectedEdgeId(selEdges[selEdges.length - 1]?.id || null);
     }, []);
+
+    // ── Persistence Logic ────────────────────────────────────────────────────
+
+    const refreshFiles = useCallback(async () => {
+        if (!projectPath) return;
+        try {
+            const folderPath = `${projectPath}/${diagFolder}`;
+            console.log("[Designer] Refreshing files in:", folderPath);
+            // Ensure folder exists
+            await invoke('ensure_directory', { base: projectPath, path: diagFolder });
+            const files = await invoke<string[]>('list_diagram_files', { path: folderPath });
+            setDiagramFiles(files);
+        } catch (e) {
+            console.error("Failed to list diagrams:", e);
+        }
+    }, [projectPath, diagFolder]);
+
+    useEffect(() => { 
+        if (projectPath) refreshFiles(); 
+    }, [projectPath, refreshFiles]);
+
+    const saveDiagram = useCallback(async (name?: string) => {
+        const fileName = name || activeFileName;
+        if (!fileName || !projectPath) return;
+
+        setIsSaving(true);
+        const visualState = { mode, nodes, edges };
+        const content = `${mermaidCode}\n\n%% NEXUS_VISUAL_STATE: ${JSON.stringify(visualState)}`;
+        
+        // Ensure name has standard extension
+        const baseName = fileName.replace(/\.mmd$/, '').replace(/\.mermaid$/, '');
+        const finalFileName = `${baseName}.mmd`;
+        const relPath = `${diagFolder}/${finalFileName}`;
+
+        try {
+            console.log(`[Designer] Saving to: ${projectPath}/${relPath}`);
+            await invoke('write_file_content', { base: projectPath, file: relPath, content });
+            if (activeFileName !== finalFileName) setActiveFileName(finalFileName);
+            refreshFiles();
+        } catch (e) {
+            console.error("[Designer] Save critical error:", e);
+            toast.error(`Error al guardar: ${e}`);
+        } finally {
+            setTimeout(() => setIsSaving(false), 500);
+        }
+    }, [projectPath, diagFolder, activeFileName, mode, nodes, edges, mermaidCode, refreshFiles]);
+
+    useEffect(() => {
+        if (!activeFileName || !projectPath) return;
+        const timer = setTimeout(() => saveDiagram(), 2000);
+        return () => clearTimeout(timer);
+    }, [nodes, edges, mode, activeFileName, projectPath, saveDiagram]);
+
+    const loadDiagram = async (fileName: string) => {
+        if (!projectPath) return;
+        try {
+            const content = await invoke<string>('read_file_content', { 
+                base: projectPath, 
+                file: `${diagFolder}/${fileName}` 
+            });
+            const stateMatch = content.match(/%% NEXUS_VISUAL_STATE: (.*)$/);
+            if (stateMatch && stateMatch[1]) {
+                const data = JSON.parse(stateMatch[1]);
+                setMode(data.mode || 'flowchart');
+                setNodes(data.nodes || []);
+                setEdges(data.edges || []);
+            } else {
+                setNodes([]); setEdges([]);
+                toast.info("Archivo estándar (sin posiciones visuales)");
+            }
+            setActiveFileName(fileName);
+            toast.success(`Cargado: ${fileName}`);
+        } catch (e) {
+            toast.error("Error al cargar diagrama");
+        }
+    };
+
+    const handleCreateDiagram = () => {
+        if (!newDiagramName.trim() || !projectPath) return;
+        const name = newDiagramName.trim();
+        const baseName = name.replace(/\.mmd$/, '').replace(/\.mermaid$/, '');
+        const finalName = `${baseName}.mmd`;
+        setNodes([]); setEdges([]);
+        setActiveFileName(finalName);
+        saveDiagram(finalName);
+        setIsCreateModalOpen(false);
+        setNewDiagramName('');
+    };
+
+    // ── Interaction Logic ────────────────────────────────────────────────────
 
     const onNodeDragStop = useCallback((_: any, draggedNode: Node) => {
         if (draggedNode.type === 'group') return;
@@ -183,33 +267,64 @@ export const VisualDesigner: React.FC = () => {
         setNodes((nds) => nds.concat(newNode));
     }, [reactFlowInstance]);
 
-    const addNodeViaClick = (type: string, label: string) => {
-        const newNode: Node = {
-            id: generateId(), type, position: { x: 250, y: 250 }, data: { label },
-            ...(type === 'group' ? { zIndex: -1, style: { width: 300, height: 200 } } : {})
-        };
-        setNodes((nds) => nds.concat(newNode));
-    };
+    if (!projectPath) return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-950 text-slate-500 gap-4">
+            <FolderSearch size={48} className="opacity-20" />
+            <div className="text-center space-y-1">
+                <p className="font-bold text-slate-300 text-lg">No hay Workspace Abierto</p>
+                <p className="text-sm max-w-xs leading-relaxed">Abre una carpeta de proyecto en el panel principal para empezar a diseñar diagramas.</p>
+            </div>
+        </div>
+    );
 
     return (
         <div className="flex h-full w-full bg-slate-950 overflow-hidden relative">
+            {/* Sidebar Left */}
             <div className="w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col p-4 gap-6 shrink-0 overflow-y-auto scrollbar-hide">
+                {/* File Management */}
+                <div>
+                    <div className="flex items-center justify-between mb-1">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                            <FolderSearch size={12} /> Mis Diagramas
+                        </h3>
+                        <Button variant="ghost" size="icon-xs" onClick={() => setIsCreateModalOpen(true)} className="text-nexus-neon hover:bg-nexus-neon/10">
+                            <Plus size={14} />
+                        </Button>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-1 mb-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]" />
+                        <span className="text-[9px] text-slate-500 font-mono truncate" title={projectPath}>.../{projectPath.split('/').pop()}/.mmd</span>
+                    </div>
+                    
+                    <div className="space-y-1 max-h-40 overflow-y-auto scrollbar-hide pr-1 border-l border-slate-800 ml-1.5 pl-3">
+                        {diagramFiles.length === 0 ? (
+                            <p className="text-[10px] text-slate-600 italic">No hay archivos .mmd</p>
+                        ) : (
+                            diagramFiles.map(f => (
+                                <button key={f} onClick={() => loadDiagram(f)}
+                                    className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded text-[11px] text-left transition-colors",
+                                        activeFileName === f ? "bg-blue-500/20 text-blue-400 font-bold border border-blue-500/30" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200")}>
+                                    <FileText size={12} /> <span className="truncate">{f.replace('.mmd', '')}</span>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                <div className="h-px bg-slate-800" />
+
+                {/* Mode Selector */}
                 <div>
                     <div className="flex items-center justify-between mb-3">
                         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Modo</h3>
                         {nodes.length > 0 && (
                             <Tooltip>
-                                <TooltipTrigger>
-                                    <Badge variant="outline" className="text-[8px] h-4 border-amber-500/30 text-amber-500 bg-amber-500/5 cursor-help">Bloqueado</Badge>
-                                </TooltipTrigger>
+                                <TooltipTrigger><Badge variant="outline" className="text-[8px] h-4 border-amber-500/30 text-amber-500 bg-amber-500/5 cursor-help">Bloqueado</Badge></TooltipTrigger>
                                 <TooltipContent side="right">Limpia el canvas para cambiar de modo</TooltipContent>
                             </Tooltip>
                         )}
                     </div>
-                    <div className={cn(
-                        "flex bg-slate-950 p-1 rounded-lg border border-slate-800 transition-opacity",
-                        nodes.length > 0 && "opacity-60"
-                    )}>
+                    <div className={cn("flex bg-slate-950 p-1 rounded-lg border border-slate-800", nodes.length > 0 && "opacity-60")}>
                         <Button variant="ghost" size="xs" onClick={() => setMode('flowchart')}
                             disabled={nodes.length > 0 && mode !== 'flowchart'}
                             className={cn("flex-1 text-[10px] font-bold uppercase", mode === 'flowchart' ? "bg-blue-500/20 text-blue-400" : "text-slate-600")}>Flujo</Button>
@@ -222,7 +337,7 @@ export const VisualDesigner: React.FC = () => {
                 <div className="space-y-4">
                     <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center justify-between">
                         <span>Librería</span>
-                        <Badge variant="outline" className="text-[8px] font-mono h-4 px-1 opacity-50 border-slate-700">Drag & Drop</Badge>
+                        <Badge variant="outline" className="text-[8px] font-mono h-4 px-1 opacity-50 border-slate-700 uppercase">Pro</Badge>
                     </h3>
                     <div className="grid grid-cols-2 gap-2">
                         {mode === 'flowchart' ? (
@@ -232,7 +347,7 @@ export const VisualDesigner: React.FC = () => {
                                 <DraggableTool icon={<LayoutGrid size={14}/>} label="Tarea" type="default" onClick={() => addNodeViaClick('default', 'Proceso')} />
                                 <DraggableTool icon={<Diamond size={14}/>} label="Decisión" type="decision" onClick={() => addNodeViaClick('decision', '¿Condición?')} />
                                 <ToolButton icon={<HardDrive size={14}/>} label="DB" onClick={() => addNodeViaClick('database', 'Base Datos')} />
-                                <ToolButton icon={<StickyNote size={14}/>} label="Sub-proceso" onClick={() => addNodeViaClick('subroutine', 'Subrutina')} />
+                                <ToolButton icon={<StickyNote size={14}/>} label="Subrutina" onClick={() => addNodeViaClick('subroutine', 'Subrutina')} />
                             </>
                         ) : (
                             <>
@@ -264,10 +379,14 @@ export const VisualDesigner: React.FC = () => {
                 )}
 
                 <div className="mt-auto flex flex-col gap-2 pt-4 border-t border-slate-800">
+                    <div className="flex items-center justify-between mb-1 px-1">
+                        <span className="text-[9px] text-slate-500 uppercase font-black">Estado</span>
+                        {isSaving ? <span className="text-[9px] text-emerald-500 animate-pulse flex items-center gap-1"><Save size={10}/> Guardando...</span> : <span className="text-[9px] text-slate-600 flex items-center gap-1"><Save size={10}/> Sincronizado</span>}
+                    </div>
                     <Button variant="secondary" className="w-full gap-2 text-xs font-bold h-9" onClick={() => setShowPreview(!showPreview)}>
                         {showPreview ? <EyeOff size={14} /> : <Eye size={14} />} {showPreview ? 'Ocultar Preview' : 'Mostrar Preview'}</Button>
                     <Button variant="outline" className="w-full gap-2 text-xs font-bold h-9 border-slate-800" onClick={() => setShowCode(!showCode)}><Code size={14} /> {showCode ? 'Ocultar Código' : 'Ver Mermaid'}</Button>
-                    <Button variant="ghost" className="w-full gap-2 text-xs text-slate-500 hover:text-red-400" onClick={() => { setNodes([]); setEdges([]); setSelectedNodeId(null); setSelectedEdgeId(null); }}><Trash2 size={14} /> Limpiar Todo</Button>
+                    <Button variant="ghost" className="w-full gap-2 text-xs text-slate-500 hover:text-red-400" onClick={() => { setNodes([]); setEdges([]); setSelectedNodeId(null); setSelectedEdgeId(null); setActiveFileName(null); }}><Trash2 size={14} /> Limpiar Canvas</Button>
                 </div>
             </div>
 
@@ -278,7 +397,12 @@ export const VisualDesigner: React.FC = () => {
                 >
                     <Background color="#1e293b" gap={20} />
                     <Controls />
-                    <Panel position="top-right"><Badge variant="outline" className={cn("bg-slate-900/80 backdrop-blur-md px-3 py-1 font-mono text-[10px]", mode === 'flowchart' ? "text-blue-400 border-blue-900/50" : "text-amber-400 border-amber-900/50")}>DESIGNER — {mode.toUpperCase()} MODE</Badge></Panel>
+                    <Panel position="top-right">
+                        <div className="flex flex-col items-end gap-2">
+                            <Badge variant="outline" className={cn("bg-slate-900/80 backdrop-blur-md px-3 py-1 font-mono text-[10px]", mode === 'flowchart' ? "text-blue-400 border-blue-900/50" : "text-amber-400 border-amber-900/50")}>DESIGNER — {mode.toUpperCase()} MODE</Badge>
+                            {activeFileName && <Badge variant="secondary" className="bg-slate-950/80 text-slate-400 border border-slate-800 text-[9px] font-mono uppercase tracking-tighter">FILE: {activeFileName}</Badge>}
+                        </div>
+                    </Panel>
                 </ReactFlow>
 
                 {showPreview && (
@@ -297,26 +421,41 @@ export const VisualDesigner: React.FC = () => {
                     <div className="absolute right-4 top-16 bottom-4 w-[450px] bg-slate-900/95 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50 animate-in slide-in-from-right-4">
                         <div className="px-5 py-3 border-b border-slate-700 flex items-center justify-between bg-slate-950/50">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Mermaid Definition</span>
-                            <div className="flex gap-1">
-                                <Button variant="ghost" size="icon-xs" onClick={() => { navigator.clipboard.writeText(debouncedMermaidCode); toast.success("Copiado"); }} className="text-blue-400"><Copy size={16} /></Button>
-                                <Button variant="ghost" size="icon-xs" className="text-blue-400"><Download size={16} /></Button>
-                            </div>
+                            <div className="flex gap-1"><Button variant="ghost" size="icon-xs" onClick={() => { navigator.clipboard.writeText(debouncedMermaidCode); toast.success("Copiado"); }} className="text-blue-400"><Copy size={16} /></Button><Button variant="ghost" size="icon-xs" className="text-blue-400"><Download size={16} /></Button></div>
                         </div>
                         <pre className="flex-1 p-6 font-mono text-[12px] text-emerald-400 overflow-auto scrollbar-hide select-all leading-relaxed">{debouncedMermaidCode}</pre>
                     </div>
                 )}
             </div>
+
+            <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+                <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-[400px]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><Plus size={18} className="text-nexus-neon" /> Nuevo Diagrama</DialogTitle>
+                        <DialogDescription className="text-slate-400 pt-2 text-xs">Se guardará como archivo <strong>.mmd</strong> en la carpeta <strong>.mmd</strong> del workspace.</DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-2">
+                        <Label htmlFor="diag-name" className="text-[10px] font-bold text-slate-500 uppercase">Nombre del archivo</Label>
+                        <Input id="diag-name" autoFocus value={newDiagramName} onChange={(e) => setNewDiagramName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleCreateDiagram()} placeholder="ej: auth-flow" className="bg-slate-950 border-slate-800 focus-visible:ring-nexus-neon h-9 text-xs" />
+                    </div>
+                    <DialogFooter className="gap-2">
+                        <Button variant="ghost" onClick={() => setIsCreateModalOpen(false)} className="text-slate-400">Cancelar</Button>
+                        <Button onClick={handleCreateDiagram} disabled={!newDiagramName.trim()} className="bg-nexus-neon text-slate-900 font-bold h-9">Crear y Abrir</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };
 
 function DraggableTool({ icon, label, type, onClick }: any) {
+    const onDragStart = (event: React.DragEvent, nodeType: string, nodeLabel: string) => {
+        event.dataTransfer.setData('application/reactflow', nodeType);
+        event.dataTransfer.setData('application/reactflow-label', nodeLabel);
+        event.dataTransfer.effectAllowed = 'move';
+    };
     return (
-        <div draggable onDragStart={(e) => {
-            e.dataTransfer.setData('application/reactflow', type);
-            e.dataTransfer.setData('application/reactflow-label', label);
-            e.dataTransfer.effectAllowed = 'move';
-        }} className="cursor-grab active:cursor-grabbing">
+        <div draggable onDragStart={(e) => onDragStart(e, type, label)} className="cursor-grab active:cursor-grabbing">
             <Button variant="outline" size="sm" onClick={onClick} className="flex flex-col h-16 w-full gap-1 bg-slate-900 border-slate-800 hover:border-blue-500 transition-all pointer-events-none text-[9px] uppercase font-bold">
                 <div className="text-slate-400">{icon}</div> {label}
             </Button>

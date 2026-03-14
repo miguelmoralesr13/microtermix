@@ -772,6 +772,26 @@ pub async fn kill_all_services(state: State<'_, AppState>) -> Result<(), String>
 // Helpers de lectura/escritura de archivos que usa el frontend.
 
 #[tauri::command]
+pub fn list_diagram_files(path: String) -> Result<Vec<String>, String> {
+    let diag_dir = Path::new(&path);
+    if !diag_dir.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let mut files = Vec::new();
+    if let Ok(entries) = fs::read_dir(diag_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".mmd") || name.ends_with(".mermaid") {
+                files.push(name);
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
+}
+
+#[tauri::command]
 pub fn read_file_content(base: String, file: String) -> Result<String, String> {
     let path = Path::new(&base).join(&file);
     fs::read_to_string(path).map_err(|e| e.to_string())
@@ -784,8 +804,18 @@ pub fn read_file_at_path(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn ensure_directory(base: String, path: String) -> Result<(), String> {
+    let full_path = Path::new(&base).join(&path);
+    println!("[ensure_directory] Creating: {:?}", full_path);
+    fs::create_dir_all(full_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn write_file_content(base: String, file: String, content: String) -> Result<(), String> {
     let path = Path::new(&base).join(&file);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     fs::write(path, content).map_err(|e| e.to_string())
 }
 

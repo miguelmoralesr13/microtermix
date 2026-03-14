@@ -29,10 +29,10 @@ pub use crate::projects::{
     get_project_script_bodies, list_test_files, read_project_envs, scan_projects, Project,
 };
 pub use crate::processes::{
-    execute_pipeline, execute_service_script, get_listening_processes, get_pipeline_state,
-    get_service_logs, kill_all_services, kill_process_by_pid, kill_service, kill_tree_unix_pub,
-    open_in_editor, read_file_at_path, read_file_content, write_file_content, ListeningProcess,
-    LogEvent,
+    ensure_directory, execute_pipeline, execute_service_script, get_listening_processes,
+    get_pipeline_state, get_service_logs, kill_all_services, kill_process_by_pid, kill_service,
+    kill_tree_unix_pub, list_diagram_files, open_in_editor, read_file_at_path, read_file_content,
+    write_file_content, ListeningProcess, LogEvent,
 };
 pub use crate::proxy::{
     get_proxy_candidates, has_vite_config, parse_vite_federation, start_proxy, stop_proxy,
@@ -279,6 +279,7 @@ pub fn run() {
             read_file_content,
             read_file_at_path,
             write_file_content,
+            ensure_directory,
             compute_unified_diff,
             compute_diff_hunks,
             apply_rejected_hunks,
@@ -298,6 +299,7 @@ pub fn run() {
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,
+            list_diagram_files,
             kill_process_by_pid,
             has_vite_config,
             parse_vite_federation,
