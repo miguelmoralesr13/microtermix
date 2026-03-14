@@ -2,7 +2,7 @@ use notify::{Watcher, RecursiveMode, RecommendedWatcher, Config, Event};
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager};
 use crate::state::AppState;
-use std::collections::{HashSet, HashMap};
+use std::collections::HashSet;
 
 // ── Multi-Window Fetch Worker ────────────────────────────────────────────────
 
