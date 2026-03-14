@@ -1,6 +1,10 @@
 import type { CommandStep } from './commands';
 import type { GitAccount } from '../stores/gitStore';
 import { useGitStore } from '../stores/gitStore';
+import type { JiraAccount } from '../components/jiraApi';
+import { useJiraStore } from '../stores/jiraStore';
+import type { SonarConfig } from '../stores/sonarStore';
+import { useSonarStore } from '../stores/sonarStore';
 
 export interface PipelineStepConfig {
     /** folderName::script (the space at end is handled by execution logic) */
@@ -41,6 +45,10 @@ export interface NexusWorkspaceConfig {
     projectEnvs?: Record<string, { activeEnv: string; envs: Record<string, Record<string, string>> }>;
     /** Por proyecto: key = nombre de carpeta del proyecto */
     projectViteWrapper?: Record<string, { enabled: boolean; remotes: Record<string, string> }>;
+    // Nuevos campos:
+    jiraAccounts?: JiraAccount[];
+    jiraActiveAccountId?: string | null;
+    sonarConfig?: SonarConfig;
 }
 
 export const WORKSPACE_CONFIG_FILENAME = 'nexus-workspace.json';
@@ -189,5 +197,8 @@ export function buildWorkspaceConfigFromCurrentState(
         activeTerminalTabId: activeTerminalTabId ? getFolderName(activeTerminalTabId) : undefined,
         projectEnvs: Object.keys(projectEnvs).length ? projectEnvs : undefined,
         projectViteWrapper: Object.keys(projectViteWrapper).length ? projectViteWrapper : undefined,
+        jiraAccounts: useJiraStore.getState().accounts,
+        jiraActiveAccountId: useJiraStore.getState().activeAccountId,
+        sonarConfig: useSonarStore.getState().config,
     };
 }

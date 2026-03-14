@@ -5,11 +5,14 @@ import type { CommandStep } from '../types/commands';
 
 import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { toast } from 'sonner';
 import type { NexusWorkspaceConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
 import { applyWorkspaceConfigToStorage, resolveFolderNameToPath } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
+import { useJiraStore } from '../stores/jiraStore';
+import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore, batchedAppendLogs } from '../stores/processStore';
 import { useToolStore } from '../stores/toolStore';
 
@@ -188,6 +191,19 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 const fullPath = resolveFolderNameToPath(folderName, projectPaths);
                 if (fullPath) gitStore.setRepoAccount(fullPath, accountId);
             });
+        }
+
+        // Hidratar cuentas de Jira desde workspace JSON
+        if (config.jiraAccounts != null) {
+            useJiraStore.getState().hydrate(
+                config.jiraAccounts,
+                config.jiraActiveAccountId ?? null,
+            );
+        }
+
+        // Hidratar config de Sonar desde workspace JSON
+        if (config.sonarConfig != null) {
+            useSonarStore.getState().hydrate(config.sonarConfig);
         }
     }, []);
 

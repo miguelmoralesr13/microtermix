@@ -473,7 +473,7 @@ export const useGitStore = create<GitStore>()(
                 name: 'nexus-git-store',
                 partialize: (s) => ({
                     ui: s.ui,
-                    repoAccounts: s.repoAccounts,
+                    // repoAccounts se persiste en nexus-workspace.json, no aquí
                     cloneFavorites: s.cloneFavorites,
                     repos: Object.fromEntries(
                         Object.entries(s.repos).map(([k, v]) => [

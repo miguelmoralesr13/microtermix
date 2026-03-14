@@ -14,6 +14,7 @@ import { useProcessStore } from '../stores/processStore';
 import { TerminalView } from './TerminalView';
 import { useGitStore } from '../stores/gitStore';
 import { Badge } from './ui/badge';
+import { useSonarStore } from '../stores/sonarStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,13 +27,6 @@ export interface SonarRule {
 interface ProjectLink {
     projectKey?: string;
     token?: string;
-}
-
-interface GlobalSonarConfig {
-    serverUrl: string;
-    token: string;
-    organization?: string;
-    authType?: 'basic' | 'bearer';
 }
 
 interface SonarMetrics {
@@ -81,22 +75,9 @@ const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = 
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
-const GLOBAL_KEY = 'nexus-sonar-global-config';
 const METRICS_CACHE_KEY = 'nexus-sonar-metrics-cache';
 const STORAGE_SONAR_PATH = 'nexus-sonar-selected-path';
 const STORAGE_SONAR_TAB = 'nexus-sonar-active-tab';
-const DEFAULT_GLOBAL: GlobalSonarConfig = { serverUrl: 'https://sonarcloud.io', token: '', authType: 'basic' };
-
-function loadGlobalConfig(): GlobalSonarConfig {
-    try {
-        const raw = localStorage.getItem(GLOBAL_KEY);
-        if (raw) return { ...DEFAULT_GLOBAL, ...JSON.parse(raw) };
-    } catch (_) { }
-    return { ...DEFAULT_GLOBAL };
-}
-function saveGlobalConfig(cfg: GlobalSonarConfig) {
-    try { localStorage.setItem(GLOBAL_KEY, JSON.stringify(cfg)); } catch (_) { }
-}
 
 function loadMetricsCache(): Record<string, SonarMetrics> {
     try {
@@ -204,6 +185,9 @@ export const SonarPanel: React.FC = () => {
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
     const repos = useGitStore(s => s.repos);
     
+    const sonarConfig = useSonarStore(s => s.config);
+    const setSonarConfig = useSonarStore(s => s.setConfig);
+    
     const projects = state.projects;
 
     // ── Selection
@@ -220,7 +204,6 @@ export const SonarPanel: React.FC = () => {
     }, [selectedPath]);
 
     // ── Config
-    const [globalConfig, setGlobalConfig] = useState<GlobalSonarConfig>(loadGlobalConfig);
     const [configModalOpen, setConfigModalOpen] = useState(false);
 
     // Per-project: project key + token
@@ -269,7 +252,7 @@ export const SonarPanel: React.FC = () => {
 
     // ── Derived config
     const projectKey = link.projectKey || (projects.find(p => p.path === selectedPath)?.name as string || '');
-    const effectiveToken = link.token || globalConfig.token;
+    const effectiveToken = link.token || sonarConfig.token;
 
     const currentBranch = useMemo(() => {
         if (!selectedPath) return null;
@@ -277,12 +260,12 @@ export const SonarPanel: React.FC = () => {
     }, [selectedPath, repos]);
 
     const scanCommand = useMemo(() => {
-        const { serverUrl, token, organization } = globalConfig;
+        const { serverUrl, token, organization } = sonarConfig;
         let cmd = `npx sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${serverUrl} -Dsonar.token=${token}`;
         if (organization) cmd += ` -Dsonar.organization=${organization}`;
         if (currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
         return cmd;
-    }, [globalConfig, projectKey, currentBranch]);
+    }, [sonarConfig, projectKey, currentBranch]);
 
     const serviceId = useMemo(() => `${selectedPath}::${scanCommand} `, [selectedPath, scanCommand]);
     const processState = activeProcesses[serviceId];
@@ -301,20 +284,20 @@ export const SonarPanel: React.FC = () => {
         ]);
     }, []);
 
-    const baseUrl = globalConfig.serverUrl.replace(/\/+$/, '');
+    const baseUrl = sonarConfig.serverUrl.replace(/\/+$/, '');
 
     const authHeader = (token: string) =>
-        globalConfig.authType === 'bearer'
+        sonarConfig.authType === 'bearer'
             ? `Bearer ${token}`
             : `Basic ${btoa(token + ':')}`;
 
     const handleTestConnection = useCallback(async () => {
-        if (!globalConfig.token || !globalConfig.serverUrl) {
+        if (!sonarConfig.token || !sonarConfig.serverUrl) {
             setTestResult({ ok: false, message: 'Completa Server URL y Token.' });
             return;
         }
-        const testBase = globalConfig.serverUrl.replace(/\/+$/, '');
-        const testAuth = authHeader(globalConfig.token);
+        const testBase = sonarConfig.serverUrl.replace(/\/+$/, '');
+        const testAuth = authHeader(sonarConfig.token);
         const url = `${testBase}/api/authentication/validate`;
         setTestResult({ ok: null, message: 'Probando conexión...' });
         try {
@@ -332,10 +315,10 @@ export const SonarPanel: React.FC = () => {
         } catch (e) {
             setTestResult({ ok: false, message: `Error de red: ${e}` });
         }
-    }, [globalConfig]);
+    }, [sonarConfig]);
 
     const fetchMetrics = useCallback(async () => {
-        if (!projectKey || !effectiveToken || !globalConfig.serverUrl) return;
+        if (!projectKey || !effectiveToken || !sonarConfig.serverUrl) return;
         setLoadingMetrics(true);
         const metricKeys = 'alert_status,bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating';
         const url = `${baseUrl}/api/measures/component?component=${encodeURIComponent(projectKey)}&metricKeys=${metricKeys}`;
@@ -368,7 +351,7 @@ export const SonarPanel: React.FC = () => {
         } finally {
             setLoadingMetrics(false);
         }
-    }, [selectedPath, projectKey, effectiveToken, globalConfig, addLog, baseUrl]);
+    }, [selectedPath, projectKey, effectiveToken, sonarConfig, addLog, baseUrl]);
 
     const fetchMetricsRef = useRef(fetchMetrics);
     useEffect(() => { fetchMetricsRef.current = fetchMetrics; });
@@ -397,7 +380,7 @@ export const SonarPanel: React.FC = () => {
         } finally {
             setLoadingIssues(false);
         }
-    }, [selectedPath, projectKey, effectiveToken, globalConfig, addLog, baseUrl]);
+    }, [selectedPath, projectKey, effectiveToken, sonarConfig, addLog, baseUrl]);
 
     const handleSearch = useCallback(async (projectPath: string, initialName: string) => {
         setSearchingFor(projectPath);
@@ -406,7 +389,7 @@ export const SonarPanel: React.FC = () => {
         const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(initialName)}&ps=5`;
         addLog('network', `GET ${url} (auto-link)`);
         try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(globalConfig.token) } });
+            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(sonarConfig.token) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
@@ -414,21 +397,21 @@ export const SonarPanel: React.FC = () => {
             addLog('error', `Search failed: ${e}`);
             setSearchResults([]);
         }
-    }, [globalConfig, addLog, baseUrl]);
+    }, [sonarConfig, addLog, baseUrl]);
 
     const handleSearchQuery = useCallback(async () => {
-        if (!searchingFor || !searchQuery.trim() || !globalConfig.token) return;
+        if (!searchingFor || !searchQuery.trim() || !sonarConfig.token) return;
         setSearchResults(null);
         const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(searchQuery)}&ps=5`;
         try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(globalConfig.token) } });
+            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(sonarConfig.token) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
         } catch (_) {
             setSearchResults([]);
         }
-    }, [searchingFor, searchQuery, globalConfig, baseUrl]);
+    }, [searchingFor, searchQuery, sonarConfig, baseUrl]);
 
     const handleLinkProject = useCallback((projectPath: string, result: SonarProjectResult) => {
         const existing = loadLink(projectPath);
@@ -444,7 +427,7 @@ export const SonarPanel: React.FC = () => {
     }, [selectedPath, addLog]);
 
     useEffect(() => {
-        if (!selectedPath || !projectKey || !effectiveToken || !globalConfig.serverUrl) return;
+        if (!selectedPath || !projectKey || !effectiveToken || !sonarConfig.serverUrl) return;
         fetchMetricsRef.current();
     }, [selectedPath, projectKey, effectiveToken]);
 
@@ -589,7 +572,7 @@ export const SonarPanel: React.FC = () => {
                                                         <p className="text-xs text-slate-400 font-mono">{projectKey}</p>
                                                     </div>
                                                 </div>
-                                                <button onClick={() => openUrl(`${globalConfig.serverUrl}/dashboard?id=${projectKey}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors">
+                                                <button onClick={() => openUrl(`${sonarConfig.serverUrl}/dashboard?id=${projectKey}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors">
                                                     <ExternalLink size={13} /> Ver en Sonar
                                                 </button>
                                             </div>
@@ -700,14 +683,14 @@ export const SonarPanel: React.FC = () => {
 
                         <div className="grid grid-cols-2 gap-3">
                             <button 
-                                onClick={() => setGlobalConfig(g => ({ ...g, serverUrl: 'https://sonarcloud.io', authType: 'bearer' }))}
-                                className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${globalConfig.serverUrl.includes('sonarcloud.io') ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
+                                onClick={() => setSonarConfig({ serverUrl: 'https://sonarcloud.io', authType: 'bearer' })}
+                                className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${sonarConfig.serverUrl.includes('sonarcloud.io') ? 'bg-blue-600/20 border-blue-500 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
                             >
                                 SonarCloud (Public)
                             </button>
                             <button 
-                                onClick={() => setGlobalConfig(g => ({ ...g, authType: 'basic' }))}
-                                className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${!globalConfig.serverUrl.includes('sonarcloud.io') ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
+                                onClick={() => setSonarConfig({ authType: 'basic' })}
+                                className={`py-2 text-[10px] font-bold rounded-xl border transition-all ${!sonarConfig.serverUrl.includes('sonarcloud.io') ? 'bg-orange-600/20 border-orange-500 text-orange-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}
                             >
                                 SonarQube (Private/Local)
                             </button>
@@ -716,19 +699,19 @@ export const SonarPanel: React.FC = () => {
                         <div className="space-y-3">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Server URL</label>
-                                <input type="text" value={globalConfig.serverUrl} onChange={e => setGlobalConfig(g => ({ ...g, serverUrl: e.target.value }))} placeholder="https://sonarcloud.io o http://localhost:9000" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                                <input type="text" value={sonarConfig.serverUrl} onChange={e => setSonarConfig({ serverUrl: e.target.value })} placeholder="https://sonarcloud.io o http://localhost:9000" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
                             </div>
 
-                            {globalConfig.serverUrl.includes('sonarcloud.io') && (
+                            {sonarConfig.serverUrl.includes('sonarcloud.io') && (
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Organización (Solo SonarCloud)</label>
-                                    <input type="text" value={globalConfig.organization || ''} onChange={e => setGlobalConfig(g => ({ ...g, organization: e.target.value }))} placeholder="mi-organizacion" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                                    <input type="text" value={sonarConfig.organization || ''} onChange={e => setSonarConfig({ organization: e.target.value })} placeholder="mi-organizacion" className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
                                 </div>
                             )}
 
                             <div className="space-y-1">
                                 <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Token de Acceso</label>
-                                <input type="password" value={globalConfig.token} onChange={e => setGlobalConfig(g => ({ ...g, token: e.target.value }))} placeholder="squ_..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
+                                <input type="password" value={sonarConfig.token} onChange={e => setSonarConfig({ token: e.target.value })} placeholder="squ_..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-200 outline-none focus:border-blue-500 transition-colors" />
                             </div>
 
                             <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800">
@@ -737,8 +720,8 @@ export const SonarPanel: React.FC = () => {
                                     <span className="text-[9px] text-slate-500 tracking-tight">Cloud usa Bearer, On-Premise suele usar Basic</span>
                                 </div>
                                 <select 
-                                    value={globalConfig.authType} 
-                                    onChange={e => setGlobalConfig(g => ({ ...g, authType: e.target.value as any }))}
+                                    value={sonarConfig.authType} 
+                                    onChange={e => setSonarConfig({ authType: e.target.value as any })}
                                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none cursor-pointer"
                                 >
                                     <option value="basic">HTTP Basic</option>
@@ -755,7 +738,7 @@ export const SonarPanel: React.FC = () => {
                                 Probar Conexión
                             </button>
                             <button 
-                                onClick={() => { saveGlobalConfig(globalConfig); setConfigModalOpen(false); }} 
+                                onClick={() => { setConfigModalOpen(false); }} 
                                 className="px-6 py-2.5 bg-blue-600 text-white text-xs font-black rounded-xl hover:bg-blue-500 transition-colors shadow-lg shadow-blue-600/20"
                             >
                                 Guardar Configuración

@@ -52,6 +52,7 @@ export interface JiraStoreState {
     updateAccount: (id: string, patch: Partial<Pick<JiraAccount, 'name' | 'config'>>) => void;
     removeAccount: (id: string) => void;
     setActiveAccount: (id: string | null) => void;
+    hydrate: (accounts: JiraAccount[], activeAccountId: string | null) => void;
 
     // ── Config helpers ────────────────────────────────────────────────────────
     getActiveConfig: () => JiraConfig;
@@ -186,6 +187,14 @@ export const useJiraStore = create<JiraStoreState>()(
                     });
                 },
 
+                hydrate: (accounts, activeAccountId) => {
+                    const resolvedId = activeAccountId && accounts.some(a => a.id === activeAccountId)
+                        ? activeAccountId
+                        : accounts[0]?.id ?? null;
+                    syncLegacyKeys(accounts, resolvedId);
+                    set({ accounts, activeAccountId: resolvedId });
+                },
+
                 // ── Config helpers ────────────────────────────────────────────
 
                 getActiveConfig: () => {
@@ -247,9 +256,8 @@ export const useJiraStore = create<JiraStoreState>()(
                 name: 'nexus-jira-store',
                 // Persist everything except the full issue objects in selection
                 // (those are re-fetched; only keys are needed for persistence)
+                // accounts and activeAccountId are persisted in nexus-workspace.json, not here
                 partialize: (s) => ({
-                    accounts: s.accounts,
-                    activeAccountId: s.activeAccountId,
                     boardFilter: s.boardFilter,
                     boardProjectKey: s.boardProjectKey,
                     storiesSelection: {

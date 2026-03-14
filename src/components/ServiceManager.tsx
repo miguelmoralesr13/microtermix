@@ -25,6 +25,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 import { useGitStore } from '../stores/gitStore';
+import { useJiraStore } from '../stores/jiraStore';
+import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore } from '../stores/processStore';
 
 const ACTIVE_TERMINAL_STORAGE_KEY = 'nexus-active-terminal-tab';
@@ -49,6 +51,11 @@ export const ServiceManager: React.FC = () => {
 
     const gitAccounts = useGitStore(s => s.accounts);
     const gitRepoAccounts = useGitStore(s => s.repoAccounts);
+
+    const jiraAccounts = useJiraStore(s => s.accounts);
+    const jiraActiveAccountId = useJiraStore(s => s.activeAccountId);
+    const sonarConfig = useSonarStore(s => s.config);
+
     const processIds = useMemo(() => Object.keys(activeProcesses), [activeProcesses]);
 
     const setActiveTerminalTab = useCallback((id: string | null) => {
@@ -204,6 +211,7 @@ export const ServiceManager: React.FC = () => {
         selectedProjects, multiScript, globalEnvName, vitePreviewOpen,
         activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps, state.pipelines,
         gitAccounts, gitRepoAccounts,
+        jiraAccounts, jiraActiveAccountId, sonarConfig,
     ]);
 
     const handleLoadWorkspaceConfig = async () => {
