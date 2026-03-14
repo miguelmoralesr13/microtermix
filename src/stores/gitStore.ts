@@ -151,7 +151,7 @@ export const EMPTY_REPO_DATA: GitRepoData = {
 export const defaultRepoData = (): GitRepoData => ({
     isGitRepo: null,
     branches: { local: [], remote: [], stashes: [] },
-    status: { files: [], currentBranch: '', isMergeInProgress: false, isRebaseInProgress: false },
+    status: { files: [], currentBranch: '', isMergeInProgress: false, isRebaseInProgress: false, statusOutput: '' },
     timeline: { commits: [], localHashes: [] },
     aheadBehind: null,
     loading: { repo: false, branches: false, status: false, timeline: false, aheadBehind: false },
@@ -473,6 +473,7 @@ export const useGitStore = create<GitStore>()(
                 name: 'nexus-git-store',
                 partialize: (s) => ({
                     ui: s.ui,
+                    accounts: s.accounts,
                     // repoAccounts se persiste en nexus-workspace.json, no aquí
                     cloneFavorites: s.cloneFavorites,
                     repos: Object.fromEntries(

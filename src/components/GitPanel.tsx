@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Settings, RefreshCw, Github, Gitlab, Download } from 'lucide-react';
+import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen } from '@tauri-apps/api/event';
@@ -22,6 +22,7 @@ import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
+import { toast } from 'sonner';
 
 function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
     if (!remoteUrl) return null;
@@ -36,33 +37,41 @@ const MAX_PANEL = 800;
 export const GitPanel: React.FC = () => {
     const { state } = useWorkspace();
     
-    // Selectores granulares para evitar re-renders masivos al redimensionar
+    // Selectores granulares
     const activeTab = useGitStore(s => s.ui.activeTab);
     const sidebarWidth = useGitStore(s => s.ui.sidebarWidth);
     const stagingWidth = useGitStore(s => s.ui.stagingWidth);
-    
     const setUi = useGitStore(s => s.setUi);
+
     const fetchRepo = useGitStore(s => s.fetchRepo);
     const fetchAll = useGitStore(s => s.fetchAll);
-    const fetchStatus = useGitStore(s => s.fetchStatus);
     const fetchAheadBehind = useGitStore(s => s.fetchAheadBehind);
-
     const invalidate = useGitStore(s => s.invalidate);
     const ensureRepo = useGitStore(s => s.ensureRepo);
+
     const repoData = useGitStore(s => s.repos[activeTab ?? ''] ?? EMPTY_REPO_DATA);
 
     const accounts = useGitStore(s => s.accounts);
-    const repoAccounts = useGitStore(s => s.repoAccounts);
+    const gitRepoAccounts = useGitStore(s => s.repoAccounts);
     const setRepoAccount = useGitStore(s => s.setRepoAccount);
     const getActiveAccount = useGitStore(s => s.getActiveAccount);
 
+    // Inicializar activeTab si no hay uno
+    useEffect(() => {
+        if (!activeTab && state.projects.length > 0) {
+            setUi({ activeTab: state.projects[0].path as string });
+        }
+    }, [activeTab, state.projects, setUi]);
+
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
+
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
     const [detectedAccounts, setDetectedAccounts] = useState<typeof accounts>([]);
     const activeAccount = activeTab ? getActiveAccount(activeTab) : undefined;
+    const showBanner = !!activeTab && !activeAccount;
 
     const handleRefreshAll = useCallback((force = true, silent = false) => {
         if (!activeTab) return;
@@ -134,25 +143,32 @@ export const GitPanel: React.FC = () => {
 
     useEffect(() => {
         if (!activeTab) { setDetectedAccounts([]); return; }
-        if (repoAccounts[activeTab]) { setDetectedAccounts([]); return; }
-        if (accounts.length === 0) { setDetectedAccounts([]); return; }
+        if (gitRepoAccounts[activeTab]) { setDetectedAccounts([]); return; }
+        
+        if (accounts.length === 0) {
+            setDetectedAccounts([]); 
+            return; 
+        }
 
         invoke<{ success: boolean; stdout: string }>('git_execute', {
             projectPath: activeTab,
             args: ['remote', 'get-url', 'origin'],
         }).then(res => {
-            if (!res.success) { setDetectedAccounts([]); return; }
-            const provider = detectProviderFromUrl(res.stdout.trim());
-            if (!provider) { setDetectedAccounts([]); return; }
-            const matches = accounts.filter(a => a.provider === provider);
-            if (matches.length === 1) {
-                setRepoAccount(activeTab!, matches[0].id);
-                setDetectedAccounts([]);
-            } else {
-                setDetectedAccounts(matches);
+            if (!res.success) { 
+                // Si falla la detección del remoto, mostramos todas las cuentas para que elija
+                setDetectedAccounts(accounts); 
+                return; 
             }
-        }).catch(() => setDetectedAccounts([]));
-    }, [activeTab, repoAccounts, accounts]);
+            const provider = detectProviderFromUrl(res.stdout.trim());
+            if (!provider) { 
+                setDetectedAccounts(accounts); 
+                return; 
+            }
+            const matches = accounts.filter(a => a.provider === provider);
+            // Si hay matches del proveedor, mostramos esos. Si no, mostramos todos.
+            setDetectedAccounts(matches.length > 0 ? matches : accounts);
+        }).catch(() => setDetectedAccounts(accounts));
+    }, [activeTab, gitRepoAccounts, accounts]);
 
     const resizeSidebar = useCallback((delta: number) => {
         setUi({ sidebarWidth: Math.min(MAX_PANEL, Math.max(MIN_PANEL, sidebarWidth + delta)) });
@@ -259,19 +275,52 @@ export const GitPanel: React.FC = () => {
                 </div>
             </div>
 
-            {/* Banner auto-detección: múltiples cuentas coinciden */}
-            {detectedAccounts.length > 1 && activeTab && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-nexus-accent/10 border-b border-nexus-accent/30 text-xs text-slate-300 shrink-0">
-                    <span>Se detectaron {detectedAccounts.length} cuentas para este repo. Selecciona:</span>
-                    {detectedAccounts.map(a => (
-                        <button
-                            key={a.id}
-                            onClick={() => { setRepoAccount(activeTab!, a.id); setDetectedAccounts([]); }}
-                            className="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium"
-                        >
-                            {a.alias}
-                        </button>
-                    ))}
+            {/* Banner auto-detección: Selecciona una cuenta para este repo */}
+            {showBanner && (
+                <div className="flex items-center gap-3 px-4 py-1.5 bg-blue-600/15 border-b border-blue-500/30 text-xs shrink-0 backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                    {accounts.length === 0 ? (
+                        <>
+                            <div className="flex items-center gap-1.5 text-blue-400 font-bold">
+                                <AlertCircle size={14} />
+                                <span>No hay cuentas Git configuradas:</span>
+                            </div>
+                            <button
+                                onClick={() => setIsAccountModalOpen(true)}
+                                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all shadow-sm"
+                            >
+                                Configurar primera cuenta
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex items-center gap-1.5 text-blue-400 font-bold">
+                                <AlertCircle size={14} />
+                                <span>Asociar cuenta Git:</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {(detectedAccounts.length > 0 ? detectedAccounts : accounts).map(a => (
+                                    <button
+                                        key={a.id}
+                                        onClick={() => {
+                                            setRepoAccount(activeTab!, a.id);
+                                            setDetectedAccounts([]);
+                                            toast.success(`Cuenta "${a.alias}" asociada al repositorio`);
+                                        }}
+                                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium border border-slate-700 hover:border-blue-500 transition-all shadow-sm"
+                                    >
+                                        {a.alias}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                    <div className="flex-1" />
+                    <button 
+                        onClick={() => setIsAccountModalOpen(true)}
+                        className="text-[10px] text-slate-500 hover:text-blue-400 font-bold uppercase transition-colors"
+                    >
+                        Gestionar cuentas
+                    </button>
                 </div>
             )}
 
