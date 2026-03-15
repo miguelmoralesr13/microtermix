@@ -18,19 +18,6 @@ export function usePersistedState<T>(key: string, initialValue: T): [T, React.Di
     return [state, setState];
 }
 
-export const LogMessage = React.memo(({ message }: { message: string }) => {
-    try {
-        const parsed = JSON.parse(message);
-        return (
-            <pre className="text-[10px] text-slate-300 bg-slate-900/50 p-2 rounded-md border border-slate-800/50 whitespace-pre-wrap break-words">
-                {JSON.stringify(parsed, null, 2)}
-            </pre>
-        );
-    } catch {
-        return <span className="break-all">{message}</span>;
-    }
-});
-
 export function NeedConfig({ onGo }: { onGo: () => void }) {
     return (
         <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500 p-12">
@@ -48,7 +35,7 @@ export function parseAwsCredentialBlock(text: string): Partial<CwCredentials> {
         const eq = line.indexOf('=');
         if (eq === -1) continue;
         const key = line.slice(0, eq).trim().toLowerCase();
-        const value = line.slice(eq + 1).trim();
+        const value = line.slice(eq + 1).trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '');
         if (!value) continue;
         if (key === 'aws_access_key_id') result.accessKeyId = value;
         if (key === 'aws_secret_access_key') result.secretAccessKey = value;

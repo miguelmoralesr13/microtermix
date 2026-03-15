@@ -45,7 +45,7 @@ pub use crate::file_server::{
 pub use crate::workspace::{get_initial_workspace_for_window, open_new_workspace};
 pub use crate::cloudwatch::{
     cw_get_log_groups, cw_get_log_streams, cw_get_log_events, cw_filter_log_events,
-    cw_list_metrics, cw_get_metric_data,
+    cw_list_metrics, cw_get_metric_data, cw_start_tail, cw_stop_tail,
 };
 pub use crate::http_client::make_http_request;
 pub use crate::ec2::{
@@ -317,6 +317,8 @@ pub fn run() {
             cw_filter_log_events,
             cw_list_metrics,
             cw_get_metric_data,
+            cw_start_tail,
+            cw_stop_tail,
             http_client::execute_http_request,
             ec2_list_instances,
             ec2_start_instance,

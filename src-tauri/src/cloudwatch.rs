@@ -327,3 +327,139 @@ pub async fn cw_get_metric_data(
 
     Ok(points)
 }
+
+// ── Smart Live Tail Worker ────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn cw_stop_tail(
+    state: tauri::State<'_, crate::AppState>,
+    worker_id: String,
+) -> Result<(), String> {
+    let mut workers = state.cw_workers.lock().await;
+    if let Some(tx) = workers.remove(&worker_id) {
+        let _ = tx.send(());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cw_start_tail(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, crate::AppState>,
+    credentials: CwCredentials,
+    log_group: String,
+    filter_pattern: Option<String>,
+    worker_id: String,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    use tokio::sync::oneshot;
+    use std::collections::HashSet;
+
+    // 1. Kill existing worker with same ID
+    {
+        let mut workers = state.cw_workers.lock().await;
+        if let Some(tx) = workers.remove(&worker_id) {
+            let _ = tx.send(());
+        }
+    }
+
+    let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
+    {
+        let mut workers = state.cw_workers.lock().await;
+        workers.insert(worker_id.clone(), stop_tx);
+    }
+
+    let app_handle = app.clone();
+    let wid = worker_id.clone();
+    let lg = log_group.clone();
+    let fp = filter_pattern.clone();
+
+    tokio::spawn(async move {
+        let client = logs_client(&credentials).await;
+        let mut last_timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64 - 5000; // Start from 5 seconds ago
+
+        let mut sleep_ms = 1000;
+        let mut seen_ids = HashSet::new();
+        let mut no_data_ticks = 0;
+
+        loop {
+            // Check for stop signal
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+
+            let mut req = client.filter_log_events()
+                .log_group_name(&lg)
+                .start_time(last_timestamp + 1)
+                .limit(100);
+
+            if let Some(p) = &fp {
+                if !p.is_empty() {
+                    req = req.filter_pattern(p);
+                }
+            }
+
+            match req.send().await {
+                Ok(resp) => {
+                    let events: Vec<LogEvent> = resp.events().iter()
+                        .filter_map(|e| {
+                            let id = e.event_id().unwrap_or_default().to_string();
+                            if id.is_empty() || seen_ids.contains(&id) {
+                                return None;
+                            }
+                            
+                            // Keep last 200 IDs for deduplication
+                            seen_ids.insert(id);
+                            if seen_ids.len() > 200 {
+                                // Simple way to clear oldest: if it grows too much, reset.
+                                // A VecDeque would be better for a proper sliding window.
+                                if seen_ids.len() > 500 { seen_ids.clear(); }
+                            }
+
+                            let ts = e.timestamp().unwrap_or(0);
+                            if ts > last_timestamp {
+                                last_timestamp = ts;
+                            }
+
+                            Some(LogEvent {
+                                timestamp: ts,
+                                message: e.message().map(|m| m.trim_end_matches('\n').to_string()).unwrap_or_default(),
+                            })
+                        })
+                        .collect();
+
+                    if !events.is_empty() {
+                        let _ = app_handle.emit(&format!("cw-logs-{}", wid), &events);
+                        sleep_ms = 1000; // Reset to fast polling
+                        no_data_ticks = 0;
+                    } else {
+                        no_data_ticks += 1;
+                        // Adaptive Decay
+                        if no_data_ticks > 120 { // 2 mins at 1s
+                            sleep_ms = 5000;
+                        }
+                        if no_data_ticks > 600 { // 10 mins (approx)
+                            sleep_ms = 30000;
+                        }
+                    }
+                }
+                Err(e) => {
+                    let err_msg = format_logs_err(e);
+                    let _ = app_handle.emit(&format!("cw-logs-error-{}", wid), err_msg);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(5000)).await;
+                    continue;
+                }
+            }
+
+            tokio::select! {
+                _ = &mut stop_rx => break,
+                _ = tokio::time::sleep(tokio::time::Duration::from_millis(sleep_ms)) => {}
+            }
+        }
+    });
+
+    Ok(())
+}

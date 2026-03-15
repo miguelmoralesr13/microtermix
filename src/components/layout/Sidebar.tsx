@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
-    Network, Package, Ghost, Palette, Cloud,
+    Network, Package, Ghost,  Cloud,
     ChevronUp, ChevronDown 
 } from 'lucide-react';
 import { 

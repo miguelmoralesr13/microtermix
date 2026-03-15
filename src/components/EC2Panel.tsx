@@ -1,20 +1,18 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import {
     Monitor, RefreshCw, Settings, Play, Square, RotateCcw, Terminal,
     ChevronDown, ChevronRight, CheckCircle, XCircle, Circle, Loader,
-    AlertCircle, Eye, EyeOff, Search, X, Database, Link2,
+    AlertCircle, Eye, EyeOff, Search, X, Database, Link2, Plus, Trash2, Activity, ExternalLink, AlertTriangle
 } from 'lucide-react';
+import { useAwsStore, SsmTunnel } from '../stores/awsStore';
+import { CwCredentials } from '../services/cloudwatchApi';
+import { parseAwsCredentialBlock } from './cloudwatch/cwUtils';
+
+// ── Components ────────────────────────────────────────────────────────────────
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface Ec2Credentials {
-    access_key_id: string;
-    secret_access_key: string;
-    region: string;
-    session_token?: string;
-}
 
 interface Ec2Tag {
     key: string;
@@ -39,37 +37,14 @@ interface Ec2Instance {
     tags: Ec2Tag[];
 }
 
-interface ActiveTunnel {
-    serviceId: string;
-    instanceId: string;
-    instanceName: string;
-    remoteHost: string;
-    remotePort: number;
-    localPort: number;
-    status: 'connecting' | 'active' | 'stopped';
-}
-
 // ── localStorage ───────────────────────────────────────────────────────────────
 
-const CFG_KEY = 'microtermix-ec2-cfg';
 const SSH_KEY = 'microtermix-ec2-ssh';
 
 interface SshDefaults {
     username: string;
     keyPath: string;
     port: number;
-}
-
-function loadCreds(): Ec2Credentials {
-    try {
-        const raw = localStorage.getItem(CFG_KEY);
-        if (raw) return JSON.parse(raw);
-    } catch { /* ignore */ }
-    return { access_key_id: '', secret_access_key: '', region: 'us-east-1', session_token: '' };
-}
-
-function saveCreds(c: Ec2Credentials) {
-    localStorage.setItem(CFG_KEY, JSON.stringify(c));
 }
 
 function loadSshDefaults(): SshDefaults {
@@ -229,46 +204,74 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
 
 // ── Active Tunnels Panel ────────────────────────────────────────────────────────
 
-interface ActiveTunnelsPanelProps {
-    tunnels: ActiveTunnel[];
-    onStop: (serviceId: string) => void;
-}
+function ActiveTunnelsPanel() {
+    const { ssm, toggleTunnel, removeTunnel } = useAwsStore();
+    const [expanded, setExpanded] = useState(true);
 
-function ActiveTunnelsPanel({ tunnels, onStop }: ActiveTunnelsPanelProps) {
-    if (tunnels.length === 0) return null;
+    if (ssm.tunnels.length === 0) return null;
+
     return (
-        <div className="mx-4 mb-3 border border-slate-700 rounded-lg overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border-b border-slate-700">
+        <div className="mx-4 mb-3 border border-slate-700 rounded-lg overflow-hidden bg-slate-900/50 shadow-lg">
+            <div 
+                className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border-b border-slate-700 cursor-pointer hover:bg-slate-800 transition-colors"
+                onClick={() => setExpanded(!expanded)}
+            >
                 <Link2 size={13} className="text-microtermix-neon" />
-                <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Túneles activos</span>
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex-1">Túneles SSM Guardados</span>
+                <span className="text-[10px] text-slate-500 font-mono bg-slate-950 px-1.5 py-0.5 rounded-full">{ssm.tunnels.length}</span>
+                {expanded ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
             </div>
-            <div className="flex flex-col divide-y divide-slate-800">
-                {tunnels.map(t => (
-                    <div key={t.serviceId} className="flex items-center gap-3 px-3 py-2.5 bg-slate-900">
-                        <div className="shrink-0">
-                            {t.status === 'connecting'
-                                ? <Loader size={13} className="animate-spin text-yellow-400" />
-                                : t.status === 'active'
-                                    ? <CheckCircle size={13} className="text-green-400" />
-                                    : <XCircle size={13} className="text-slate-500" />
-                            }
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <div className="text-xs font-mono text-slate-200">
-                                localhost:{t.localPort} <span className="text-slate-500">→</span> {t.remoteHost}:{t.remotePort}
+            
+            {expanded && (
+                <div className="flex flex-col divide-y divide-slate-800/50">
+                    {ssm.tunnels.map(t => (
+                        <div key={t.id} className="flex items-center gap-3 px-3 py-2.5 bg-slate-900/30 group">
+                            <div className="shrink-0 relative">
+                                {t.active ? (
+                                    <>
+                                        <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-20" />
+                                        <CheckCircle size={14} className="text-green-400 relative z-10" />
+                                    </>
+                                ) : (
+                                    <XCircle size={14} className="text-slate-600" />
+                                )}
                             </div>
-                            <div className="text-xs text-slate-500 truncate">via {t.instanceName}</div>
+                            
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-slate-200">{t.name}</span>
+                                    <span className="text-[10px] text-slate-500 font-mono truncate">via {t.instanceId}</span>
+                                </div>
+                                <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                                    localhost:<span className="text-microtermix-accent">{t.localPort}</span> 
+                                    <span className="text-slate-600 mx-1">→</span> 
+                                    {t.remoteHost}:<span className="text-slate-300">{t.remotePort}</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={() => toggleTunnel(t.id)}
+                                    className={`px-3 py-1 rounded text-[10px] font-bold border transition-all ${
+                                        t.active 
+                                        ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' 
+                                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                                    }`}
+                                >
+                                    {t.active ? 'DETENER' : 'INICIAR'}
+                                </button>
+                                <button
+                                    onClick={() => removeTunnel(t.id)}
+                                    className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                                    title="Eliminar túnel"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
                         </div>
-                        <button
-                            onClick={() => onStop(t.serviceId)}
-                            className="px-2 py-0.5 rounded text-xs text-red-400 border border-red-800/40 hover:bg-red-900/20 transition-colors shrink-0"
-                            title="Detener túnel"
-                        >
-                            Detener
-                        </button>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -465,7 +468,7 @@ function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: I
     const stateLabel = inst.state.charAt(0).toUpperCase() + inst.state.slice(1);
 
     return (
-        <div className="border border-slate-800 rounded-lg overflow-hidden">
+        <div className="border border-slate-800 rounded-lg overflow-hidden group/row">
             {/* Main row */}
             <div
                 className="flex items-center gap-3 px-4 py-3 bg-slate-900 hover:bg-slate-800/70 cursor-pointer select-none"
@@ -481,14 +484,14 @@ function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: I
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-slate-100 truncate">{displayName}</span>
                         {inst.name && (
-                            <span className="text-xs text-slate-500 font-mono truncate">{inst.instance_id}</span>
+                            <span className="text-[10px] text-slate-500 font-mono truncate">{inst.instance_id}</span>
                         )}
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                        <span style={{ color: stateColor(inst.state) }}>{stateLabel}</span>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500 font-mono">
+                        <span style={{ color: stateColor(inst.state) }} className="font-bold">{stateLabel}</span>
                         <span>{inst.instance_type}</span>
                         {inst.availability_zone && <span>{inst.availability_zone}</span>}
-                        {connectHost && <span className="font-mono">{connectHost}</span>}
+                        {connectHost && <span className="text-microtermix-neon/60">{connectHost}</span>}
                     </div>
                 </div>
 
@@ -523,10 +526,13 @@ function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: I
                                     >
                                         <RotateCcw size={14} />
                                     </button>
+                                    
+                                    <div className="h-4 w-px bg-slate-800 mx-1" />
+
                                     <button
                                         onClick={handleConnect}
                                         disabled={!canConnect}
-                                        className="px-2.5 py-1 rounded text-xs bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 hover:bg-microtermix-neon/20 transition-colors disabled:opacity-40 flex items-center gap-1.5"
+                                        className="px-2.5 py-1 rounded text-[10px] font-bold bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 hover:bg-microtermix-neon/20 transition-colors disabled:opacity-40 flex items-center gap-1.5"
                                         title={canConnect ? buildSshCommand() : 'No public/private IP available'}
                                     >
                                         <Terminal size={12} />
@@ -534,14 +540,25 @@ function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: I
                                     </button>
                                     <button
                                         onClick={() => { setTunnelError(null); setShowTunnelModal(true); }}
-                                        className="px-2.5 py-1 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-colors flex items-center gap-1.5"
+                                        className="px-2.5 py-1 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-colors flex items-center gap-1.5"
                                         title="SSM Port Forwarding — conectar a bases de datos privadas"
                                     >
                                         <Database size={12} />
-                                        Tunnel
+                                        TUNNEL
                                     </button>
                                 </>
                             )}
+                            <button
+                                onClick={() => {
+                                    // Deep link logic could be handled by a global UI state or event
+                                    // For now we can emit an event or just show a message
+                                    console.log(`Deep link to logs for ${inst.instance_id}`);
+                                }}
+                                className="p-1.5 rounded text-slate-500 hover:text-microtermix-neon hover:bg-microtermix-neon/5 transition-colors"
+                                title="Ver Logs en CloudWatch"
+                            >
+                                <ExternalLink size={14} />
+                            </button>
                         </>
                     )}
                 </div>
@@ -615,89 +632,30 @@ interface InstancesTabProps {
     ssh: SshDefaults;
 }
 
-function InstancesTab({ creds, ssh }: InstancesTabProps) {
-    const [instances, setInstances] = useState<Ec2Instance[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+function InstancesTab({ ssh }: { ssh: SshDefaults }) {
+    const { 
+        credentials, 
+        ec2, 
+        fetchInstances, 
+        startInstance, 
+        stopInstance,
+        addTunnel 
+    } = useAwsStore();
+    
     const [pendingMap, setPendingMap] = useState<Record<string, string>>({});
     const [stateFilter, setStateFilter] = useState<StateFilter>('all');
     const [search, setSearch] = useState('');
-    const [tunnels, setTunnels] = useState<ActiveTunnel[]>([]);
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const fetchInstances = useCallback(async () => {
-        if (!creds.access_key_id || !creds.secret_access_key || !creds.region) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const result = await invoke<Ec2Instance[]>('ec2_list_instances', { credentials: creds });
-            setInstances(result);
-        } catch (e) {
-            setError(String(e));
-        } finally {
-            setLoading(false);
-        }
-    }, [creds]);
-
-    // Initial fetch + 30s auto-refresh
     useEffect(() => {
-        fetchInstances();
-        pollRef.current = setInterval(fetchInstances, 30_000);
-        return () => { if (pollRef.current) clearInterval(pollRef.current); };
-    }, [fetchInstances]);
-
-    // Listen for service-stopped to mark tunnels as stopped
-    useEffect(() => {
-        let unlisten: (() => void) | null = null;
-        listen<string>('service-stopped', ev => {
-            const stoppedId = ev.payload;
-            setTunnels(prev => prev.map(t =>
-                t.serviceId === stoppedId ? { ...t, status: 'stopped' } : t
-            ));
-        }).then(fn => { unlisten = fn; });
-        return () => { unlisten?.(); };
-    }, []);
-
-    // Listen for first log line from tunnel to mark it active
-    useEffect(() => {
-        let unlisten: (() => void) | null = null;
-        listen<{ service_id: string; line: string; is_error: boolean }>('service-logs', ev => {
-            const { service_id } = ev.payload;
-            if (!service_id.startsWith('ssm-tunnel::')) return;
-            setTunnels(prev => prev.map(t =>
-                t.serviceId === service_id && t.status === 'connecting'
-                    ? { ...t, status: 'active' }
-                    : t
-            ));
-        }).then(fn => { unlisten = fn; });
-        return () => { unlisten?.(); };
-    }, []);
-
-    function handleTunnelStarted(tunnel: ActiveTunnel) {
-        setTunnels(prev => {
-            // Replace if same serviceId already exists
-            const without = prev.filter(t => t.serviceId !== tunnel.serviceId);
-            return [...without, tunnel];
-        });
-    }
-
-    async function handleStopTunnel(serviceId: string) {
-        try {
-            await invoke('kill_service', { serviceId });
-        } catch { /* ignore */ }
-        setTunnels(prev => prev.filter(t => t.serviceId !== serviceId));
-    }
+        if (credentials) fetchInstances();
+    }, [credentials, fetchInstances]);
 
     async function handleAction(action: 'start' | 'stop' | 'reboot', id: string) {
         setPendingMap(p => ({ ...p, [id]: action }));
         try {
-            const cmd = action === 'start' ? 'ec2_start_instance'
-                : action === 'stop' ? 'ec2_stop_instance'
-                    : 'ec2_reboot_instance';
-            await invoke(cmd, { credentials: creds, instanceId: id });
-            // Short delay then refresh to pick up state transition
-            await new Promise(r => setTimeout(r, 1500));
-            await fetchInstances();
+            if (action === 'start') await startInstance(id);
+            else if (action === 'stop') await stopInstance(id);
+            else await invoke('ec2_reboot_instance', { credentials, instanceId: id });
         } catch (e) {
             alert(`Failed to ${action} instance: ${e}`);
         } finally {
@@ -705,7 +663,7 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
         }
     }
 
-    const filtered = instances.filter(i => {
+    const filtered = ec2.instances.filter(i => {
         if (stateFilter !== 'all' && i.state !== stateFilter) return false;
         if (search) {
             const q = search.toLowerCase();
@@ -717,38 +675,36 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
     });
 
     const counts = {
-        all: instances.length,
-        running: instances.filter(i => i.state === 'running').length,
-        stopped: instances.filter(i => i.state === 'stopped').length,
+        all: ec2.instances.length,
+        running: ec2.instances.filter(i => i.state === 'running').length,
+        stopped: ec2.instances.filter(i => i.state === 'stopped').length,
     };
 
-    const needsCreds = !creds.access_key_id || !creds.secret_access_key || !creds.region;
+    const needsCreds = !credentials?.accessKeyId;
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-slate-950/50">
             {/* Toolbar */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
-                {/* State filter tabs */}
-                <div className="flex gap-1">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0 bg-slate-900/20">
+                <div className="flex gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
                     {(['all', 'running', 'stopped'] as StateFilter[]).map(f => (
                         <button
                             key={f}
                             onClick={() => setStateFilter(f)}
-                            className={`px-3 py-1 rounded text-xs capitalize transition-colors ${stateFilter === f ? 'bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30' : 'text-slate-500 hover:text-slate-300'}`}
+                            className={`px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-tighter transition-all ${stateFilter === f ? 'bg-microtermix-neon text-slate-950 shadow-[0_0_10px_-2px_rgba(34,211,238,0.6)]' : 'text-slate-500 hover:text-slate-300'}`}
                         >
                             {f} <span className="opacity-60">({counts[f]})</span>
                         </button>
                     ))}
                 </div>
 
-                {/* Search */}
-                <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded px-2 py-1 flex-1 max-w-xs">
+                <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 flex-1 max-w-xs transition-all focus-within:border-microtermix-neon/50">
                     <Search size={13} className="text-slate-500 shrink-0" />
                     <input
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder="Filter by name or IP…"
-                        className="bg-transparent text-sm text-slate-100 focus:outline-none placeholder-slate-600 w-full"
+                        placeholder="Buscar por nombre, ID o IP…"
+                        className="bg-transparent text-xs text-slate-100 focus:outline-none placeholder-slate-600 w-full"
                     />
                     {search && (
                         <button onClick={() => setSearch('')} className="text-slate-500 hover:text-slate-300">
@@ -757,67 +713,75 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
                     )}
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
-                    {loading && <Loader size={14} className="animate-spin text-slate-400" />}
+                <div className="ml-auto flex items-center gap-3">
+                    {ec2.loading && <Loader size={14} className="animate-spin text-microtermix-neon" />}
                     <button
-                        onClick={fetchInstances}
-                        disabled={loading || needsCreds}
-                        className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors disabled:opacity-40"
-                        title="Refresh"
+                        onClick={() => fetchInstances(true)}
+                        disabled={ec2.loading || needsCreds}
+                        className="p-2 rounded-lg text-slate-400 hover:text-microtermix-neon hover:bg-microtermix-neon/10 transition-all disabled:opacity-40 border border-transparent hover:border-microtermix-neon/20"
+                        title="Refrescar instancias"
                     >
-                        <RefreshCw size={15} />
+                        <RefreshCw size={16} className={ec2.loading ? 'animate-spin' : ''} />
                     </button>
                 </div>
             </div>
 
             {/* Active tunnels */}
-            <ActiveTunnelsPanel
-                tunnels={tunnels.filter(t => t.status !== 'stopped')}
-                onStop={handleStopTunnel}
-            />
+            <ActiveTunnelsPanel />
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4">
-                {needsCreds && (
-                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
+                {needsCreds ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-600">
+                        <div className="p-6 rounded-full bg-slate-900 border border-slate-800">
+                            <Monitor size={48} strokeWidth={1} />
+                        </div>
+                        <p className="text-sm font-medium">Configura tus credenciales AWS en la pestaña de ajustes.</p>
+                    </div>
+                ) : ec2.error ? (
+                    <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm max-w-2xl mx-auto">
+                        <AlertTriangle size={18} className="shrink-0" />
+                        <div className="flex flex-col gap-1">
+                            <span className="font-bold uppercase text-[10px]">Error de Conexión</span>
+                            <span className="font-mono text-xs">{ec2.error}</span>
+                        </div>
+                    </div>
+                ) : !ec2.loading && ec2.instances.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-600">
                         <Monitor size={40} strokeWidth={1} />
-                        <p className="text-sm">Configure your AWS credentials in the Settings tab.</p>
+                        <p className="text-sm">No se encontraron instancias en <span className="text-slate-300 font-mono">{credentials?.region}</span>.</p>
                     </div>
-                )}
-
-                {!needsCreds && error && (
-                    <div className="flex items-start gap-2 p-3 bg-red-900/20 border border-red-800/40 rounded text-red-400 text-sm">
-                        <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                        <span>{error}</span>
-                    </div>
-                )}
-
-                {!needsCreds && !error && !loading && instances.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500">
-                        <Monitor size={40} strokeWidth={1} />
-                        <p className="text-sm">No instances found in <span className="text-slate-300">{creds.region}</span>.</p>
-                    </div>
-                )}
-
-                {!needsCreds && filtered.length > 0 && (
-                    <div className="flex flex-col gap-2">
+                ) : (
+                    <div className="flex flex-col gap-3 max-w-5xl mx-auto">
                         {filtered.map(inst => (
                             <InstanceRow
                                 key={inst.instance_id}
                                 inst={inst}
                                 ssh={ssh}
-                                creds={creds}
+                                creds={{
+                                    access_key_id: credentials!.accessKeyId,
+                                    secret_access_key: credentials!.secretAccessKey,
+                                    region: credentials!.region,
+                                    session_token: credentials!.sessionToken
+                                }}
                                 onAction={handleAction}
                                 pending={pendingMap[inst.instance_id] ?? null}
-                                onTunnelStarted={handleTunnelStarted}
+                                onTunnelStarted={(t) => {
+                                    addTunnel({
+                                        name: t.instanceName,
+                                        instanceId: t.instanceId,
+                                        remoteHost: t.remoteHost,
+                                        remotePort: t.remotePort,
+                                        localPort: t.localPort
+                                    });
+                                }}
                             />
                         ))}
-                    </div>
-                )}
-
-                {!needsCreds && !error && instances.length > 0 && filtered.length === 0 && (
-                    <div className="text-center text-slate-500 text-sm pt-16">
-                        No instances match the current filter.
+                        {filtered.length === 0 && ec2.instances.length > 0 && (
+                            <div className="text-center text-slate-500 text-sm pt-16 italic">
+                                Ninguna instancia coincide con los filtros actuales.
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -830,72 +794,56 @@ function InstancesTab({ creds, ssh }: InstancesTabProps) {
 type Tab = 'instances' | 'settings';
 
 export function EC2Panel() {
+    const { credentials } = useAwsStore();
     const [tab, setTab] = useState<Tab>('instances');
-    const [creds, setCreds] = useState<Ec2Credentials>(loadCreds);
     const [ssh, setSsh] = useState<SshDefaults>(loadSshDefaults);
-    const [testing, setTesting] = useState(false);
-    const [testResult, setTestResult] = useState<string | null>(null);
 
     function handleSave() {
-        saveCreds(creds);
         saveSshDefaults(ssh);
-        setTestResult(null);
         setTab('instances');
-    }
-
-    async function handleTest() {
-        setTesting(true);
-        setTestResult(null);
-        try {
-            await invoke<Ec2Instance[]>('ec2_list_instances', { credentials: creds });
-            setTestResult('✓ Connection successful');
-        } catch (e) {
-            setTestResult(`✗ ${e}`);
-        } finally {
-            setTesting(false);
-        }
     }
 
     return (
         <div className="flex flex-col h-full bg-slate-950 text-slate-100">
             {/* Header */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
-                <Monitor size={18} className="text-microtermix-neon" />
-                <h2 className="text-sm font-semibold text-slate-200">AWS EC2</h2>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0 bg-slate-900/40">
+                <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-microtermix-neon/10 border border-microtermix-neon/30">
+                        <Monitor size={18} className="text-microtermix-neon" />
+                    </div>
+                    <h2 className="text-sm font-bold text-slate-200 tracking-tight">AWS EC2</h2>
+                </div>
 
-                <div className="flex gap-1 ml-4">
+                <div className="flex gap-1 ml-6 bg-slate-900/50 p-1 rounded-xl border border-slate-800">
                     {(['instances', 'settings'] as Tab[]).map(t => (
                         <button
                             key={t}
                             onClick={() => setTab(t)}
-                            className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs capitalize transition-colors ${tab === t ? 'bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30' : 'text-slate-500 hover:text-slate-300'}`}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${tab === t ? 'bg-slate-800 text-microtermix-neon shadow-inner' : 'text-slate-500 hover:text-slate-300'}`}
                         >
-                            {t === 'settings' && <Settings size={12} />}
-                            {t === 'instances' && <Monitor size={12} />}
-                            {t.charAt(0).toUpperCase() + t.slice(1)}
+                            {t === 'settings' ? <Settings size={13} /> : <Activity size={13} />}
+                            {t === 'instances' ? 'Instancias' : 'Ajustes'}
                         </button>
                     ))}
                 </div>
 
-                {creds.region && (
-                    <span className="ml-auto text-xs text-slate-500 font-mono">{creds.region}</span>
+                {credentials?.region && (
+                    <div className="ml-auto flex items-center gap-2 px-3 py-1 bg-slate-900 border border-slate-800 rounded-full">
+                        <div className="w-1.5 h-1.5 rounded-full bg-microtermix-neon animate-pulse" />
+                        <span className="text-[10px] text-slate-400 font-mono font-bold">{credentials.region}</span>
+                    </div>
                 )}
             </div>
 
             {/* Tab content */}
             <div className="flex-1 overflow-hidden">
-                {tab === 'instances' && <InstancesTab creds={creds} ssh={ssh} />}
+                {tab === 'instances' && <InstancesTab ssh={ssh} />}
                 {tab === 'settings' && (
-                    <div className="overflow-y-auto h-full">
+                    <div className="overflow-y-auto h-full bg-slate-950/20">
                         <SettingsTab
-                            creds={creds}
-                            setCreds={setCreds}
                             ssh={ssh}
                             setSsh={setSsh}
                             onSave={handleSave}
-                            onTest={handleTest}
-                            testing={testing}
-                            testResult={testResult}
                         />
                     </div>
                 )}

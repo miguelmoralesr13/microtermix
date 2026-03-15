@@ -147,5 +147,23 @@ export function cwGetMetricData(
         periodSecs,
         startMs,
         endMs,
-    });
-}
+        });
+        }
+
+        export function cwStartTail(
+        cfg: CwCredentials,
+        logGroup: string,
+        filterPattern: string | null,
+        workerId: string,
+        ): Promise<void> {
+        return invoke('cw_start_tail', {
+            credentials: toRust(cfg),
+            logGroup,
+            filterPattern,
+            workerId,
+        });
+        }
+
+        export function cwStopTail(workerId: string): Promise<void> {
+        return invoke('cw_stop_tail', { workerId });
+        }

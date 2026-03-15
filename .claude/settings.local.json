@@ -40,7 +40,8 @@
       "Bash(wc -l /mnt/datos/projects/microtermix/src/components/Git*.tsx | tail -1)",
       "Bash(cat package.json | python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}.items\\(\\)]\" 2>/dev/null | head -60)",
       "Bash(git add:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(find:*)"
     ]
   }
 }
