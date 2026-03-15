@@ -131,7 +131,6 @@ Pattern mirrors `gitStore.ts`: `create` with `persist` + `devtools` middleware.
 
 ```typescript
 interface TailTarget {
-  creds: CwCredentials   // passed through to the Rust cw_start_tail command
   logGroup: string
   stream?: string
   filterPattern?: string
@@ -173,6 +172,8 @@ interface CwStore {
 **Persistence:** Only `recentNamespaces` and `recentDimensions` are persisted to localStorage via the `partialize` option. All other fields are ephemeral.
 
 **Tauri invocation layer:** `cwStore.startTail()` and `cwStore.stopTail()` are responsible for both updating the store state (`isTailing`, `tailTarget`) AND calling the Tauri commands via `cloudwatchApi.startTail()` / `cloudwatchApi.stopTail()`. The store is the single call site — `LogsTab` and other components call `cwStore.startTail()` only, never `invoke()` directly. `cloudwatchApi.ts` provides the typed wrappers around `invoke('cw_start_tail', ...)` and `invoke('cw_stop_tail')`.
+
+**Credentials:** `cwStore.startTail()` reads credentials internally via `loadCwConfig()` (which reads from localStorage `microtermix-cloudwatch-cfg`). Callers do not need to pass credentials — `TailTarget` only contains the log targeting parameters.
 
 ### 3.2 Batching Strategy
 
