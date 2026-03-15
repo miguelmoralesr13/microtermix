@@ -222,9 +222,15 @@ Flow:
 4. Record start time, execute request, compute `duration_ms`
 5. Return `InvokeResponse` with status, headers (as `HashMap<String,String>`), body as UTF-8 string
 
-### 2c. `lib.rs` — register new commands
+### 2c. `lib.rs` — register new commands and module
+
+Add `mod sigv4;` alongside the other module declarations at the top of `lib.rs`. Then register the three new Tauri commands:
 
 ```rust
+// module declaration (top of file, with other mod declarations)
+mod sigv4;
+
+// command registration (in .invoke_handler)
 apigw_fetch_all,
 apigw_get_stages,
 apigw_invoke_endpoint,
@@ -335,7 +341,12 @@ goToLogs: (logGroup) => set({ activeTab: 'logs', preloadedLogGroup: logGroup }),
 clearPreloadedLogGroup: () => set({ preloadedLogGroup: null }),
 ```
 
-The CloudWatch logs panel reads `preloadedLogGroup` on mount/tab-switch and pre-fills its log group filter input.
+The CloudWatch `LogsTab` reads `preloadedLogGroup` on mount/tab-switch and pre-fills the selected group. Since `selectedGroup` uses `usePersistedState` (persisted to localStorage), the effect must:
+1. Call `setGroupSearch(preloadedLogGroup)` — clears the sidebar filter so the group is visible
+2. Call `setSelectedGroup(preloadedLogGroup)` — selects it (persisted setter)
+3. Call `clearPreloadedLogGroup()` — resets the store
+
+Pattern mirrors how `MetricsTab` consumes `preloadedMetric`.
 
 ---
 
@@ -393,5 +404,5 @@ User clicks [Enviar]
 | `src/components/ApiGatewayDetails.tsx` | Modify |
 | `src-tauri/src/sigv4.rs` | Create |
 | `src-tauri/src/apigateway.rs` | Modify (add 3 commands, refactor to internal helpers) |
-| `src-tauri/src/lib.rs` | Modify (register 3 new commands) |
+| `src-tauri/src/lib.rs` | Modify (add `mod sigv4;` + register 3 new commands) |
 | `src-tauri/Cargo.toml` | Modify (add `aws-sigv4 = { version = "1", features = ["sign-http"] }`) |
