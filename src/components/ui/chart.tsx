@@ -1,5 +1,5 @@
 import * as React from "react"
-import { ResponsiveContainer, TooltipProps } from "recharts"
+import { ResponsiveContainer, TooltipContentProps } from "recharts"
 
 export const ChartContainer = React.forwardRef<
   HTMLDivElement,
@@ -20,7 +20,9 @@ export function ChartTooltip({
   payload,
   label,
   formatter,
-}: TooltipProps<number, string> & { formatter?: (val: number) => React.ReactNode }) {
+}: Omit<TooltipContentProps<number, string>, "formatter"> & { 
+  formatter?: (val: number) => React.ReactNode 
+}) {
   if (!active || !payload?.length) return null
   
   return (

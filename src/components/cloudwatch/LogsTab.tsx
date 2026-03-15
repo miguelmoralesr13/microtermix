@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Star, X, Copy, Check, ChevronRight, ChevronDown, Filter, AlertTriangle, BarChart3 } from 'lucide-react';
+import { RefreshCw, Star, X, Copy, Check, Filter, AlertTriangle, BarChart3 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import {
@@ -11,7 +11,6 @@ import {
     cwFilterLogEvents,
     cwStartTail,
     cwStopTail,
-    cwGetMetricData
 } from '../../services/cloudwatchApi';
 import { usePersistedState } from './cwUtils';
 
@@ -339,7 +338,6 @@ export function LogsTab() {
         setWorkerError(null);
         setLoadingEvents(true);
 
-        const startMs = Date.now() - (timeRange * 60 * 1000);
         
         // Use FilterLogEvents for tailing regardless of mergedView, but if not merged, filter by stream name
         // Wait, the Rust worker uses FilterLogEvents which is cross-stream. 

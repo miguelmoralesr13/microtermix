@@ -87,15 +87,10 @@ export function Ec2Tab() {
     }
 
     async function handleSsmConnect(inst: Ec2Instance) {
-        if (connectingId) return;
+        if (!cfg || connectingId) return;
         setConnectingId({ id: inst.instance_id, type: 'ssm' });
         const serviceId = `ec2::ssm::${inst.instance_id}`;
-        const credentials = {
-            access_key_id: cfg.accessKeyId,
-            secret_access_key: cfg.secretAccessKey,
-            region: cfg.region,
-            session_token: cfg.sessionToken ?? null,
-        };
+        const credentials = toEc2Rust(cfg);
         try {
             await invoke('ssm_start_session', {
                 credentials,

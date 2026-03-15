@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-    Monitor, RefreshCw, Settings, Play, Square, RotateCcw, Terminal,
+    Monitor, RefreshCw, Play, Square, RotateCcw,
     ChevronDown, ChevronRight, CheckCircle, XCircle, Circle, Loader,
-    AlertCircle, Eye, EyeOff, Search, X, Database, Link2, Trash2, Activity, ExternalLink, AlertTriangle
-} from 'lucide-react';
+    AlertCircle, Eye, EyeOff, Search, X, Database, Link2, Trash2, } from 'lucide-react';
 import { useAwsStore } from '../stores/awsStore';
 import { CwCredentials } from '../services/cloudwatchApi';
 import { parseAwsCredentialBlock } from './cloudwatch/cwUtils';
+import { Button } from '@base-ui/react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

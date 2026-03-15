@@ -224,7 +224,7 @@ export const ApiGatewayDetails: React.FC = () => {
                         <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter ml-1">Stage</span>
                         <Select 
                             value={activeStage} 
-                            onValueChange={(val) => setSelectedStage(selectedApi.id, val)}
+                            onValueChange={(val) => setSelectedStage(selectedApi.id, val??"")}
                         >
                             <SelectTrigger className="h-8 bg-slate-800 border-slate-700 text-xs text-slate-300 min-w-[140px]">
                                 <SelectValue placeholder="Seleccionar stage" />

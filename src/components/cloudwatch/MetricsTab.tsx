@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import  { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, X, Activity, BarChart3, TrendingUp, Filter } from 'lucide-react';
 import {
     CwMetricItem,
     CwDimension,
-    CwDatapoint,
     cwListMetrics,
     cwGetMetricData
 } from '../../services/cloudwatchApi';
@@ -16,11 +15,11 @@ import { useAwsStore } from '../../stores/awsStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 // ── Multi-Metric Chart ───────────────────────────────────────────────────────
-import { ChartContainer, ChartTooltip } from '../ui/chart';
+import {  ChartTooltip } from '../ui/chart';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface MultiStatData {
@@ -73,7 +72,7 @@ function MetricChart({ data }: { data: MultiStatData[] }) {
                         width={45}
                     />
                     <CartesianGrid stroke="#1e293b" vertical={false} strokeDasharray="3 3" />
-                    <RechartsTooltip content={<ChartTooltip />} />
+                    <RechartsTooltip content={<ChartTooltip active=false  />} />
                     <Legend 
                         verticalAlign="top" 
                         align="right" 
