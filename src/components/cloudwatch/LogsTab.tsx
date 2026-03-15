@@ -123,14 +123,16 @@ const JsonExpandable = ({ data }: { data: any }) => {
     );
 };
 
-const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy }: { 
+const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy, filters }: { 
     event: CwLogEvent, 
     index: number, 
     onRequestIdClick: (id: string) => void,
     copiedId: string | null,
-    onCopy: (msg: string, id: string) => void
+    onCopy: (msg: string, id: string) => void,
+    filters: string[]
 }) => {
     const lineId = `${event.timestamp}-${index}`;
+    const [expanded, setExpanded] = useState(false);
     
     // Detect JSON
     const jsonParsed = useMemo(() => {
@@ -147,37 +149,76 @@ const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy }
         return match ? match[0] : null;
     }, [event.message]);
 
+    // Highlight Function
+    const renderMessage = () => {
+        let msg = event.message;
+        if (!filters.length && !requestId) return msg;
+
+        // Parts to highlight
+        const highlightTokens = [...filters];
+        if (requestId) highlightTokens.push(requestId);
+
+        if (!highlightTokens.length) return msg;
+
+        // Escape regex special chars and join with |
+        const pattern = highlightTokens
+            .map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('|');
+        const regex = new RegExp(`(${pattern})`, 'gi');
+        
+        const parts = msg.split(regex);
+
+        return parts.map((part, i) => {
+            if (!part) return null;
+            const isHighlight = regex.test(part);
+            const isRequestId = requestId && part.toLowerCase() === requestId.toLowerCase();
+
+            if (isRequestId) {
+                return (
+                    <button 
+                        key={i}
+                        onClick={(e) => { e.stopPropagation(); onRequestIdClick(requestId); }}
+                        className="text-microtermix-accent hover:underline decoration-microtermix-accent/50 underline-offset-2 font-bold"
+                    >
+                        {part}
+                    </button>
+                );
+            }
+
+            if (isHighlight) {
+                return (
+                    <span key={i} className="bg-amber-400/30 text-amber-200 px-0.5 rounded border border-amber-500/30 font-bold">
+                        {part}
+                    </span>
+                );
+            }
+
+            return <span key={i}>{part}</span>;
+        });
+    };
+
     return (
-        <div className="flex gap-3 leading-relaxed hover:bg-slate-800/40 p-1.5 rounded-md transition-colors w-full group overflow-hidden relative border-b border-transparent hover:border-slate-800/50">
+        <div 
+            onClick={() => jsonParsed && setExpanded(!expanded)}
+            className={`flex gap-3 leading-relaxed p-1.5 rounded-md transition-colors w-full group overflow-hidden relative border-b border-transparent hover:border-slate-800/50 ${jsonParsed ? 'cursor-pointer hover:bg-slate-800/60' : 'hover:bg-slate-800/40'}`}
+        >
             <span className="text-slate-600 shrink-0 select-none whitespace-nowrap mt-0.5 w-16 text-right" title={new Date(event.timestamp).toLocaleString()}>
                 {new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}
             </span>
             <div className="flex-1 min-w-0">
                 <div className="break-all whitespace-pre-wrap">
-                    {requestId ? (
-                        <>
-                            {event.message.split(requestId).map((part, i, arr) => (
-                                <React.Fragment key={i}>
-                                    {part}
-                                    {i < arr.length - 1 && (
-                                        <button 
-                                            onClick={() => onRequestIdClick(requestId)}
-                                            className="text-microtermix-accent hover:underline decoration-microtermix-accent/50 underline-offset-2"
-                                        >
-                                            {requestId}
-                                        </button>
-                                    )}
-                                </React.Fragment>
-                            ))}
-                        </>
-                    ) : (
-                        event.message
-                    )}
+                    {renderMessage()}
                 </div>
-                {jsonParsed && <JsonExpandable data={jsonParsed} />}
+                {expanded && jsonParsed && (
+                    <div className="mt-2 animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
+                        <pre className="p-2.5 bg-slate-950 border border-microtermix-neon/30 rounded-lg text-[10px] overflow-x-auto whitespace-pre font-mono text-slate-300 shadow-[0_0_20px_-10px_rgba(34,211,238,0.3)]">
+                            {JSON.stringify(jsonParsed, null, 2)}
+                        </pre>
+                    </div>
+                )}
             </div>
             <button
-                onClick={() => onCopy(event.message, lineId)}
+                onClick={(e) => { e.stopPropagation(); onCopy(event.message, lineId); }}
                 className={`absolute right-2 top-2 p-1.5 rounded bg-slate-900/80 border border-slate-700 opacity-0 group-hover:opacity-100 transition-all hover:bg-slate-800 ${copiedId === lineId ? 'text-emerald-400 opacity-100' : 'text-slate-400'}`}
                 title="Copiar línea"
             >
@@ -400,16 +441,19 @@ export function LogsTab({ cfg }: LogsTabProps) {
             .finally(() => setLoadingEvents(false));
 
         const unlistenLogs = listen<CwLogEvent[]>(`cw-logs-${workerId}`, (event) => {
+            const newEvents = event.payload;
+            console.log(`[CloudWatch] Recibidos ${newEvents.length} eventos nuevos para ${workerId}`);
+            
             setEvents(prev => {
-                const newEvents = event.payload;
-                // Prepend new events (since we want newest first in the list, or oldest first?)
-                // Standard terminal is oldest first (bottom). Let's do that for Live feel.
-                const combined = [...prev, ...newEvents];
-                return combined.slice(-5000); // Keep last 5000
+                // Sort new events newest first and prepend them
+                const sortedNew = [...newEvents].sort((a, b) => b.timestamp - a.timestamp);
+                const combined = [...sortedNew, ...prev];
+                return combined.slice(0, 5000); // Keep last 5000
             });
         });
 
         const unlistenError = listen<string>(`cw-logs-error-${workerId}`, (event) => {
+            console.error(`[CloudWatch] Error en worker ${workerId}:`, event.payload);
             setWorkerError(event.payload);
         });
 
@@ -436,8 +480,8 @@ export function LogsTab({ cfg }: LogsTabProps) {
 
         fetchFn()
             .then(res => {
-                // For Live feel, we want oldest first (index 0 is oldest, last index is newest)
-                const sorted = [...res.events].sort((a, b) => a.timestamp - b.timestamp);
+                // Initial load: Newest first (descending)
+                const sorted = [...res.events].sort((a, b) => b.timestamp - a.timestamp);
                 setEvents(sorted);
                 setBackToken(res.next_backward_token);
             })
@@ -455,10 +499,11 @@ export function LogsTab({ cfg }: LogsTabProps) {
 
             const res = await fetchFn();
             if (res.events.length > 0) {
-                const sortedHistory = [...res.events].sort((a, b) => a.timestamp - b.timestamp);
+                // History: Sort newest first and append to the end (bottom)
+                const sortedHistory = [...res.events].sort((a, b) => b.timestamp - a.timestamp);
                 setEvents(prev => {
-                    const combined = [...sortedHistory, ...prev];
-                    return combined.slice(-10000);
+                    const combined = [...prev, ...sortedHistory];
+                    return combined.slice(0, 10000);
                 });
             }
             setBackToken(res.next_backward_token);
@@ -634,6 +679,20 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                         LIVE
                                     </button>
 
+                                    <button
+                                        onClick={() => {
+                                            setMergedView(!mergedView);
+                                            if (!mergedView) setSelectedStream(null);
+                                        }}
+                                        className={`px-2 py-1 text-[10px] font-bold rounded border transition-all ${mergedView
+                                            ? 'bg-microtermix-neon/10 text-microtermix-neon border-microtermix-neon/30'
+                                            : 'bg-slate-800 text-slate-500 border-slate-700 hover:text-slate-300'
+                                        }`}
+                                        title="Alternar entre stream individual o todos los streams del grupo"
+                                    >
+                                        MULTISTREAM {mergedView ? 'ON' : 'OFF'}
+                                    </button>
+
                                     <div className="relative">
                                         <Filter size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600" />
                                         <input
@@ -688,33 +747,32 @@ export function LogsTab({ cfg }: LogsTabProps) {
 
                         <div className="flex-1 min-h-0 font-mono text-[11px] text-slate-300">
                             <Virtuoso
-                                ref={virtuosoRef}
-                                data={filteredEvents}
-                                followOutput="auto"
-                                initialTopMostItemIndex={filteredEvents.length - 1}
-                                itemContent={(index, event) => (
-                                    <LogLine 
-                                        key={`${event.timestamp}-${index}`}
-                                        event={event} 
-                                        index={index} 
-                                        onRequestIdClick={onRequestIdClick}
-                                        copiedId={copiedId}
-                                        onCopy={copyLine}
-                                    />
-                                )}
-                                components={{
-                                    Header: () => (
-                                        <div className="py-4 border-b border-slate-900 mb-2">
+                            ref={virtuosoRef}
+                            data={filteredEvents}
+                            initialTopMostItemIndex={0}
+                            itemContent={(index, event) => (
+                                <LogLine 
+                                    key={`${event.timestamp}-${index}`}
+                                    event={event} 
+                                    index={index} 
+                                    onRequestIdClick={onRequestIdClick}
+                                    copiedId={copiedId}
+                                    onCopy={copyLine}
+                                    filters={logFilters}
+                                />
+                            )}                                components={{
+                                    Footer: () => (
+                                        <div className="py-4 border-t border-slate-900 mt-2">
                                             {backToken ? (
                                                 <button 
                                                     onClick={loadHistory}
                                                     disabled={loadingHistory}
                                                     className="w-full py-2 text-[10px] text-slate-500 hover:text-microtermix-neon transition-colors"
                                                 >
-                                                    {loadingHistory ? 'Cargando historia...' : 'Cargar logs anteriores ↑'}
+                                                    {loadingHistory ? 'Cargando historia...' : 'Cargar logs antiguos ↓'}
                                                 </button>
                                             ) : (
-                                                <div className="text-center text-[9px] text-slate-700 italic">Inicio del periodo alcanzado</div>
+                                                <div className="text-center text-[9px] text-slate-700 italic">Fin de la historia</div>
                                             )}
                                         </div>
                                     )

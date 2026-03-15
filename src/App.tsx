@@ -187,7 +187,19 @@ function useLinuxClipboardFix() {
       const key = e.key.toLowerCase();
       // Ctrl+Shift+Z → redo (alternative to Ctrl+Y)
       const cmd = (e.shiftKey && key === 'z') ? 'redo' : EDIT_SHORTCUT_MAP[key];
-      if (cmd) document.execCommand(cmd);
+      
+      if (cmd) {
+        // Prevent double trigger if we are in an input/textarea
+        const active = document.activeElement;
+        const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
+        
+        if (isInput && cmd === 'paste') {
+          // Let the browser handle native paste in inputs
+          return;
+        }
+        
+        document.execCommand(cmd);
+      }
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
