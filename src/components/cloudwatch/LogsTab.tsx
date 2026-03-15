@@ -4,7 +4,6 @@ import { RefreshCw, Star, X, Copy, Check, ChevronRight, ChevronDown, Filter, Ale
 import { listen } from '@tauri-apps/api/event';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import {
-    CwCredentials,
     CwLogEvent,
     cwGetLogGroups,
     cwGetLogStreams,
@@ -16,112 +15,10 @@ import {
 } from '../../services/cloudwatchApi';
 import { usePersistedState } from './cwUtils';
 
-interface LogsTabProps {
-    cfg: CwCredentials;
-}
+import { useCwStore } from '../../stores/cwStore';
+import { useAwsStore } from '../../stores/awsStore';
 
 // ── Components ────────────────────────────────────────────────────────────────
-
-const MiniChart = ({ points, color = "#22d3ee", label }: { points: any[], color?: string, label: string }) => {
-    if (points.length === 0) return <div className="h-12 flex items-center justify-center text-[9px] text-slate-700 italic border border-slate-800/50 rounded bg-slate-900/30">Sin datos</div>;
-    
-    const maxVal = Math.max(...points.map(p => p.value)) || 1;
-    const minVal = Math.min(...points.map(p => p.value));
-    const range = maxVal - minVal || 1;
-    
-    return (
-        <div className="flex flex-col gap-1 flex-1 min-w-[100px]">
-            <div className="flex justify-between items-baseline px-1">
-                <span className="text-[9px] text-slate-500 uppercase font-bold">{label}</span>
-                <span className="text-[10px] text-slate-300 font-mono">
-                    {points[points.length-1].value.toFixed(label.includes('Duration') ? 0 : 1)}
-                    {label.includes('Duration') ? 'ms' : ''}
-                </span>
-            </div>
-            <div className="h-10 bg-slate-900/50 rounded border border-slate-800/50 p-1 flex items-end gap-px">
-                {points.slice(-20).map((p, i) => {
-                    const h = ((p.value - minVal) / range) * 100;
-                    return (
-                        <div 
-                            key={i} 
-                            className="flex-1 rounded-t-sm transition-all hover:opacity-80" 
-                            style={{ height: `${Math.max(5, h)}%`, backgroundColor: color }}
-                            title={`${new Date(p.timestamp).toLocaleTimeString()}: ${p.value}`}
-                        />
-                    );
-                })}
-            </div>
-        </div>
-    );
-};
-
-const QuickMetrics = ({ cfg, logGroup }: { cfg: CwCredentials, logGroup: string }) => {
-    const isLambda = logGroup.startsWith('/aws/lambda/');
-    const lambdaName = isLambda ? logGroup.replace('/aws/lambda/', '') : null;
-    const [visible, setVisible] = useState(false);
-
-    const { data: metricsData } = useQuery({
-        queryKey: ['cw-quick-metrics', cfg.accessKeyId, cfg.region, logGroup],
-        queryFn: async () => {
-            if (!lambdaName) return null;
-            const endMs = Date.now();
-            const startMs = endMs - (60 * 60 * 1000); // Last hour
-            const dims = [{ name: 'FunctionName', value: lambdaName }];
-            
-            const [invocations, errors, duration] = await Promise.all([
-                cwGetMetricData(cfg, 'AWS/Lambda', 'Invocations', dims, 'Sum', 300, startMs, endMs),
-                cwGetMetricData(cfg, 'AWS/Lambda', 'Errors', dims, 'Sum', 300, startMs, endMs),
-                cwGetMetricData(cfg, 'AWS/Lambda', 'Duration', dims, 'Average', 300, startMs, endMs),
-            ]);
-            
-            return { invocations, errors, duration };
-        },
-        enabled: !!lambdaName && visible,
-        refetchInterval: 60_000,
-    });
-
-    if (!isLambda) return null;
-
-    return (
-        <div className="px-3 py-2 border-b border-slate-800 bg-slate-950/40">
-            <button 
-                onClick={() => setVisible(!visible)}
-                className="flex items-center gap-2 text-[10px] font-bold text-slate-500 hover:text-microtermix-neon transition-colors"
-            >
-                <BarChart3 size={12} className={visible ? 'text-microtermix-neon' : ''} />
-                {visible ? 'OCULTAR MÉTRICAS' : 'MÉTRICAS RÁPIDAS (INVOCACIONES, ERRORES, DURACIÓN)'}
-            </button>
-            {visible && metricsData && (
-                <div className="flex gap-4 mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <MiniChart label="Invocations" points={metricsData.invocations} />
-                    <MiniChart label="Errors" points={metricsData.errors} color="#ef4444" />
-                    <MiniChart label="Duration (avg)" points={metricsData.duration} color="#a855f7" />
-                </div>
-            )}
-        </div>
-    );
-};
-
-const JsonExpandable = ({ data }: { data: any }) => {
-    const [expanded, setExpanded] = useState(false);
-    
-    return (
-        <div className="mt-1">
-            <button 
-                onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-1 text-[10px] text-microtermix-neon/80 hover:text-microtermix-neon transition-colors font-bold uppercase tracking-tighter"
-            >
-                {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                {expanded ? 'Ocultar JSON' : 'Ver JSON'}
-            </button>
-            {expanded && (
-                <pre className="mt-1.5 p-2 bg-slate-900 border border-slate-800 rounded text-[10px] overflow-x-auto whitespace-pre font-mono text-slate-300">
-                    {JSON.stringify(data, null, 2)}
-                </pre>
-            )}
-        </div>
-    );
-};
 
 const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy, filters }: { 
     event: CwLogEvent, 
@@ -362,9 +259,21 @@ const Sidebar = React.memo(({
     );
 });
 
-export function LogsTab({ cfg }: LogsTabProps) {
+export function LogsTab() {
+    const cfg = useAwsStore(s => s.credentials);
+    if (!cfg) return null;
+    const { goToMetrics, preloadedLogGroup, clearPreloadedLogGroup } = useCwStore();
     const [groupSearch, setGroupSearch] = usePersistedState('microtermix-cw-logs-group-search', '');
     const [selectedGroup, setSelectedGroup] = usePersistedState<string | null>('microtermix-cw-logs-selected-group', null);
+
+    // Deep link integration for Log Group
+    useEffect(() => {
+        if (preloadedLogGroup) {
+            setGroupSearch(''); // Clear search so the group is visible in sidebar
+            setSelectedGroup(preloadedLogGroup);
+            clearPreloadedLogGroup();
+        }
+    }, [preloadedLogGroup, setGroupSearch, setSelectedGroup, clearPreloadedLogGroup]);
     const [favorites, setFavorites] = usePersistedState<string[]>('microtermix-cw-favorites', []);
     const [streamFavorites, setStreamFavorites] = usePersistedState<string[]>('microtermix-cw-stream-favorites', []);
     const [streamSearch, setStreamSearch] = usePersistedState('microtermix-cw-logs-stream-search', '');
@@ -415,7 +324,12 @@ export function LogsTab({ cfg }: LogsTabProps) {
 
     // ── Smart Tailing Logic ───────────────────────────────────────────────────
 
-    const workerId = useMemo(() => `cw-worker-${selectedGroup}-${selectedStream}-${mergedView}`, [selectedGroup, selectedStream, mergedView]);
+    const workerId = useMemo(() => {
+        // Safe ID: alfanumeric, -, _, :, /
+        const safeGroup = selectedGroup?.replace(/[^a-zA-Z0-9]/g, '_') || 'none';
+        const safeStream = selectedStream?.replace(/[^a-zA-Z0-9]/g, '_') || 'none';
+        return `cw_worker_${safeGroup}_${safeStream}_${mergedView}`;
+    }, [selectedGroup, selectedStream, mergedView]);
 
     useEffect(() => {
         if (!selectedGroup) return;
@@ -723,8 +637,22 @@ export function LogsTab({ cfg }: LogsTabProps) {
                                 </div>
                             </div>
 
-                            {/* Lambda Quick Metrics */}
-                            {selectedGroup && <QuickMetrics cfg={cfg} logGroup={selectedGroup} />}
+                            {/* Lambda Context Actions */}
+                            {selectedGroup?.startsWith('/aws/lambda/') && (
+                                <div className="px-3 py-1.5 border-b border-slate-800 bg-slate-900/20 flex items-center gap-2">
+                                    <BarChart3 size={12} className="text-microtermix-neon" />
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Lambda detectada:</span>
+                                    <button 
+                                        onClick={() => {
+                                            const lambdaName = selectedGroup.replace('/aws/lambda/', '');
+                                            goToMetrics('AWS/Lambda', 'Invocations', [{ name: 'FunctionName', value: lambdaName }]);
+                                        }}
+                                        className="text-[10px] font-bold text-microtermix-neon hover:underline bg-microtermix-neon/5 px-2 py-0.5 rounded border border-microtermix-neon/20 transition-all"
+                                    >
+                                        ANALIZAR MÉTRICAS (INVOCACIONES, ERRORES, DURACIÓN)
+                                    </button>
+                                </div>
+                            )}
 
                             {logFilters.length > 0 && (
                                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/50">

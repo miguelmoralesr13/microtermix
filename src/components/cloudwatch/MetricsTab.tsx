@@ -1,7 +1,7 @@
+import React, { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, X } from 'lucide-react';
 import {
-    CwCredentials,
     CwMetricItem,
     CwDimension,
     CwDatapoint,
@@ -9,6 +9,8 @@ import {
     cwGetMetricData
 } from '../../services/cloudwatchApi';
 import { usePersistedState } from './cwUtils';
+import { useCwStore } from '../../stores/cwStore';
+import { useAwsStore } from '../../stores/awsStore';
 
 // ── SVG Line Chart ────────────────────────────────────────────────────────────
 
@@ -88,12 +90,12 @@ const RANGE_OPTIONS = [
     { label: 'Últimos 7d', value: 604800_000 },
 ];
 
-interface MetricsTabProps {
-    cfg: CwCredentials;
-}
-
-export function MetricsTab({ cfg }: MetricsTabProps) {
+export function MetricsTab() {
+    const cfg = useAwsStore(s => s.credentials);
+    if (!cfg) return null;
     const queryClient = useQueryClient();
+    const { preloadedMetric, clearPreloadedMetric } = useCwStore();
+    
     const [namespace, setNamespace] = usePersistedState('microtermix-cw-metrics-ns', '');
     const [metricSearch, setMetricSearch] = usePersistedState('microtermix-cw-metrics-search', '');
     const [selectedMetric, setSelectedMetric] = usePersistedState<CwMetricItem | null>('microtermix-cw-metrics-selected', null);
@@ -101,6 +103,25 @@ export function MetricsTab({ cfg }: MetricsTabProps) {
     const [stat, setStat] = usePersistedState('microtermix-cw-metrics-stat', 'Average');
     const [period, setPeriod] = usePersistedState('microtermix-cw-metrics-period', 300);
     const [range, setRange] = usePersistedState('microtermix-cw-metrics-range', 3600_000);
+
+    // Deep link integration
+    useEffect(() => {
+        if (preloadedMetric) {
+            setNamespace(preloadedMetric.namespace);
+            setSelectedMetric({
+                namespace: preloadedMetric.namespace,
+                metric_name: preloadedMetric.metricName,
+                dimensions: preloadedMetric.dimensions
+            });
+            setDimensions(preloadedMetric.dimensions);
+            // Default better range for Lambdas when preloaded
+            setRange(3600_000 * 3); // 3h
+            setPeriod(60); // 1 min resolution
+            
+            // Clean up store to avoid re-triggering on tab switches
+            clearPreloadedMetric();
+        }
+    }, [preloadedMetric, setNamespace, setSelectedMetric, setDimensions, setRange, setPeriod, clearPreloadedMetric]);
 
     // Queries
     const {

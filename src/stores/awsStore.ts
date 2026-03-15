@@ -6,9 +6,8 @@ import {
     cwGetLogGroups 
 } from '../services/cloudwatchApi';
 import { 
-    ec2_list_instances, 
     Ec2Instance 
-} from '../components/cloudwatch/ec2Types'; // Note: check where Ec2Instance is defined exactly
+} from '../components/cloudwatch/ec2Types';
 import { invoke } from '@tauri-apps/api/core';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -230,10 +229,23 @@ export const useAwsStore = create<AwsState & AwsActions>()(
                 partialize: (s) => ({
                     credentials: s.credentials,
                     ssm: s.ssm,
-                    // We can persist instances and groups if we want them to show up immediately
                     ec2: { ...s.ec2, loading: false },
                     cloudwatch: { ...s.cloudwatch, loading: false },
                 }),
+                onRehydrateStorage: () => (state) => {
+                    if (state && !state.credentials) {
+                        try {
+                            const raw = localStorage.getItem('microtermix-cloudwatch-cfg');
+                            if (raw) {
+                                const old = JSON.parse(raw);
+                                if (old?.accessKeyId) {
+                                    state.credentials = old;
+                                    localStorage.removeItem('microtermix-cloudwatch-cfg');
+                                }
+                            }
+                        } catch { /* ignore */ }
+                    }
+                },
             }
         ),
         { name: 'AwsStore' }

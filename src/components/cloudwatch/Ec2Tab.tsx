@@ -13,13 +13,12 @@ import {
 import { Ec2InstanceRow } from './Ec2InstanceRow';
 import { Ec2SshSettings } from './Ec2SshSettings';
 import { Ec2Terminal } from './Ec2Terminal';
-import { CwCredentials, ssmCheckPlugin } from '../../services/cloudwatchApi';
+import { ssmCheckPlugin } from '../../services/cloudwatchApi';
+import { useAwsStore } from '../../stores/awsStore';
 
-interface Ec2TabProps {
-    cfg: CwCredentials;
-}
-
-export function Ec2Tab({ cfg }: Ec2TabProps) {
+export function Ec2Tab() {
+    const cfg = useAwsStore(s => s.credentials);
+    if (!cfg) return null;
     const queryClient = useQueryClient();
     const [pendingMap, setPendingMap] = useState<Record<string, string>>({});
     const [stateFilter, setStateFilter] = useState<Ec2StateFilter>('all');

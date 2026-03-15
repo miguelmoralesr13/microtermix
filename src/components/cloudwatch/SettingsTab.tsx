@@ -2,19 +2,20 @@ import { useState } from 'react';
 import { Settings, RefreshCw, CheckCircle, AlertCircle, ClipboardPaste } from 'lucide-react';
 import {
     CwCredentials,
-    loadCwConfig,
-    saveCwConfig,
     cwGetLogGroups,
     ssmCheckPlugin
 } from '../../services/cloudwatchApi';
 import { parseAwsCredentialBlock, detectOs, OsTab } from './cwUtils';
+import { useAwsStore } from '../../stores/awsStore';
 
 interface SettingsTabProps {
     onSaved: () => void;
 }
 
 export function SettingsTab({ onSaved }: SettingsTabProps) {
-    const [draft, setDraft] = useState<CwCredentials>(() => loadCwConfig());
+    const [draft, setDraft] = useState<CwCredentials>(
+        () => useAwsStore.getState().credentials ?? { accessKeyId: '', secretAccessKey: '', region: 'us-east-1' }
+    );
     const [testing, setTesting] = useState(false);
     const [result, setResult] = useState<'ok' | 'error' | null>(null);
     const [errMsg, setErrMsg] = useState('');
@@ -24,7 +25,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
     const [osTab, setOsTab] = useState<OsTab>(detectOs);
 
     const handleSave = () => {
-        saveCwConfig(draft);
+        useAwsStore.getState().setCredentials(draft);
         onSaved();
     };
 

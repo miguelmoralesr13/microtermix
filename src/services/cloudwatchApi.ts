@@ -47,22 +47,6 @@ export interface CwDatapoint {
     value: number;
 }
 
-// ── localStorage ──────────────────────────────────────────────────────────────
-
-const STORAGE_KEY = 'microtermix-cloudwatch-cfg';
-
-export function loadCwConfig(): CwCredentials {
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-    } catch { /* ignore */ }
-    return { accessKeyId: '', secretAccessKey: '', region: 'us-east-1' };
-}
-
-export function saveCwConfig(cfg: CwCredentials): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
-}
-
 // ── Credential serialisation (camelCase → snake_case for Rust) ────────────────
 
 function toRust(cfg: CwCredentials) {

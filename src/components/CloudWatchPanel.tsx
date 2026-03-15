@@ -6,34 +6,24 @@ import { Ec2Tab } from './cloudwatch/Ec2Tab';
 import { SettingsTab } from './cloudwatch/SettingsTab';
 import { LogsTab } from './cloudwatch/LogsTab';
 import { MetricsTab } from './cloudwatch/MetricsTab';
-import { usePersistedState, NeedConfig } from './cloudwatch/cwUtils';
-import {
-    CwCredentials,
-    loadCwConfig,
-} from '../services/cloudwatchApi';
+import { NeedConfig } from './cloudwatch/cwUtils';
 import { ApiGatewayPanel } from './ApiGatewayPanel';
+import { useCwStore } from '../stores/cwStore';
+import { useAwsStore } from '../stores/awsStore';
 
 type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway';
-
-
-
-
-
-
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 export const CloudWatchPanel: React.FC = () => {
-    const [tab, setTab] = usePersistedState<CwTab>('microtermix-cw-active-tab', 'settings');
+    const { activeTab: tab, setActiveTab: setTab } = useCwStore();
     const [savedMsg, setSavedMsg] = useState(false);
-    const [cfg, setCfg] = useState<CwCredentials>(() => loadCwConfig());
-    const isConfigured = !!(cfg.accessKeyId && cfg.secretAccessKey && cfg.region);
+    const credentials = useAwsStore(s => s.credentials);
+    const isConfigured = !!(credentials?.accessKeyId && credentials?.secretAccessKey && credentials?.region);
 
     const handleSaved = () => {
-        const updated = loadCwConfig();
-        setCfg(updated);
         setSavedMsg(true);
-        if (updated.accessKeyId && updated.secretAccessKey) setTab('logs');
+        if (useAwsStore.getState().credentials?.accessKeyId) setTab('logs');
     };
 
     const tabs: { id: CwTab; label: string }[] = [
@@ -70,13 +60,13 @@ export const CloudWatchPanel: React.FC = () => {
             <div className="flex-1 min-h-0 overflow-auto">
                 {tab === 'settings' && <SettingsTab onSaved={handleSaved} />}
                 {tab === 'logs' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
-                {tab === 'logs' && isConfigured && <LogsTab cfg={cfg} />}
+                {tab === 'logs' && isConfigured && <LogsTab />}
                 {tab === 'metrics' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
-                {tab === 'metrics' && isConfigured && <MetricsTab cfg={cfg} />}
+                {tab === 'metrics' && isConfigured && <MetricsTab />}
                 {tab === 'ec2' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
-                {tab === 'ec2' && isConfigured && <Ec2Tab cfg={cfg} />}
+                {tab === 'ec2' && isConfigured && <Ec2Tab />}
                 {tab === 'api-gateway' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
-                {tab === 'api-gateway' && isConfigured && <ApiGatewayPanel credentials={cfg} />}
+                {tab === 'api-gateway' && isConfigured && <ApiGatewayPanel />}
             </div>
         </div>
     );
