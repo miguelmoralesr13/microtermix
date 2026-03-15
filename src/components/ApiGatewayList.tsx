@@ -1,22 +1,15 @@
 import React, { useMemo } from 'react';
-import { useApiGatewayStore, SelectedApi } from '../stores/useApiGatewayStore';
+import { useApiGatewayStore, SelectedApi } from '../stores/apiGatewayStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Server, Zap, Star } from 'lucide-react';
-import { AwsCredentials } from '../stores/useApiGatewayStore';
 
 interface ApiGatewayListProps {
     searchTerm: string;
-    credentials?: AwsCredentials;
 }
 
-export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm, credentials }) => {
-    const restApis = useApiGatewayStore(state => state.restApis);
-    const httpApis = useApiGatewayStore(state => state.httpApis);
-    const selectedApi = useApiGatewayStore(state => state.selectedApi);
-    const selectApi = useApiGatewayStore(state => state.selectApi);
-    const favoriteApis = useApiGatewayStore(state => state.favoriteApis);
-    const toggleFavorite = useApiGatewayStore(state => state.toggleFavorite);
+export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm }) => {
+    const { restApis, httpApis, selectedApi, selectApi, favoriteApis, toggleFavorite } = useApiGatewayStore();
 
     const term = searchTerm.toLowerCase().trim();
 
@@ -43,9 +36,7 @@ export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm, cred
     }, [httpApis, term, favoriteApis]);
 
     const handleSelect = (api: SelectedApi) => {
-        if (credentials) {
-            selectApi(api, credentials);
-        }
+        selectApi(api);
     };
 
     return (

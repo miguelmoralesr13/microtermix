@@ -1,33 +1,30 @@
 import React, { useEffect, useState } from 'react';
-import { useApiGatewayStore } from '../stores/useApiGatewayStore';
+import { useApiGatewayStore } from '../stores/apiGatewayStore';
 import { ApiGatewayList } from './ApiGatewayList';
 import { ApiGatewayDetails } from './ApiGatewayDetails';
-import { RefreshCw, Network } from 'lucide-react';
+import { RefreshCw, Network, Search, Layout } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { AwsCredentials } from '../stores/useApiGatewayStore';
+import { useAwsStore } from '../stores/awsStore';
+import { ApiGatewayTester } from './ApiGatewayTester';
 
-interface ApiGatewayPanelProps {
-    credentials?: AwsCredentials;
-}
-
-export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials }) => {
-    const fetchApis = useApiGatewayStore(state => state.fetchApis);
-    const loadingApis = useApiGatewayStore(state => state.loadingApis);
-    const error = useApiGatewayStore(state => state.error);
+export const ApiGatewayPanel: React.FC = () => {
+    const { fetchApis, loadingApis, error } = useApiGatewayStore();
+    const credentials = useAwsStore(s => s.credentials);
+    const isConfigured = !!credentials?.accessKeyId;
 
     const [searchTerm, setSearchTerm] = useState('');
     const [inputValue, setInputValue] = useState('');
 
     useEffect(() => {
-        if (credentials?.accessKeyId && credentials?.region) {
-            fetchApis(credentials);
+        if (isConfigured) {
+            fetchApis();
         }
-    }, [fetchApis, credentials?.accessKeyId, credentials?.region, credentials?.sessionToken]);
+    }, [isConfigured, fetchApis]);
 
     const handleRefresh = () => {
-        if (credentials?.accessKeyId) {
-            fetchApis(credentials);
+        if (isConfigured) {
+            fetchApis();
         }
     };
 
@@ -36,7 +33,10 @@ export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials })
             {/* Header Toolbar */}
             <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-4">
-                    <h2 className="text-lg font-bold text-white tracking-wide">API Gateway</h2>
+                    <div className="flex items-center gap-2">
+                        <Layout size={18} className="text-microtermix-neon" />
+                        <h2 className="text-lg font-bold text-white tracking-wide uppercase tracking-tighter">API Gateway</h2>
+                    </div>
                     <Button
                         variant="ghost"
                         size="sm"
@@ -49,9 +49,10 @@ export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials })
                     </Button>
                 </div>
 
-                <div className="w-64">
+                <div className="relative w-64">
+                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                     <Input
-                        placeholder="Search APIs... (Press Enter)"
+                        placeholder="Buscar APIs..."
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={(e) => {
@@ -59,7 +60,7 @@ export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials })
                                 setSearchTerm(inputValue);
                             }
                         }}
-                        className="h-8 bg-slate-800 border-slate-700 text-sm"
+                        className="h-8 bg-slate-800 border-slate-700 pl-9 text-sm focus:border-microtermix-neon/50"
                     />
                 </div>
             </div>
@@ -67,32 +68,35 @@ export const ApiGatewayPanel: React.FC<ApiGatewayPanelProps> = ({ credentials })
             {/* Main Content Area: Master / Detail */}
             <div className="flex flex-1 overflow-hidden min-h-0 relative">
 
-                {!credentials?.accessKeyId && (
+                {!isConfigured && (
                     <div className="absolute inset-0 z-20 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center">
                         <div className="flex flex-col items-center gap-4 text-slate-400 max-w-sm text-center">
                             <Network size={48} className="opacity-20" />
-                            <div>Please configure your AWS Credentials in the <span className="text-microtermix-neon">Settings</span> tab to view API Gateways.</div>
+                            <div>Por favor configura tus <span className="text-microtermix-neon">credenciales de AWS</span> en la pestaña de Ajustes (CloudWatch o EC2) para ver tus API Gateways.</div>
                         </div>
                     </div>
                 )}
 
                 {/* Error Banner */}
                 {error && (
-                    <div className="absolute inset-x-0 top-0 z-10 bg-red-900/90 text-red-100 text-xs px-4 py-2 text-center shadow-md">
+                    <div className="absolute inset-x-0 top-0 z-10 bg-red-900/90 text-red-100 text-xs px-4 py-2 text-center shadow-md font-mono">
                         {error}
                     </div>
                 )}
 
                 {/* Left Pane: List */}
                 <div className="w-[380px] shrink-0 border-r border-slate-800 bg-slate-900/50 flex flex-col h-full overflow-hidden">
-                    <ApiGatewayList searchTerm={searchTerm} credentials={credentials} />
+                    <ApiGatewayList searchTerm={searchTerm} />
                 </div>
 
                 {/* Right Pane: Details */}
                 <div className="flex-1 bg-slate-950 flex flex-col h-full overflow-hidden">
-                    <ApiGatewayDetails credentials={credentials} />
+                    <ApiGatewayDetails />
                 </div>
             </div>
+
+            {/* Tester Drawer/Modal */}
+            <ApiGatewayTester />
         </div>
     );
 };

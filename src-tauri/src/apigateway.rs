@@ -1,6 +1,7 @@
 use aws_sdk_apigateway::Client as ApiGatewayClient;
 use aws_sdk_apigatewayv2::Client as ApiGatewayV2Client;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use crate::cloudwatch::CwCredentials;
 
 // ==========================================
@@ -59,10 +60,7 @@ pub struct RestApiResource {
     pub methods: Vec<String>,
 }
 
-#[tauri::command]
-pub async fn apigw_get_rest_apis(credentials: CwCredentials) -> Result<Vec<RestApiInfo>, String> {
-    let client = apigateway_client(&credentials).await;
-
+async fn fetch_rest_apis_internal(client: &ApiGatewayClient) -> Result<Vec<RestApiInfo>, String> {
     let mut apis = Vec::new();
     let mut position = None;
 
@@ -96,6 +94,12 @@ pub async fn apigw_get_rest_apis(credentials: CwCredentials) -> Result<Vec<RestA
     }
 
     Ok(apis)
+}
+
+#[tauri::command]
+pub async fn apigw_get_rest_apis(credentials: CwCredentials) -> Result<Vec<RestApiInfo>, String> {
+    let client = apigateway_client(&credentials).await;
+    fetch_rest_apis_internal(&client).await
 }
 
 #[tauri::command]
@@ -254,10 +258,7 @@ pub struct HttpApiRoute {
     pub target: Option<String>,
 }
 
-#[tauri::command]
-pub async fn apigw_get_http_apis(credentials: CwCredentials) -> Result<Vec<HttpApiInfo>, String> {
-    let client = apigateway_v2_client(&credentials).await;
-
+async fn fetch_http_apis_internal(client: &ApiGatewayV2Client) -> Result<Vec<HttpApiInfo>, String> {
     let mut apis = Vec::new();
     let mut next_token = None;
 
@@ -293,6 +294,12 @@ pub async fn apigw_get_http_apis(credentials: CwCredentials) -> Result<Vec<HttpA
     }
 
     Ok(apis)
+}
+
+#[tauri::command]
+pub async fn apigw_get_http_apis(credentials: CwCredentials) -> Result<Vec<HttpApiInfo>, String> {
+    let client = apigateway_v2_client(&credentials).await;
+    fetch_http_apis_internal(&client).await
 }
 
 #[tauri::command]
@@ -420,6 +427,136 @@ pub async fn apigw_get_http_route_integration(
         payload_format_version: int_resp.payload_format_version().map(|s| s.to_string()),
         timeout_in_millis: int_resp.timeout_in_millis(),
         integration_request_templates: request_templates,
+    })
+}
+
+#[derive(Serialize)]
+pub struct FetchAllResult {
+    pub rest_apis: Vec<RestApiInfo>,
+    pub http_apis: Vec<HttpApiInfo>,
+}
+
+#[tauri::command]
+pub async fn apigw_fetch_all(credentials: CwCredentials) -> Result<FetchAllResult, String> {
+    let v1_client = apigateway_client(&credentials).await;
+    let v2_client = apigateway_v2_client(&credentials).await;
+
+    let (rest_result, http_result) = tokio::join!(
+        fetch_rest_apis_internal(&v1_client),
+        fetch_http_apis_internal(&v2_client)
+    );
+
+    Ok(FetchAllResult {
+        rest_apis: rest_result?,
+        http_apis: http_result?,
+    })
+}
+
+#[tauri::command]
+pub async fn apigw_get_stages(
+    credentials: CwCredentials,
+    api_id: String,
+    is_rest: bool,
+) -> Result<Vec<String>, String> {
+    if is_rest {
+        let client = apigateway_client(&credentials).await;
+        let resp = client.get_stages().rest_api_id(&api_id).send().await
+            .map_err(|e| format!("Failed to get REST stages: {:?}", e))?;
+        
+        let stages: Vec<String> = resp.item().iter()
+            .filter_map(|s| s.stage_name().map(|n| n.to_string()))
+            .filter(|n| !n.is_empty())
+            .collect();
+        Ok(stages)
+    } else {
+        let client = apigateway_v2_client(&credentials).await;
+        let resp = client.get_stages().api_id(&api_id).send().await
+            .map_err(|e| format!("Failed to get HTTP stages: {:?}", e))?;
+        
+        let stages: Vec<String> = resp.items().iter()
+            .filter_map(|s| s.stage_name().map(|n| n.to_string()))
+            .filter(|n| !n.is_empty())
+            .collect();
+        Ok(stages)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct InvokeRequest {
+    pub url: String,
+    pub method: String,
+    pub headers: HashMap<String, String>,
+    pub body: Option<String>,
+    pub service: String,
+    pub sign: bool,
+}
+
+#[derive(Serialize)]
+pub struct InvokeResponse {
+    pub status: u16,
+    pub headers: HashMap<String, String>,
+    pub body: String,
+    pub duration_ms: u64,
+}
+
+#[tauri::command]
+pub async fn apigw_invoke_endpoint(
+    credentials: CwCredentials,
+    request: InvokeRequest,
+) -> Result<InvokeResponse, String> {
+    use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+    use std::time::Instant;
+    use url::Url;
+
+    let client = reqwest::Client::new();
+    let url = Url::parse(&request.url).map_err(|e| format!("Invalid URL: {}", e))?;
+    
+    let mut headers = HeaderMap::new();
+    for (k, v) in &request.headers {
+        headers.insert(
+            HeaderName::from_bytes(k.as_bytes()).map_err(|e| e.to_string())?,
+            HeaderValue::from_str(v).map_err(|e| e.to_string())?,
+        );
+    }
+
+    let body_bytes = request.body.as_deref().unwrap_or("").as_bytes();
+
+    if request.sign {
+        crate::sigv4::sign_request(
+            &credentials,
+            &credentials.region,
+            &request.service,
+            &request.method,
+            &url,
+            &mut headers,
+            body_bytes,
+        )?;
+    }
+
+    let method = reqwest::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
+    
+    let mut req_builder = client.request(method, url).headers(headers);
+    if let Some(body) = request.body {
+        req_builder = req_builder.body(body);
+    }
+
+    let start = Instant::now();
+    let resp = req_builder.send().await.map_err(|e| format!("Request failed: {}", e))?;
+    let duration = start.elapsed().as_millis() as u64;
+
+    let status = resp.status().as_u16();
+    let mut resp_headers = HashMap::new();
+    for (name, value) in resp.headers() {
+        resp_headers.insert(name.to_string(), value.to_str().unwrap_or_default().to_string());
+    }
+    
+    let body = resp.text().await.map_err(|e| format!("Failed to read response body: {}", e))?;
+
+    Ok(InvokeResponse {
+        status,
+        headers: resp_headers,
+        body,
+        duration_ms: duration,
     })
 }
 

@@ -14,6 +14,7 @@ mod ssm;
 mod crypto;
 mod mock_server;
 mod apigateway;
+mod sigv4;
 mod java_manager;
 mod json_processor;
 mod notes;
@@ -62,6 +63,7 @@ pub use crate::apigateway::{
     apigw_get_rest_apis, apigw_get_rest_api_resources, apigw_get_rest_method_details,
     apigw_get_http_apis, apigw_get_http_api_routes, apigw_get_http_route_integration,
     apigw_export_api_swagger_rest, apigw_export_api_swagger_http,
+    apigw_fetch_all, apigw_get_stages, apigw_invoke_endpoint,
 };
 pub use crate::mock_server::{start_mock_server, stop_mock_server, MockServerState};
 pub use crate::git_watcher::{watch_repo, stop_watching_repo};
@@ -345,6 +347,9 @@ pub fn run() {
             apigw_get_http_route_integration,
             apigw_export_api_swagger_rest,
             apigw_export_api_swagger_http,
+            apigw_fetch_all,
+            apigw_get_stages,
+            apigw_invoke_endpoint,
             start_mock_server,
             stop_mock_server,
             json_processor::json_format,
