@@ -36,6 +36,7 @@ aws-sdk-ec2 = "1"
 aws-sdk-ssm = "1"
 aws-sdk-apigateway = "1"
 aws-sdk-apigatewayv2 = "1"
+aws-sdk-sfn = "1"
 aws-config = { version = "1", features = ["behavior-version-latest"] }
 aws-credential-types = "1"
 aws-sigv4 = { version = "1", features = ["sign-http"] }

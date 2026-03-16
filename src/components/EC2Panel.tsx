@@ -7,7 +7,7 @@ import {
 import { useAwsStore } from '../stores/awsStore';
 import { CwCredentials } from '../services/cloudwatchApi';
 import { parseAwsCredentialBlock } from './cloudwatch/cwUtils';
-import { Button } from '@base-ui/react';
+import { Button } from './ui/button';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -366,7 +366,7 @@ function SettingsTab({ ssh, setSsh, onSave }: { ssh: SshDefaults; setSsh: (s: Ss
             <div className="grid grid-cols-2 gap-8">
                 <div className="flex flex-col gap-4">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">AWS Credentials</h3>
-                    <Button variant="outline" size="sm" onClick={handlePaste} className="text-[10px] h-7 bg-slate-800">Pegar desde portapapeles</Button>
+                    <Button  size="sm" variant="secondary" onClick={handlePaste} className="text-[10px] h-7 bg-slate-800">Pegar desde portapapeles</Button>
                     <input value={localCreds.region} onChange={e => setLocalCreds({ ...localCreds, region: e.target.value })} placeholder="Region" className="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-sm font-mono" />
                     <input value={localCreds.accessKeyId} onChange={e => setLocalCreds({ ...localCreds, accessKeyId: e.target.value })} placeholder="Access Key ID" className="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-sm font-mono" />
                     <div className="flex gap-2">

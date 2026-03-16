@@ -11,7 +11,8 @@
     "tauri:portable": "npm run build && tauri build --no-bundle && node scripts/copy-portable.js",
     "tauri:linux": "npm run build && tauri build --bundles deb,appimage",
     "tauri:deb": "npm run build && tauri build --bundles deb",
-    "tauri:mac": "npm run build && tauri build --bundles dmg,app"
+    "tauri:mac": "npm run build && tauri build --bundles dmg,app",
+    "tauri:windows": "npm run build && tauri build --target x86_64-pc-windows-msvc --runner cargo-xwin"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

@@ -282,7 +282,6 @@ export function LogsTab() {
 
     // Events State
     const [events, setEvents] = useState<CwLogEvent[]>([]);
-    const [loadingEvents, setLoadingEvents] = useState(false);
     const [backToken, setBackToken] = useState<string | null>(null);
     const [tailing, setTailing] = useState(true);
     const [loadingHistory, setLoadingHistory] = useState(false);
@@ -336,7 +335,6 @@ export function LogsTab() {
         if (!tailing) return;
 
         setWorkerError(null);
-        setLoadingEvents(true);
 
         
         // Use FilterLogEvents for tailing regardless of mergedView, but if not merged, filter by stream name
@@ -349,8 +347,7 @@ export function LogsTab() {
         // I'll adjust the pattern if needed.
 
         cwStartTail(cfg, selectedGroup, filterPattern, workerId)
-            .catch(err => setWorkerError(String(err)))
-            .finally(() => setLoadingEvents(false));
+            .catch(err => setWorkerError(String(err)));
 
         const unlistenLogs = listen<CwLogEvent[]>(`cw-logs-${workerId}`, (event) => {
             const newEvents = event.payload;
@@ -383,7 +380,6 @@ export function LogsTab() {
         
         setEvents([]);
         setBackToken(null);
-        setLoadingEvents(true);
 
         const startMs = Date.now() - (timeRange * 60 * 1000);
         const fetchFn = mergedView
@@ -398,7 +394,6 @@ export function LogsTab() {
                 setBackToken(res.next_backward_token);
             })
             .catch(err => console.error("History load error:", err))
-            .finally(() => setLoadingEvents(false));
     }, [selectedGroup, selectedStream, mergedView, timeRange, cfg]);
 
     const loadHistory = useCallback(async () => {
@@ -671,7 +666,8 @@ export function LogsTab() {
                             </div>
                         )}
 
-                        <div className="flex-1 min-h-0 font-mono text-[11px] text-slate-300">
+                        <div className="flex-1 min-h-0 font-mono text-[11px] text-slate-300 relative">
+
                             <Virtuoso
                             ref={virtuosoRef}
                             data={filteredEvents}

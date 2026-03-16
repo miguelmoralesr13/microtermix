@@ -20,7 +20,7 @@ export function ChartTooltip({
   payload,
   label,
   formatter,
-}: Omit<TooltipContentProps<number, string>, "formatter"> & { 
+}: Partial<TooltipContentProps<number, string>> & { 
   formatter?: (val: number) => React.ReactNode 
 }) {
   if (!active || !payload?.length) return null

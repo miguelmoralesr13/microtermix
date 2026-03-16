@@ -461,3 +461,5 @@ export const useWorkspace = () => {
     }
     return context;
 };
+
+export { WorkspaceContext };

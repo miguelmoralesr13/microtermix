@@ -18,6 +18,7 @@ mod sigv4;
 mod java_manager;
 mod json_processor;
 mod notes;
+mod stepfunctions;
 
 use std::fs;
 use std::path::Path;
@@ -67,6 +68,9 @@ pub use crate::apigateway::{
 };
 pub use crate::mock_server::{start_mock_server, stop_mock_server, MockServerState};
 pub use crate::git_watcher::{watch_repo, stop_watching_repo};
+pub use crate::stepfunctions::{
+    sfn_list_state_machines, sfn_list_executions, sfn_get_execution_history, sfn_start_execution,
+};
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -350,6 +354,10 @@ pub fn run() {
             apigw_fetch_all,
             apigw_get_stages,
             apigw_invoke_endpoint,
+            sfn_list_state_machines,
+            sfn_list_executions,
+            sfn_get_execution_history,
+            sfn_start_execution,
             start_mock_server,
             stop_mock_server,
             json_processor::json_format,

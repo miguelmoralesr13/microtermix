@@ -72,7 +72,7 @@ function MetricChart({ data }: { data: MultiStatData[] }) {
                         width={45}
                     />
                     <CartesianGrid stroke="#1e293b" vertical={false} strokeDasharray="3 3" />
-                    <RechartsTooltip content={<ChartTooltip active=false  />} />
+                    <RechartsTooltip content={<ChartTooltip active={false}  />} />
                     <Legend 
                         verticalAlign="top" 
                         align="right" 
