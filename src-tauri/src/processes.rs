@@ -351,16 +351,35 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
 
     #[cfg(target_os = "windows")]
     {
+        // OPTIMIZACIÓN CRÍTICA: Obtener todos los procesos de una vez para evitar N ejecuciones de tasklist
+        let mut process_names = HashMap::new();
+        let tasklist_out = StdCommand::new("tasklist")
+            .args(["/NH", "/FO", "CSV"])
+            .output();
+        
+        if let Ok(out) = tasklist_out {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            for line in stdout.lines() {
+                let parts: Vec<&str> = line.split(',').map(|s| s.trim_matches('"')).collect();
+                if parts.len() >= 2 {
+                    if let Ok(pid) = parts[1].parse::<u32>() {
+                        process_names.insert(pid, parts[0].to_string());
+                    }
+                }
+            }
+        }
+
         let mut cmd = StdCommand::new("netstat");
         cmd.args(["-ano"]);
-        #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
         }
+        
         let output = cmd.output().map_err(|e| e.to_string())?;
         let stdout = String::from_utf8_lossy(&output.stdout);
         let mut rows = Vec::new();
+        
         for line in stdout.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with("Active") || line.starts_with("Proto") {
@@ -372,8 +391,10 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
                 if state_str == "LISTENING" {
                     let pid: u32 = parts[4].parse().unwrap_or(0);
                     if pid > 0 {
-                        let (name, path) = resolve_process_info(pid);
+                        // Usar el mapa precargado en lugar de llamar a resolve_process_info(pid)
+                        let name = process_names.get(&pid).cloned().unwrap_or_else(|| "unknown".to_string());
                         let service_id = pid_to_service.get(&pid).cloned();
+                        
                         rows.push(ListeningProcess {
                             proto: parts[0].to_string(),
                             local_address: parts[1].to_string(),
@@ -381,7 +402,7 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
                             state: parts[3].to_string(),
                             pid,
                             name,
-                            path,
+                            path: "unknown".to_string(),
                             service_id,
                         });
                     }

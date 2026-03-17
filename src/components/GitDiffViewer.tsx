@@ -99,6 +99,23 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         if (targetLine) editor.getModifiedEditor().revealLineInCenter(targetLine);
     };
 
+    // Safe cleanup for Monaco to avoid "TextModel got disposed" error
+    useEffect(() => {
+        return () => {
+            if (editorRef.current) {
+                const editor = editorRef.current;
+                // Importante: Limpiar el modelo antes de que el componente se destruya
+                // para que DiffEditorWidget no intente acceder a modelos ya eliminados
+                try {
+                    editor.setModel(null);
+                } catch (e) {
+                    // Silently fail if already disposed
+                }
+                editorRef.current = null;
+            }
+        };
+    }, []);
+
     const scrollToHunk = (hunk: HunkInfo) => {
         if (!editorRef.current) return;
         setSelectedHunkId(hunk.id);
