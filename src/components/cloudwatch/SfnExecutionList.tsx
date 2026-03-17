@@ -1,8 +1,11 @@
 import React from 'react';
 import { useSfnStore, SfnExecution } from '../../stores/sfnStore';
 import { Badge } from '../ui/badge';
-import { Loader2, AlertCircle, History, Play } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Loader2, AlertCircle, History, Play, ExternalLink, Info } from 'lucide-react';
 import { format } from 'date-fns';
+import { useCwStore } from '../../stores/cwStore';
+import { useWorkspace } from '../../context/WorkspaceContext';
 
 export const SfnExecutionList: React.FC = () => {
   const { 
@@ -11,8 +14,16 @@ export const SfnExecutionList: React.FC = () => {
     selectExecution, 
     loadingExecutions, 
     errorExecutions,
-    selectedMachineArn
+    selectedMachineArn,
+    machines,
+    logGroupName
   } = useSfnStore();
+
+  const { goToLogs } = useCwStore();
+  const { setActiveView } = useWorkspace();
+
+  const selectedMachine = machines.find(m => m.arn === selectedMachineArn);
+  const isExpress = selectedMachine?.machineType.includes('EXPRESS');
 
   const getStatusBadge = (status: SfnExecution['status']) => {
     switch (status) {
@@ -45,12 +56,113 @@ export const SfnExecutionList: React.FC = () => {
     );
   }
 
-  if (errorExecutions) {
+  // Si tenemos ejecuciones, las mostramos SIEMPRE, incluso si hay un error de fondo (como el de 'Not Supported')
+  if (executions.length > 0) {
     return (
-      <div className="p-4">
-        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/20 border border-red-900/50 p-3 rounded-md">
-          <AlertCircle size={14} />
-          {errorExecutions}
+      <div className="flex flex-col h-full min-h-0">
+        <div className="px-4 py-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800 flex justify-between items-center">
+          <span>Recent Executions {isExpress && <span className="text-blue-400 ml-1">(From Logs)</span>}</span>
+          {loadingExecutions && <Loader2 size={10} className="animate-spin text-microtermix-neon" />}
+        </div>
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-sm shadow-sm z-10 border-b border-slate-800">
+              <tr>
+                <th className="px-4 py-2 font-medium text-slate-400">Name / Status</th>
+                <th className="px-4 py-2 font-medium text-slate-400">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {executions.map((e) => (
+                <tr 
+                  key={e.executionArn} 
+                  onClick={() => selectExecution(e.executionArn)}
+                  className={`cursor-pointer transition-colors hover:bg-slate-800/40 ${
+                    selectedExecutionArn === e.executionArn ? 'bg-microtermix-neon/10 border-l-2 border-l-microtermix-neon' : ''
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-slate-200 truncate max-w-[150px]" title={e.name}>
+                        {e.name}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(e.status)}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 tabular-nums">
+                    {format(e.startDate, 'MMM d, HH:mm:ss')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  if (errorExecutions) {
+    const isExpressError = errorExecutions.includes("EXPRESS") || errorExecutions.includes("StateMachineTypeNotSupported") || errorExecutions.includes("Log Group");
+    
+    if (isExpressError && selectedMachine) {
+      return (
+        <div className="p-4 flex flex-col gap-4">
+          <div className="flex flex-col gap-3 p-4 rounded-lg bg-blue-500/5 border border-blue-500/20 text-blue-400">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+              <Info size={14} />
+              Express Workflow
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              This workflow requires **CloudWatch Logging** to show execution history.
+            </p>
+            
+            <div className="space-y-2 mt-1">
+               <div className="flex items-center gap-2 text-[10px] text-slate-300">
+                  <div className="w-1 h-1 rounded-full bg-blue-400" />
+                  Go to AWS Console
+               </div>
+               <div className="flex items-center gap-2 text-[10px] text-slate-300">
+                  <div className="w-1 h-1 rounded-full bg-blue-400" />
+                  Edit State Machine → Logging
+               </div>
+               <div className="flex items-center gap-2 text-[10px] text-slate-300">
+                  <div className="w-1 h-1 rounded-full bg-blue-400" />
+                  Set Level to <span className="text-blue-300 font-bold">ALL</span>
+               </div>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 h-8 text-[10px] border-blue-500/30 text-blue-300 hover:bg-blue-500/10"
+              onClick={() => {
+                const actualLogGroup = logGroupName || `/aws/vendedlogs/states/${selectedMachine.name}-Logs`;
+                goToLogs(actualLogGroup);
+                setActiveView('cloudwatch');
+              }}
+            >
+              <ExternalLink size={12} className="mr-1.5" />
+              Check Log Group Manually
+            </Button>
+
+            {loadingExecutions && (
+              <div className="flex items-center gap-2 text-[10px] text-blue-400/70 border-t border-blue-500/10 pt-3">
+                <Loader2 size={10} className="animate-spin" />
+                Searching logs for executions...
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-4 flex flex-col gap-4">
+        <div className="flex items-start gap-2 text-xs p-3 rounded-md border text-red-400 bg-red-950/20 border-red-900/50">
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+          <span>{errorExecutions}</span>
         </div>
       </div>
     );

@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
-    Network, Package, Ghost,  Cloud,
+    Network, Package, Ghost,  Cloud, Regex,
     ChevronUp, ChevronDown 
 } from 'lucide-react';
 import { 
@@ -70,6 +70,7 @@ export const Sidebar: React.FC = () => {
                 {renderNavIcon('lib-cipher', Package, "Cifrado / Descifrado")}
                 {renderNavIcon('mocks', Ghost, "Servidor de Mocks")}
                 {renderNavIcon('json-processor', SiJson, "JSON Processor")}
+                {renderNavIcon('regex', Regex, "Regex Laboratory")}
                 {renderNavIcon('notes', SiMarkdown, "Notas Markdown")}
                 {renderNavIcon('swagger', SiSwagger, "Swagger / OpenAPI Editor")}
                 {renderNavIcon('designer', SiMermaid, "Visual Designer (Mermaid)")}

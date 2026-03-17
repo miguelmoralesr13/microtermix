@@ -16,6 +16,7 @@ import { JenkinsPanel } from './JenkinsPanel';
 import { LibCipherPanel } from './LibCipherPanel';
 import { MockPanel } from './mocks/MockPanel';
 import { JsonProcessorPanel } from './json-processor/JsonProcessorPanel';
+import { RegexTesterPanel } from './regex/RegexTesterPanel';
 import { NotesPanel } from './notes/NotesPanel';
 import { SwaggerPanel } from './swagger/SwaggerPanel';
 import { VisualDesigner } from './designer/VisualDesigner';
@@ -368,6 +369,12 @@ export const ServiceManager: React.FC = () => {
                     {state.activeView === 'json-processor' && (
                         <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
                             <JsonProcessorPanel />
+                        </div>
+                    )}
+
+                    {state.activeView === 'regex' && (
+                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
+                            <RegexTesterPanel />
                         </div>
                     )}
 

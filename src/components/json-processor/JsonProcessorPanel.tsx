@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
     Braces, AlignLeft, CheckCircle2, Code2, GitBranch,
-    Search, ArrowLeftRight, GitCompareArrows, SquarePen, Table2, HelpCircle,
+    Search, ArrowLeftRight, GitCompareArrows, SquarePen, Table2, HelpCircle, FileCode,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -16,6 +16,7 @@ import { JsonFormatTab } from './JsonFormatTab';
 import { JsonDiffTab } from './JsonDiffTab';
 import { JsonNodeEditorTab } from './JsonNodeEditorTab';
 import { JsonFlatTab } from './JsonFlatTab';
+import { JwtDebuggerTab } from './JwtDebuggerTab';
 
 const TABS = [
     {
@@ -53,6 +54,10 @@ const TABS = [
     {
         id: 'flat', label: 'Aplanar', Icon: Table2,
         description: 'Convierte objetos anidados en una lista plana de claves (ej: user.address.city).'
+    },
+    {
+        id: 'jwt', label: 'JWT', Icon: FileCode,
+        description: 'Decodifica y analiza tokens JSON Web Token (Header, Payload y Firma).'
     },
 ] as const;
 
@@ -136,6 +141,7 @@ export const JsonProcessorPanel: React.FC = () => {
                 {active === 'diff' && <JsonDiffTab />}
                 {active === 'nodes' && <JsonNodeEditorTab />}
                 {active === 'flat' && <JsonFlatTab />}
+                {active === 'jwt' && <JwtDebuggerTab />}
             </div>
         </div>
     );

@@ -36,22 +36,27 @@ interface SfnState {
   machines: SfnMachine[];
   executions: SfnExecution[];
   steps: SfnStep[];
+  definition: string | null;
+  logGroupName: string | null;
   selectedMachineArn: string | null;
   selectedExecutionArn: string | null;
   
   loadingMachines: boolean;
   loadingExecutions: boolean;
   loadingHistory: boolean;
+  loadingDefinition: boolean;
   
   errorMachines: string | null;
   errorExecutions: string | null;
   errorHistory: string | null;
+  errorDefinition: string | null;
 }
 
 interface SfnActions {
   fetchMachines: (force?: boolean) => Promise<void>;
   selectMachine: (arn: string) => void;
   fetchExecutions: (machineArn: string) => Promise<void>;
+  fetchDefinition: (machineArn: string) => Promise<void>;
   selectExecution: (executionArn: string) => void;
   fetchHistory: (executionArn: string) => Promise<void>;
   startExecution: (machineArn: string, input: string) => Promise<void>;
@@ -75,16 +80,20 @@ export const useSfnStore = create<SfnState & SfnActions>()(
         machines: [],
         executions: [],
         steps: [],
+        definition: null,
+        logGroupName: null,
         selectedMachineArn: null,
         selectedExecutionArn: null,
         
         loadingMachines: false,
         loadingExecutions: false,
         loadingHistory: false,
+        loadingDefinition: false,
         
         errorMachines: null,
         errorExecutions: null,
         errorHistory: null,
+        errorDefinition: null,
 
         fetchMachines: async (force = false) => {
           const creds = getRustCreds();
@@ -103,23 +112,81 @@ export const useSfnStore = create<SfnState & SfnActions>()(
         },
 
         selectMachine: (arn) => {
-          set({ selectedMachineArn: arn, executions: [], steps: [], selectedExecutionArn: null });
+          set({ 
+            selectedMachineArn: arn, 
+            executions: [], 
+            steps: [], 
+            selectedExecutionArn: null,
+            definition: null,
+            logGroupName: null,
+            errorDefinition: null
+          });
           get().fetchExecutions(arn);
+          get().fetchDefinition(arn);
         },
 
         fetchExecutions: async (machineArn) => {
           const creds = getRustCreds();
           if (!creds) return;
 
+          const machine = get().machines.find(m => m.arn === machineArn);
+          const isExpress = machine?.machineType.includes('EXPRESS');
+          let logGroup = get().logGroupName;
+          
+          // Si es Express y no tenemos logGroup todavía, intentamos deducirlo o esperamos a fetchDefinition
+          if (isExpress && !logGroup && machine) {
+             logGroup = `/aws/vendedlogs/states/${machine.name}-Logs`;
+          }
+
           set({ loadingExecutions: true, errorExecutions: null });
           try {
-            const res: SfnExecution[] = await invoke('sfn_list_executions', { 
-                credentials: creds, 
-                machineArn 
-            });
+            let res: SfnExecution[];
+            if (isExpress && logGroup) {
+                try {
+                    res = await invoke('sfn_list_express_executions_from_logs', { 
+                        credentials: creds, 
+                        logGroup 
+                    });
+                } catch (logErr) {
+                    console.error("Failed to fetch express executions from logs, falling back to standard API", logErr);
+                    res = await invoke('sfn_list_executions', { 
+                        credentials: creds, 
+                        machineArn 
+                    });
+                }
+            } else {
+                res = await invoke('sfn_list_executions', { 
+                    credentials: creds, 
+                    machineArn 
+                });
+            }
             set({ executions: res, loadingExecutions: false });
           } catch (e: any) {
             set({ errorExecutions: String(e), loadingExecutions: false });
+          }
+        },
+
+        fetchDefinition: async (machineArn) => {
+          const creds = getRustCreds();
+          if (!creds) return;
+
+          set({ loadingDefinition: true, errorDefinition: null });
+          try {
+            const res: { definition: string, logGroupName: string | null } = await invoke('sfn_describe_state_machine', { 
+                credentials: creds, 
+                machineArn 
+            });
+            
+            const oldLogGroup = get().logGroupName;
+            set({ definition: res.definition, logGroupName: res.logGroupName, loadingDefinition: false });
+            
+            // Si el logGroup cambió o se descubrió ahora, refrescamos ejecuciones para Express
+            const machine = get().machines.find(m => m.arn === machineArn);
+            if (machine?.machineType.includes('EXPRESS') && res.logGroupName && res.logGroupName !== oldLogGroup) {
+                get().fetchExecutions(machineArn);
+            }
+          } catch (e: any) {
+            set({ errorDefinition: String(e), loadingDefinition: false });
           }
         },
 
@@ -132,12 +199,30 @@ export const useSfnStore = create<SfnState & SfnActions>()(
           const creds = getRustCreds();
           if (!creds) return;
 
+          const selectedMachineArn = get().selectedMachineArn;
+          const machine = get().machines.find(m => m.arn === selectedMachineArn);
+          const isExpress = machine?.machineType.includes('EXPRESS');
+          let logGroup = get().logGroupName;
+
+          if (isExpress && !logGroup && machine) {
+             logGroup = `/aws/vendedlogs/states/${machine.name}-Logs`;
+          }
+
           set({ loadingHistory: true, errorHistory: null });
           try {
-            const res: SfnStep[] = await invoke('sfn_get_execution_history', { 
-                credentials: creds, 
-                executionArn 
-            });
+            let res: SfnStep[];
+            if (isExpress && logGroup) {
+                res = await invoke('sfn_get_express_execution_history_from_logs', { 
+                    credentials: creds, 
+                    logGroup,
+                    executionArn
+                });
+            } else {
+                res = await invoke('sfn_get_execution_history', { 
+                    credentials: creds, 
+                    executionArn 
+                });
+            }
             set({ steps: res, loadingHistory: false });
           } catch (e: any) {
             set({ errorHistory: String(e), loadingHistory: false });

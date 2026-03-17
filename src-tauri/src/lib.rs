@@ -70,6 +70,7 @@ pub use crate::mock_server::{start_mock_server, stop_mock_server, MockServerStat
 pub use crate::git_watcher::{watch_repo, stop_watching_repo};
 pub use crate::stepfunctions::{
     sfn_list_state_machines, sfn_list_executions, sfn_get_execution_history, sfn_start_execution,
+    sfn_describe_state_machine, sfn_list_express_executions_from_logs, sfn_get_express_execution_history_from_logs,
 };
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
@@ -358,6 +359,9 @@ pub fn run() {
             sfn_list_executions,
             sfn_get_execution_history,
             sfn_start_execution,
+            sfn_describe_state_machine,
+            sfn_list_express_executions_from_logs,
+            sfn_get_express_execution_history_from_logs,
             start_mock_server,
             stop_mock_server,
             json_processor::json_format,
@@ -367,6 +371,7 @@ pub fn run() {
             json_processor::json_validate,
             json_processor::json_flatten,
             json_processor::json_generate_types,
+            json_processor::json_generate_schema,
             json_processor::json_convert_format,
             json_processor::yaml_to_json_cmd,
             json_processor::json_query_path,

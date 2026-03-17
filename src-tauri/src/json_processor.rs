@@ -502,6 +502,59 @@ pub fn json_query_path(input: String, expression: String) -> Result<String, Stri
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
+// ─── JSON Schema ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn json_generate_schema(input: String) -> Result<String, String> {
+    let value: Value = serde_json::from_str(&input)
+        .map_err(|e| format!("JSON inválido línea {}: {}", e.line(), e))?;
+    
+    let schema = infer_schema(&value);
+    serde_json::to_string_pretty(&schema).map_err(|e| e.to_string())
+}
+
+fn infer_schema(val: &Value) -> Value {
+    let mut obj = serde_json::Map::new();
+    match val {
+        Value::Null => {
+            obj.insert("type".into(), "null".into());
+        }
+        Value::Bool(_) => {
+            obj.insert("type".into(), "boolean".into());
+        }
+        Value::Number(n) => {
+            if n.is_f64() {
+                obj.insert("type".into(), "number".into());
+            } else {
+                obj.insert("type".into(), "integer".into());
+            }
+        }
+        Value::String(_) => {
+            obj.insert("type".into(), "string".into());
+        }
+        Value::Array(arr) => {
+            obj.insert("type".into(), "array".into());
+            if !arr.is_empty() {
+                obj.insert("items".into(), infer_schema(&arr[0]));
+            }
+        }
+        Value::Object(map) => {
+            obj.insert("type".into(), "object".into());
+            let mut props = serde_json::Map::new();
+            let mut required = Vec::new();
+            for (k, v) in map {
+                props.insert(k.clone(), infer_schema(v));
+                required.push(Value::String(k.clone()));
+            }
+            if !props.is_empty() {
+                obj.insert("properties".into(), Value::Object(props));
+                obj.insert("required".into(), Value::Array(required));
+            }
+        }
+    }
+    Value::Object(obj)
+}
+
 // ─── Diff ─────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
