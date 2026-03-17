@@ -48,6 +48,7 @@ interface WorkspaceContextType {
     openFolderInThisWindow: () => Promise<void>;
     openFolderInNewWindow: () => Promise<void>;
     addProjectsFromPaths: (paths: string[], silent?: boolean) => Promise<void>;
+    removeProjectsByPath: (paths: string[]) => void;
     setActiveView: (view: AppView) => void;
     setTargetTerminalTab: (tabId: string | null) => void;
     addSavedCommand: (name: string, command: string, steps?: CommandStep[], projectType?: string) => void;
@@ -267,9 +268,40 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     const scanWorkspace = async (path: string): Promise<Project[]> => {
         try {
-            const projects: Project[] = await invoke('scan_projects', { rootPath: path });
-            setState(prev => ({ ...prev, projects, currentPath: path }));
-            return projects;
+            // 1. Escanear la raíz (comportamiento original)
+            const rootProjects: Project[] = await invoke('scan_projects', { rootPath: path });
+            
+            let finalProjects = [...rootProjects];
+
+            // 2. Identificar y actualizar proyectos externos
+            // Los proyectos externos son los que NO empiezan con la ruta raíz
+            const currentProjects = state.projects;
+            const externalPaths = currentProjects
+                .map(p => p.path as string)
+                .filter(p => !p.startsWith(path));
+
+            if (externalPaths.length > 0) {
+                const updatedExternal: Project[] = [];
+                for (const extPath of externalPaths) {
+                    try {
+                        const found: Project[] = await invoke('scan_path', { path: extPath });
+                        // scan_path devuelve un array, pero como es una ruta de proyecto directo, 
+                        // tomamos el primero que coincida con la ruta exacta.
+                        const p = found.find(f => f.path === extPath);
+                        if (p) updatedExternal.push(p);
+                    } catch (e) {
+                        console.warn(`Could not refresh external project at ${extPath}`, e);
+                        // Si falla (ej: carpeta borrada), podrías decidir si mantenerlo o no.
+                        // Por ahora mantendremos el anterior si el escaneo falla pero existía.
+                        const old = currentProjects.find(cp => cp.path === extPath);
+                        if (old) updatedExternal.push(old);
+                    }
+                }
+                finalProjects = [...finalProjects, ...updatedExternal];
+            }
+
+            setState(prev => ({ ...prev, projects: finalProjects, currentPath: path }));
+            return finalProjects;
         } catch (e) {
             console.error('Failed to scan workspace', e);
             return [];
@@ -561,10 +593,19 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     }, [state.projects]);
 
+    const removeProjectsByPath = useCallback((pathsToRemove: string[]) => {
+        setState(prev => {
+            const updated = prev.projects.filter(p => !pathsToRemove.includes(p.path as string));
+            return { ...prev, projects: updated };
+        });
+        toast.success(`Se han eliminado ${pathsToRemove.length} proyectos del workspace`);
+    }, []);
+
     return (
         <WorkspaceContext.Provider value={{
             state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow,
             addProjectsFromPaths,
+            removeProjectsByPath,
             setActiveView, setTargetTerminalTab,
             executeProjectScript, addSavedCommand, removeSavedCommand, 
             saveWorkspaceConfig,

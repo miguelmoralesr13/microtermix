@@ -1,10 +1,11 @@
 import React from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { RotateCcw, FolderPlus, SquareStack, Save, Upload, FolderOpen, Palette, ExternalLink } from 'lucide-react';
+import { RotateCcw, FolderPlus, SquareStack, Save, Upload, FolderOpen, Palette, ExternalLink, Folder } from 'lucide-react';
 import { IconButton } from '../ui/IconButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useMonacoTheme, setMonacoTheme, MONACO_THEMES } from '@/hooks/useMonacoTheme';
 import { invoke } from '@tauri-apps/api/core';
+import { WorkspaceFoldersModal } from './WorkspaceFoldersModal';
 
 interface HeaderProps {
     onSaveConfig?: () => void;
@@ -17,8 +18,14 @@ export const Header: React.FC<HeaderProps> = ({
     onLoadConfigApplyCurrent,
     onLoadWorkspaceConfig,
 }) => {
-    const { state, scanWorkspace, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
+    const { state, scanWorkspace, openFolderInThisWindow, openFolderInNewWindow, saveWorkspaceConfig } = useWorkspace();
     const monacoTheme = useMonacoTheme();
+    const [foldersModalOpen, setFoldersModalOpen] = React.useState(false);
+
+    const extraProjects = React.useMemo(() => {
+        if (!state.currentPath) return [];
+        return state.projects.filter(p => !(p.path as string).startsWith(state.currentPath));
+    }, [state.projects, state.currentPath]);
 
     const getTitleSuffix = () => {
         switch (state.activeView) {
@@ -46,9 +53,21 @@ export const Header: React.FC<HeaderProps> = ({
         <header className="h-14 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 bg-slate-950/50 relative z-10 w-full gap-4">
             {/* Izquierda: Path del Workspace + Refresh */}
             <div className="flex-1 flex justify-start items-center min-w-0 gap-2">
-                <span className="text-xs text-slate-500 font-mono truncate max-w-sm lg:max-w-md bg-slate-900/50 px-3 py-1.5 rounded-md border border-slate-800" title={state.currentPath}>
-                    {state.currentPath || 'No Workspace Loaded'}
-                </span>
+                <button
+                    onClick={() => setFoldersModalOpen(true)}
+                    className="group flex items-center gap-2 max-w-sm lg:max-w-md bg-slate-900/50 hover:bg-slate-800 px-3 py-1.5 rounded-md border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-left overflow-hidden shrink-0"
+                >
+                    <Folder size={14} className={extraProjects.length > 0 ? 'text-microtermix-neon' : 'text-slate-500'} />
+                    <span className="text-xs text-slate-400 font-mono truncate" title={state.currentPath}>
+                        {state.currentPath || 'No Workspace Loaded'}
+                    </span>
+                    {extraProjects.length > 0 && (
+                        <span className="ml-1 px-1.5 py-0.5 rounded-full bg-microtermix-neon/20 text-microtermix-neon text-[10px] font-bold border border-microtermix-neon/30 shrink-0">
+                            +{extraProjects.length}
+                        </span>
+                    )}
+                </button>
+
                 {state.currentPath && (
                     <button
                         type="button"
@@ -145,7 +164,11 @@ export const Header: React.FC<HeaderProps> = ({
                     </>
                 )}
             </div>
+
+            <WorkspaceFoldersModal 
+                open={foldersModalOpen} 
+                onOpenChange={setFoldersModalOpen} 
+            />
         </header>
     );
 };
-
