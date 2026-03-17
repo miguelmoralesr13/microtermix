@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useMonacoTheme, setMonacoTheme, MONACO_THEMES } from '@/hooks/useMonacoTheme';
 import { invoke } from '@tauri-apps/api/core';
 import { WorkspaceFoldersModal } from './WorkspaceFoldersModal';
+import { listen } from '@tauri-apps/api/event';
+import { cn } from '../../lib/utils';
 
 interface HeaderProps {
     onSaveConfig?: () => void;
@@ -18,9 +20,41 @@ export const Header: React.FC<HeaderProps> = ({
     onLoadConfigApplyCurrent,
     onLoadWorkspaceConfig,
 }) => {
-    const { state, scanWorkspace, openFolderInThisWindow, openFolderInNewWindow, saveWorkspaceConfig } = useWorkspace();
+    const { state, scanWorkspace, openFolderInThisWindow, openFolderInNewWindow, addProjectsFromPaths } = useWorkspace();
     const monacoTheme = useMonacoTheme();
     const [foldersModalOpen, setFoldersModalOpen] = React.useState(false);
+    const [isDraggingOver, setIsDraggingOver] = React.useState(false);
+
+    // Localized Drag and Drop Listener
+    React.useEffect(() => {
+        let unlistenDrop: (() => void) | undefined;
+        let unlistenOver: (() => void) | undefined;
+        let unlistenLeave: (() => void) | undefined;
+
+        const setupListeners = async () => {
+            unlistenOver = await listen('tauri://drag-over', () => {
+                setIsDraggingOver(true);
+            });
+
+            unlistenLeave = await listen('tauri://drag-leave', () => {
+                setIsDraggingOver(false);
+            });
+
+            unlistenDrop = await listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
+                setIsDraggingOver(false);
+                if (event.payload.paths.length > 0) {
+                    addProjectsFromPaths(event.payload.paths);
+                }
+            });
+        };
+
+        setupListeners();
+        return () => {
+            unlistenDrop?.();
+            unlistenOver?.();
+            unlistenLeave?.();
+        };
+    }, [addProjectsFromPaths]);
 
     const extraProjects = React.useMemo(() => {
         if (!state.currentPath) return [];
@@ -55,13 +89,21 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex-1 flex justify-start items-center min-w-0 gap-2">
                 <button
                     onClick={() => setFoldersModalOpen(true)}
-                    className="group flex items-center gap-2 max-w-sm lg:max-w-md bg-slate-900/50 hover:bg-slate-800 px-3 py-1.5 rounded-md border border-slate-800 hover:border-slate-700 transition-all cursor-pointer text-left overflow-hidden shrink-0"
+                    className={cn(
+                        "group flex items-center gap-2 max-w-sm lg:max-w-md px-3 py-1.5 rounded-md border transition-all cursor-pointer text-left overflow-hidden shrink-0",
+                        isDraggingOver 
+                            ? "bg-microtermix-neon/20 border-microtermix-neon shadow-[0_0_15px_rgba(56,189,248,0.3)] animate-pulse scale-105" 
+                            : "bg-slate-900/50 hover:bg-slate-800 border-slate-800 hover:border-slate-700"
+                    )}
                 >
-                    <Folder size={14} className={extraProjects.length > 0 ? 'text-microtermix-neon' : 'text-slate-500'} />
-                    <span className="text-xs text-slate-400 font-mono truncate" title={state.currentPath}>
-                        {state.currentPath || 'No Workspace Loaded'}
+                    <Folder size={14} className={extraProjects.length > 0 || isDraggingOver ? 'text-microtermix-neon' : 'text-slate-500'} />
+                    <span className={cn(
+                        "text-xs font-mono truncate",
+                        isDraggingOver ? "text-white font-bold" : "text-slate-400"
+                    )} title={state.currentPath}>
+                        {isDraggingOver ? "Suelta para añadir..." : (state.currentPath || 'No Workspace Loaded')}
                     </span>
-                    {extraProjects.length > 0 && (
+                    {extraProjects.length > 0 && !isDraggingOver && (
                         <span className="ml-1 px-1.5 py-0.5 rounded-full bg-microtermix-neon/20 text-microtermix-neon text-[10px] font-bold border border-microtermix-neon/30 shrink-0">
                             +{extraProjects.length}
                         </span>

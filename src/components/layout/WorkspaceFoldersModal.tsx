@@ -1,9 +1,8 @@
 import React from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
-import { Folder, Trash2, Lock, ExternalLink } from 'lucide-react';
+import { Folder, Trash2, Lock } from 'lucide-react';
 import { Button } from '../ui/button';
-import { getFolderName } from '../../types/workspaceConfig';
 
 interface WorkspaceFoldersModalProps {
     open: boolean;

@@ -242,6 +242,19 @@ async fn git_ahead_behind_native(project_path: String) -> Result<git_native::Ahe
 }
 
 #[tauri::command]
+async fn get_full_diff(
+    project_path: String,
+    file_path: String,
+    mode: String,
+) -> Result<crate::git_diff::FullDiffResult, String> {
+    tokio::task::spawn_blocking(move || {
+        git_native::get_full_diff_native_impl(project_path, file_path, mode)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn git_get_diff_model_native(
     project_path: String,
     file_path: String,
@@ -293,6 +306,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            get_full_diff,
             open_standalone_window,
             open_new_workspace,
             get_initial_workspace_for_window,

@@ -59,22 +59,21 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
         setLoading(true);
         setError(null);
         try {
-            // 1. Get raw contents
-            const model: { original: string, modified: string } = await invoke('git_get_diff_model_native', {
+            // 1. Get raw contents and hunks in a single optimized call
+            const data: { 
+                original: string, 
+                modified: string, 
+                hunks: HunkInfo[],
+                unified_diff: string 
+            } = await invoke('get_full_diff', {
                 projectPath,
                 filePath: file,
                 mode
             });
-            setOriginalText(model.original);
-            setModifiedText(model.modified);
-
-            // 2. Get detected hunks from Rust engine
-            const diffData: { hunks: HunkInfo[] } = await invoke('compute_diff_hunks', {
-                original: model.original,
-                modified: model.modified,
-                filePath: file
-            });
-            setHunks(diffData.hunks);
+            
+            setOriginalText(data.original);
+            setModifiedText(data.modified);
+            setHunks(data.hunks);
         } catch (e: any) {
             setError(e?.toString?.() || 'Failed to load diff');
         } finally {
@@ -84,17 +83,6 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
 
     useEffect(() => { 
         loadContent();
-        
-        // Cleanup function for Monaco models when component unmounts or inputs change
-        return () => {
-            if (editorRef.current) {
-                const model = editorRef.current.getModel();
-                if (model) {
-                    if (model.original) model.original.dispose();
-                    if (model.modified) model.modified.dispose();
-                }
-            }
-        };
     }, [loadContent]);
 
     const handleEditorDidMount = (editor: any) => {

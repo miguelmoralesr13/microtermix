@@ -8,7 +8,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { registerMonacoThemes } from './lib/monacoThemes';
-import { GlobalDropZone } from './components/layout/GlobalDropZone';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
@@ -233,9 +232,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WorkspaceProvider>
-        <GlobalDropZone>
-          <AppContent />
-        </GlobalDropZone>
+        <AppContent />
         <Toaster position="bottom-right" theme="dark" richColors />
       </WorkspaceProvider>
       <ReactQueryDevtools initialIsOpen={false} />

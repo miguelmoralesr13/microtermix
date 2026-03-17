@@ -687,7 +687,7 @@ pub fn git_get_diff_model_native_impl(
                 found_in_index = true;
             }
         }
-        
+
         if !found_in_index {
              if let Ok(head) = repo.head() {
                 if let Ok(commit) = head.peel_to_commit() {
@@ -714,6 +714,21 @@ pub fn git_get_diff_model_native_impl(
     Ok(DiffModelResult { original, modified })
 }
 
+pub fn get_full_diff_native_impl(
+    project_path: String,
+    file_path: String,
+    mode: String,
+) -> Result<crate::git_diff::FullDiffResult, String> {
+    let model = git_get_diff_model_native_impl(project_path, file_path.clone(), mode)?;
+    let hunk_data = crate::git_diff::compute_diff_hunks_impl(model.original.clone(), model.modified.clone(), file_path)?;
+
+    Ok(crate::git_diff::FullDiffResult {
+        original: model.original,
+        modified: model.modified,
+        unified_diff: hunk_data.unified_diff,
+        hunks: hunk_data.hunks,
+    })
+}
 /// Read raw content of a file at any git revision.
 /// `rev_path` is a revspec like `"abc1234:src/foo.ts"` or `"HEAD~1:bar.rs"`.
 /// Returns the file bytes as UTF-8 text in `stdout` (same contract as `git show`).

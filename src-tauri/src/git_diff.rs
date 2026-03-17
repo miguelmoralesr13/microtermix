@@ -28,6 +28,15 @@ pub struct DiffHunksResult {
     pub hunks: Vec<HunkInfo>,
 }
 
+/// Resultado completo de un diff: texto original, modificado y hunks detectados.
+#[derive(Serialize)]
+pub struct FullDiffResult {
+    pub original: String,
+    pub modified: String,
+    pub unified_diff: String,
+    pub hunks: Vec<HunkInfo>,
+}
+
 /// Computes unified diff from original and modified content using imara-diff (Rust).
 pub fn compute_unified_diff_impl(
     original: String,
