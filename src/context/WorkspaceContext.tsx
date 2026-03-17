@@ -85,7 +85,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const gitStore = useGitStore();
     const jiraStore = useJiraStore();
     const sonarStore = useSonarStore();
-    const processStore = useProcessStore();
+    const processStoreTerminalTab = useProcessStore(s => s.activeTerminalTab);
 
     // Initial Path Recovery from Backend (Tauri)
     useEffect(() => {
@@ -190,7 +190,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                     uiStore.multiScript,
                     uiStore.globalEnvName,
                     uiStore.vitePreviewOpen,
-                    processStore.activeTerminalTab,
+                    processStoreTerminalTab,
                     state.projects.map(p => p.path as string),
                     state.savedCommands,
                     state.savedCommandSteps,
@@ -211,7 +211,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }, [
         state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
         uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
-        processStore.activeTerminalTab,
+        processStoreTerminalTab,
         gitStore.accounts, gitStore.repoAccounts,
         jiraStore.accounts, jiraStore.activeAccountId,
         sonarStore.config
@@ -266,7 +266,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     }, []);
 
-    const scanWorkspace = async (path: string): Promise<Project[]> => {
+    const scanWorkspace = useCallback(async (path: string): Promise<Project[]> => {
         try {
             // 1. Escanear la raíz (comportamiento original)
             const rootProjects: Project[] = await invoke('scan_projects', { rootPath: path });
@@ -306,7 +306,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error('Failed to scan workspace', e);
             return [];
         }
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const openFolderInThisWindow = useCallback(async () => {
         try {
@@ -551,7 +552,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 uiStore.multiScript,
                 uiStore.globalEnvName,
                 uiStore.vitePreviewOpen,
-                processStore.activeTerminalTab,
+                processStoreTerminalTab,
                 state.projects.map(p => p.path as string),
                 state.savedCommands,
                 state.savedCommandSteps,
@@ -568,7 +569,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }, [
         state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
         uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
-        processStore.activeTerminalTab
+        processStoreTerminalTab
     ]);
 
     const executePipeline = useCallback(async (pipeline: PipelineConfig) => {

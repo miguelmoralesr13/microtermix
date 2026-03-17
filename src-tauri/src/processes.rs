@@ -669,13 +669,17 @@ pub async fn execute_service_script(
     let notify_clone = notify.clone();
 
     tokio::spawn(async move {
-        let mut reader = BufReader::new(stdout).lines();
+        let mut reader = BufReader::new(stdout);
         loop {
+            let mut buf = Vec::new();
             tokio::select! {
                 _ = notify_clone.notified() => break,
-                line = reader.next_line() => {
-                    match line {
-                        Ok(Some(l)) => {
+                result = reader.read_until(b'\n', &mut buf) => {
+                    match result {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            while buf.last() == Some(&b'\n') || buf.last() == Some(&b'\r') { buf.pop(); }
+                            let l = String::from_utf8_lossy(&buf).to_string();
                             append_to_service_log_async(service_id_clone.clone(), l.clone()).await;
                             let _ = app_clone.emit("service-logs", LogEvent {
                                 service_id: service_id_clone.clone(),
@@ -683,7 +687,7 @@ pub async fn execute_service_script(
                                 is_error: false,
                             });
                         }
-                        _ => break,
+                        Err(_) => break,
                     }
                 }
             }
@@ -695,13 +699,17 @@ pub async fn execute_service_script(
     let notify_clone_err = notify.clone();
 
     tokio::spawn(async move {
-        let mut reader = BufReader::new(stderr).lines();
+        let mut reader = BufReader::new(stderr);
         loop {
+            let mut buf = Vec::new();
             tokio::select! {
                 _ = notify_clone_err.notified() => break,
-                line = reader.next_line() => {
-                    match line {
-                        Ok(Some(l)) => {
+                result = reader.read_until(b'\n', &mut buf) => {
+                    match result {
+                        Ok(0) => break, // EOF
+                        Ok(_) => {
+                            while buf.last() == Some(&b'\n') || buf.last() == Some(&b'\r') { buf.pop(); }
+                            let l = String::from_utf8_lossy(&buf).to_string();
                             append_to_service_log_async(service_id_clone_err.clone(), l.clone()).await;
                             let _ = app_clone_err.emit("service-logs", LogEvent {
                                 service_id: service_id_clone_err.clone(),
@@ -709,7 +717,7 @@ pub async fn execute_service_script(
                                 is_error: true,
                             });
                         }
-                        _ => break,
+                        Err(_) => break,
                     }
                 }
             }

@@ -82,17 +82,20 @@ function AppContent() {
     initWorkspace();
   }, [setWorkspacePath, scanWorkspace]);
 
+  // Purge phantom processes only once at mount, not on every re-render.
   React.useEffect(() => {
-    // Purge any phantom processes on soft refreshes.
     if (!isStandalone) {
         invoke('kill_all_services').catch(console.error);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  React.useEffect(() => {
     if (state.currentPath && state.projects.length === 0) {
       configLoadedForPathRef.current = null;
       scanWorkspace(state.currentPath);
     }
-  }, [state.currentPath, isStandalone, scanWorkspace, state.projects.length]);
+  }, [state.currentPath, scanWorkspace, state.projects.length]);
 
   // Al tener proyectos, cargar config del workspace desde microtermix.json en la carpeta (o crearlo si no existe)
   React.useEffect(() => {
