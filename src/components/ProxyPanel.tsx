@@ -152,7 +152,7 @@ export const ProxyPanel: React.FC = () => {
     const portFor = (c: ProxyCandidate) => portOverrides[c.project_path] ?? c.port;
 
     return (
-        <div className="flex flex-col h-full overflow-hidden bg-slate-900">
+        <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900">
             <div className="flex-1 overflow-auto p-4">
                 {error && (
                     <div className="mb-3 px-3 py-2 rounded-lg bg-microtermix-danger/10 border border-microtermix-danger/30 text-microtermix-danger text-xs">

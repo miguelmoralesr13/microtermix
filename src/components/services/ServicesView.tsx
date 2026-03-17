@@ -204,7 +204,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     };
 
     return (
-        <>
+        <div className="flex-1 w-full h-full flex overflow-hidden">
             <ProjectListPane
                 projects={state.projects}
                 selectedProjects={selectedProjects}
@@ -257,6 +257,6 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     }}
                 />
             </div>
-        </>
+        </div>
     );
 };

@@ -5,7 +5,7 @@ import { MockServerControls } from './MockServerControls';
 
 export const MockPanel: React.FC = () => {
     return (
-        <div className="flex flex-col h-full bg-slate-950 text-slate-200 overflow-hidden">
+        <div className="flex-1 flex flex-col h-full w-full bg-slate-950 text-slate-200 overflow-hidden">
             {/* Top Toolbar */}
             <MockServerControls />
 

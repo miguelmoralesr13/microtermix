@@ -43,7 +43,7 @@ export const RegexTesterPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-900 overflow-hidden">
+        <div className="flex-1 flex flex-col h-full w-full bg-slate-900 overflow-hidden">
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-slate-800">
                 <div className="flex items-center gap-2">

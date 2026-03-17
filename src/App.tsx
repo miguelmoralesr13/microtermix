@@ -1,7 +1,8 @@
 import React from "react";
 import "./App.css";
-import { WorkspaceProvider, useWorkspace } from "./context/WorkspaceContext";
+import { WorkspaceProvider, useWorkspace, AppView } from "./context/WorkspaceContext";
 import { ServiceManager } from "./components/ServiceManager";
+import { UtilityRenderer } from "./components/layout/UtilityRenderer";
 import { useGitStore } from "./stores/gitStore";
 import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
@@ -27,6 +28,11 @@ function AppContent() {
   const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
   const configLoadedForPathRef = React.useRef<string | null>(null);
   const initWatchers = useGitStore(s => s.initWatchers);
+
+  // Standalone detection
+  const params = new URLSearchParams(window.location.search);
+  const isStandalone = params.get('standalone') === 'true';
+  const standaloneUtility = params.get('utility') as AppView | null;
 
   // Iniciar watchers globales para Git
   React.useEffect(() => {
@@ -69,22 +75,24 @@ function AppContent() {
               scanWorkspace(path);
             }
           } catch (_) { }
-          window.history.replaceState(null, '', window.location.pathname || '/');
+          // window.history.replaceState(null, '', window.location.pathname || '/');
         }
       }
     };
     initWorkspace();
-  }, []);
+  }, [setWorkspacePath, scanWorkspace]);
 
   React.useEffect(() => {
     // Purge any phantom processes on soft refreshes.
-    invoke('kill_all_services').catch(console.error);
+    if (!isStandalone) {
+        invoke('kill_all_services').catch(console.error);
+    }
 
     if (state.currentPath && state.projects.length === 0) {
       configLoadedForPathRef.current = null;
       scanWorkspace(state.currentPath);
     }
-  }, [state.currentPath]);
+  }, [state.currentPath, isStandalone, scanWorkspace, state.projects.length]);
 
   // Al tener proyectos, cargar config del workspace desde microtermix.json en la carpeta (o crearlo si no existe)
   React.useEffect(() => {
@@ -108,7 +116,16 @@ function AppContent() {
       .catch(() => { });
   }, [state.currentPath, state.projects.length, applyWorkspaceConfig]);
 
+  if (isStandalone && standaloneUtility) {
+    return (
+        <div className="w-full h-screen bg-slate-900 overflow-hidden relative">
+            <UtilityRenderer view={standaloneUtility} />
+        </div>
+    );
+  }
+
   if (!state.currentPath) {
+
     return (
       <div className="flex flex-col items-center justify-center h-screen w-full bg-[#020617] text-slate-100 relative overflow-hidden">
         {/* Animated Background Gradients */}

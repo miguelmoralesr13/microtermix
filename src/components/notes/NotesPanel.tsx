@@ -139,7 +139,7 @@ export const NotesPanel: React.FC = () => {
     const activeFileName = activeFile ? activeFile.split('/').pop() ?? activeFile : null;
 
     return (
-        <div className="flex flex-col h-full w-full min-h-0 bg-slate-900">
+        <div className="flex-1 flex flex-col h-full w-full min-h-0 bg-slate-900">
             {/* Header */}
             <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-slate-950 border-b border-slate-800">
                 <div className="flex items-center gap-2 shrink-0">

@@ -42,6 +42,7 @@ aws-credential-types = "1"
 aws-sigv4 = { version = "1", features = ["sign-http"] }
 aws-smithy-runtime-api = { version = "1", features = ["client"] }
 uuid = { version = "1", features = ["v4"] }
+urlencoding = "2"
 url = "2"
 portable-pty = "0.8"
 tower = "0.4"

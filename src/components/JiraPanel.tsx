@@ -49,7 +49,7 @@ export const JiraPanel: React.FC = () => {
     const activeAccountName = accounts.find(a => a.id === activeAccountId)?.name;
 
     return (
-        <div className="flex flex-col h-full min-h-0 bg-slate-950">
+        <div className="flex-1 flex flex-col h-full w-full min-h-0 bg-slate-950">
             {/* Tab bar */}
             <div className="flex items-center gap-1 px-4 pt-3 border-b border-slate-800 shrink-0 bg-slate-900/50">
                 {tabs.map(t => (

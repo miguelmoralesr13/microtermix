@@ -1,25 +1,8 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Sidebar } from './layout/Sidebar';
 import { Header } from './layout/Header';
-import { ServicesView } from './services/ServicesView';
-import { GitPanel } from './GitPanel';
-import { JiraPanel } from './JiraPanel';
-import { ProcessesPanel } from './ProcessesPanel';
-import { ProxyPanel } from './ProxyPanel';
-import { FileServerPanel } from './FileServerPanel';
-import { TestsPanel } from './TestsPanel';
-import { SonarPanel } from './SonarPanel';
-import { CloudWatchPanel } from './CloudWatchPanel';
-import { HttpPanel } from './http/HttpPanel';
-import { JenkinsPanel } from './JenkinsPanel';
-import { LibCipherPanel } from './LibCipherPanel';
-import { MockPanel } from './mocks/MockPanel';
-import { JsonProcessorPanel } from './json-processor/JsonProcessorPanel';
-import { RegexTesterPanel } from './regex/RegexTesterPanel';
-import { NotesPanel } from './notes/NotesPanel';
-import { SwaggerPanel } from './swagger/SwaggerPanel';
-import { VisualDesigner } from './designer/VisualDesigner';
+import { UtilityRenderer } from './layout/UtilityRenderer';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
@@ -27,6 +10,7 @@ import { useGitStore } from '../stores/gitStore';
 import { useJiraStore } from '../stores/jiraStore';
 import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore } from '../stores/processStore';
+import { useUIStore } from '../stores/uiStore';
 
 const ACTIVE_TERMINAL_STORAGE_KEY = 'microtermix-active-terminal-tab';
 
@@ -42,6 +26,14 @@ function selectedProjectsKey(workspacePath: string): string {
 
 export const ServiceManager: React.FC = () => {
     const { state, setTargetTerminalTab, applyWorkspaceConfig, setWorkspacePath, scanWorkspace } = useWorkspace();
+
+    // UI Store
+    const {
+        selectedProjects, setSelectedProjects,
+        multiScript, setMultiScript,
+        globalEnvName, setGlobalEnvName,
+        vitePreviewOpen, setVitePreviewOpen
+    } = useUIStore();
 
     // Zustand Store
     const activeProcesses = useProcessStore(s => s.activeProcesses);
@@ -66,25 +58,7 @@ export const ServiceManager: React.FC = () => {
         }
     }, [state.currentPath, setActiveTerminalTabStore]);
 
-    const [multiScript, setMultiScript] = useState<string>(() => localStorage.getItem('microtermix-multi-script') || '');
-    const [globalEnvName, setGlobalEnvName] = useState<string>(() => localStorage.getItem('microtermix-multi-env-name') || 'dev');
-    const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const restoredSelectedRef = React.useRef(false);
-    const [vitePreviewOpen, setVitePreviewOpen] = useState(() => {
-        try { return localStorage.getItem('microtermix-vite-preview-open') === '1'; } catch { return false; }
-    });
-
-    React.useEffect(() => {
-        if (multiScript) localStorage.setItem('microtermix-multi-script', multiScript);
-    }, [multiScript]);
-
-    React.useEffect(() => {
-        if (globalEnvName) localStorage.setItem('microtermix-multi-env-name', globalEnvName);
-    }, [globalEnvName]);
-
-    React.useEffect(() => {
-        try { localStorage.setItem('microtermix-vite-preview-open', vitePreviewOpen ? '1' : '0'); } catch (_) { }
-    }, [vitePreviewOpen]);
 
     // Releer desde localStorage cuando se aplica una config cargada
     React.useEffect(() => {
@@ -96,13 +70,7 @@ export const ServiceManager: React.FC = () => {
                 if (Array.isArray(parsed)) setSelectedProjects(parsed);
             }
         } catch (_) { }
-        const ms = localStorage.getItem('microtermix-multi-script');
-        if (ms != null) setMultiScript(ms);
-        const ge = localStorage.getItem('microtermix-multi-env-name');
-        if (ge != null) setGlobalEnvName(ge);
-        const vp = localStorage.getItem('microtermix-vite-preview-open');
-        if (vp !== null) setVitePreviewOpen(vp === '1');
-    }, [state.configAppliedTrigger, state.currentPath]);
+    }, [state.configAppliedTrigger, state.currentPath, setSelectedProjects]);
 
     const projectPaths = useMemo(() => new Set(state.projects.map(p => p.path as string)), [state.projects]);
 
@@ -123,7 +91,7 @@ export const ServiceManager: React.FC = () => {
                 restoredSelectedRef.current = true;
             }
         } catch (_) { }
-    }, [state.projects.length, state.currentPath, projectPaths]);
+    }, [state.projects.length, state.currentPath, projectPaths, setSelectedProjects]);
 
     React.useEffect(() => {
         if (selectedProjects.length === 0) return;
@@ -152,7 +120,7 @@ export const ServiceManager: React.FC = () => {
             }
         } catch (_) { }
         setActiveTerminalTab(processIds[0]);
-    }, [processIds, state.currentPath, activeTerminalTab, setActiveTerminalTab]);
+    }, [processIds, state.currentPath, activeTerminalTab, setActiveTerminalTab, setActiveTerminalTabStore]);
 
     const handleSaveWorkspaceConfig = async () => {
         if (!state.currentPath) return;
@@ -281,123 +249,10 @@ export const ServiceManager: React.FC = () => {
                 />
 
                 <div className="flex-1 min-h-0 flex bg-slate-900 overflow-hidden w-full relative">
-                    {state.activeView === 'services' && (
-                        <ServicesView
-                            selectedProjects={selectedProjects}
-                            setSelectedProjects={setSelectedProjects}
-                            multiScript={multiScript}
-                            setMultiScript={setMultiScript}
-                            globalEnvName={globalEnvName}
-                            setGlobalEnvName={setGlobalEnvName}
-                            vitePreviewOpen={vitePreviewOpen}
-                            setVitePreviewOpen={setVitePreviewOpen}
-                        />
-                    )}
-
-                    {state.activeView === 'git' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <GitPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'jira' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <JiraPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'processes' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <ProcessesPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'proxy' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <ProxyPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'fileServer' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <FileServerPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'tests' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <TestsPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'sonar' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <SonarPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'cloudwatch' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <CloudWatchPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'http' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <HttpPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'jenkins' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <JenkinsPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'lib-cipher' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <LibCipherPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'mocks' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <MockPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'json-processor' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <JsonProcessorPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'regex' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <RegexTesterPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'notes' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <NotesPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'swagger' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <SwaggerPanel />
-                        </div>
-                    )}
-
-                    {state.activeView === 'designer' && (
-                        <div className="flex-1 w-full h-full flex flex-col overflow-hidden relative">
-                            <VisualDesigner />
-                        </div>
-                    )}
-
+                    <UtilityRenderer />
                 </div>
             </div>
         </div>
     );
 };
+

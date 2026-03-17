@@ -398,7 +398,7 @@ export const TestsPanel: React.FC = () => {
     ) : null;
 
     return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
+        <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900">
             {/* Header */}
             <div className="shrink-0 px-4 py-3 border-b border-slate-800 flex items-center gap-2">
                 <FlaskConical size={16} className="text-microtermix-neon" />

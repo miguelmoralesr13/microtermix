@@ -1,9 +1,10 @@
 import React from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { RotateCcw, FolderPlus, SquareStack, Save, Upload, FolderOpen, Palette } from 'lucide-react';
+import { RotateCcw, FolderPlus, SquareStack, Save, Upload, FolderOpen, Palette, ExternalLink } from 'lucide-react';
 import { IconButton } from '../ui/IconButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useMonacoTheme, setMonacoTheme, MONACO_THEMES } from '@/hooks/useMonacoTheme';
+import { invoke } from '@tauri-apps/api/core';
 
 interface HeaderProps {
     onSaveConfig?: () => void;
@@ -26,6 +27,18 @@ export const Header: React.FC<HeaderProps> = ({
             case 'proxy': return '- Proxy reverso';
             case 'fileServer': return '- Servidor de archivos';
             default: return `- ${state.activeView}`;
+        }
+    };
+
+    const handlePopOut = async () => {
+        const utility = state.activeView;
+        try {
+            await invoke('open_standalone_window', {
+                utility,
+                workspacePath: state.currentPath || '',
+            });
+        } catch (e) {
+            console.error('Failed to open standalone window via Rust', e);
         }
     };
 
@@ -55,6 +68,15 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Derecha: Botones de Configuración */}
             <div className="flex-1 flex items-center justify-end gap-2">
+                {state.currentPath && (
+                    <IconButton
+                        icon={ExternalLink}
+                        onClick={handlePopOut}
+                        variant="outline"
+                        title="Abrir utilidad en ventana independiente"
+                        className="text-microtermix-neon border-microtermix-neon/30 hover:bg-microtermix-neon/10"
+                    />
+                )}
                 {/* Selector de tema Monaco */}
                 <div className="flex items-center gap-1.5">
                     <Palette size={13} className="text-slate-500 shrink-0" />
@@ -126,3 +148,4 @@ export const Header: React.FC<HeaderProps> = ({
         </header>
     );
 };
+

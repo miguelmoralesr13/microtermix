@@ -178,7 +178,7 @@ export const GitPanel: React.FC = () => {
     }, [stagingWidth, setUi]);
 
     return (
-        <div className="relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
+        <div className="flex-1 relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
             {/* Header / Tabs */}
             <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4 h-11">
                 <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="h-full flex flex-col justify-end">

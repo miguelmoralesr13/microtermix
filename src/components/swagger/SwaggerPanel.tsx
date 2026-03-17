@@ -228,7 +228,7 @@ export const SwaggerPanel: React.FC = () => {
         : { flex: 1, minWidth: 0 };
 
     return (
-        <div className="flex flex-col h-full w-full min-h-0 bg-slate-900">
+        <div className="flex-1 flex flex-col h-full w-full min-h-0 bg-slate-900">
             {/* Header */}
             <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-slate-950 border-b border-slate-800">
                 <FileCode2 size={15} className="text-violet-400 shrink-0" />

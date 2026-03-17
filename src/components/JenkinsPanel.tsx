@@ -43,7 +43,7 @@ export const JenkinsPanel: React.FC = () => {
         );
 
     return (
-        <div className="flex flex-col w-full h-full overflow-hidden">
+        <div className="flex-1 flex flex-col w-full h-full overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-4 pt-3 border-b border-slate-800 shrink-0">
                 <div className="flex items-center gap-2">

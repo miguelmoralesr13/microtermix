@@ -295,7 +295,7 @@ export const VisualDesigner: React.FC = () => {
     );
 
     return (
-        <div className="flex h-full w-full bg-slate-950 overflow-hidden relative">
+        <div className="flex-1 flex h-full w-full bg-slate-950 overflow-hidden relative">
             {/* Sidebar Left */}
             <div className="w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col p-4 gap-6 shrink-0 overflow-y-auto scrollbar-hide">
                 {/* File Management */}

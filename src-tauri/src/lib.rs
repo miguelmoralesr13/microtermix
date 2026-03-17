@@ -250,6 +250,31 @@ fn git_get_diff_model_native(
     git_native::git_get_diff_model_native_impl(project_path, file_path, mode)
 }
 
+#[tauri::command]
+async fn open_standalone_window(
+    app: AppHandle,
+    utility: String,
+    workspace_path: String,
+) -> Result<(), String> {
+    let label = format!("utility-{}-{}", utility, uuid::Uuid::new_v4().to_string().get(..8).unwrap_or(""));
+    let workspace_encoded = urlencoding::encode(&workspace_path);
+    let url = format!("/?standalone=true&utility={}&workspace={}", utility, workspace_encoded);
+
+    let window = tauri::WebviewWindowBuilder::new(
+        &app,
+        label,
+        tauri::WebviewUrl::App(url.into())
+    )
+    .title(format!("Microtermix - {}", utility))
+    .inner_size(900.0, 700.0)
+    .decorations(true)
+    .shadow(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -268,6 +293,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            open_standalone_window,
             open_new_workspace,
             get_initial_workspace_for_window,
             scan_projects,

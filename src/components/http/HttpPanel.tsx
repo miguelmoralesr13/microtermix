@@ -74,7 +74,7 @@ export const HttpPanel: React.FC = () => {
     // Render
     // -----------------------------------------------------------------------
     return (
-        <div className="flex flex-col h-full bg-microtermix-dark text-slate-300">
+        <div className="flex-1 flex flex-col h-full w-full bg-microtermix-dark text-slate-300">
 
             {/* ── Top Toolbar ── */}
             <div className="flex-none p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">

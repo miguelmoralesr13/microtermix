@@ -78,7 +78,7 @@ export const JsonProcessorPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full w-full min-h-0 bg-slate-900">
+        <div className="flex-1 flex flex-col h-full w-full min-h-0 bg-slate-900">
             {/* Header */}
             <div className="shrink-0 flex items-center bg-slate-950 border-b border-slate-800 pr-4">
                 <div className="flex items-center gap-2 px-4 py-3 border-r border-slate-800 shrink-0">

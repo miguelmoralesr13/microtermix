@@ -477,7 +477,7 @@ export const SonarPanel: React.FC = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-900">
+        <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900">
             <div className="shrink-0 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <div className="p-2 bg-blue-500/10 rounded-lg">

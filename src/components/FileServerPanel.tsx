@@ -242,7 +242,7 @@ export const FileServerPanel: React.FC = () => {
     const editingRoute = editingIndex !== null ? routes[editingIndex] : null;
 
     return (
-        <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950">
+        <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-950">
             {/* Header bar */}
             <div className="shrink-0 px-4 py-3 border-b border-slate-800 bg-slate-900/50 flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
