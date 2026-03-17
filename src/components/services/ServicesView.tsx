@@ -9,13 +9,13 @@ import { invoke } from '@tauri-apps/api/core';
 
 interface ServicesViewProps {
     selectedProjects: string[];
-    setSelectedProjects: React.Dispatch<React.SetStateAction<string[]>>;
+    setSelectedProjects: (val: string[]) => void;
     multiScript: string;
-    setMultiScript: React.Dispatch<React.SetStateAction<string>>;
+    setMultiScript: (val: string) => void;
     globalEnvName: string;
-    setGlobalEnvName: React.Dispatch<React.SetStateAction<string>>;
+    setGlobalEnvName: (val: string) => void;
     vitePreviewOpen: boolean;
-    setVitePreviewOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    setVitePreviewOpen: (val: boolean) => void;
 }
 
 export const ServicesView: React.FC<ServicesViewProps> = ({
@@ -108,16 +108,17 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         const project = state.projects.find(p => p.path === path);
         if (!project) return;
 
-        setSelectedProjects(prev => {
-            if (prev.includes(path)) return prev.filter(p => p !== path);
-
+        let next: string[];
+        if (selectedProjects.includes(path)) {
+            next = selectedProjects.filter(p => p !== path);
+        } else {
             // Smart Filter: If we have an active type, only allow same type
             if (activeSelectionType && String(project.project_type) !== activeSelectionType) {
-                return prev;
+                return;
             }
-
-            return [...prev, path];
-        });
+            next = [...selectedProjects, path];
+        }
+        setSelectedProjects(next);
     };
 
     const handleSelectAll = () => {

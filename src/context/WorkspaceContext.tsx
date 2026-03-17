@@ -7,7 +7,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 import type { MicrotermixConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
-import { applyWorkspaceConfigToStorage, resolveFolderNameToPath } from '../types/workspaceConfig';
+import { applyWorkspaceConfigToStorage, resolveFolderNameToPath, buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
@@ -15,6 +15,7 @@ import { useJiraStore } from '../stores/jiraStore';
 import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore, batchedAppendLogs } from '../stores/processStore';
 import { useToolStore } from '../stores/toolStore';
+import { useUIStore } from '../stores/uiStore';
 
 export interface Project {
     name: String;
@@ -46,10 +47,12 @@ interface WorkspaceContextType {
     applyWorkspaceConfig: (config: MicrotermixConfig, workspacePath: string, projectPaths: string[]) => void;
     openFolderInThisWindow: () => Promise<void>;
     openFolderInNewWindow: () => Promise<void>;
+    addProjectsFromPaths: (paths: string[], silent?: boolean) => Promise<void>;
     setActiveView: (view: AppView) => void;
     setTargetTerminalTab: (tabId: string | null) => void;
     addSavedCommand: (name: string, command: string, steps?: CommandStep[], projectType?: string) => void;
     removeSavedCommand: (name: string) => void;
+    saveWorkspaceConfig: () => Promise<void>;
     executePipeline: (pipeline: PipelineConfig) => Promise<void>;
     executeProjectScript: (
         projectPath: string,
@@ -75,6 +78,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     // We'll use a temporary state during boot until path is confirmed
     const [isInitialized, setIsInitialized] = useState(false);
+
+    // ─── Stores for Auto-save ───────────────────────────────────────────
+    const uiStore = useUIStore();
+    const gitStore = useGitStore();
+    const jiraStore = useJiraStore();
+    const sonarStore = useSonarStore();
+    const processStore = useProcessStore();
 
     // Initial Path Recovery from Backend (Tauri)
     useEffect(() => {
@@ -165,6 +175,47 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         localStorage.setItem('microtermix-settings', JSON.stringify({ currentPath: state.currentPath }));
     }, [STORAGE_KEY, state.savedCommands, state.savedCommandSteps, state.savedCommandTypes, isInitialized]);
 
+    // ─── Global Auto-save (microtermix.json) ──────────────────────────────
+    const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (!state.currentPath || state.projects.length === 0) return;
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        
+        autoSaveTimerRef.current = setTimeout(async () => {
+            try {
+                const config = buildWorkspaceConfigFromCurrentState(
+                    state.currentPath,
+                    uiStore.selectedProjects,
+                    uiStore.multiScript,
+                    uiStore.globalEnvName,
+                    uiStore.vitePreviewOpen,
+                    processStore.activeTerminalTab,
+                    state.projects.map(p => p.path as string),
+                    state.savedCommands,
+                    state.savedCommandSteps,
+                    state.savedCommandTypes,
+                    state.pipelines,
+                );
+                
+                await invoke('write_workspace_config_in_folder', {
+                    workspacePath: state.currentPath,
+                    content: JSON.stringify(config, null, 2),
+                });
+            } catch (e) {
+                console.error('[Workspace] Auto-save failed', e);
+            }
+        }, 1500);
+
+        return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+    }, [
+        state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
+        uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
+        processStore.activeTerminalTab,
+        gitStore.accounts, gitStore.repoAccounts,
+        jiraStore.accounts, jiraStore.activeAccountId,
+        sonarStore.config
+    ]);
+
     const setWorkspacePath = (path: string) => {
         setState(prev => ({ ...prev, currentPath: path }));
     };
@@ -240,6 +291,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error('Open folder failed', e);
         }
     }, []);
+
     const openFolderInNewWindow = useCallback(async () => {
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta para nueva ventana' });
@@ -252,6 +304,43 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             toast.error("Error al abrir nueva ventana");
         }
     }, []);
+
+    const addProjectsFromPaths = useCallback(async (paths: string[], silent = false) => {
+        try {
+            const allFound: Project[] = [];
+            for (const path of paths) {
+                const found: Project[] = await invoke('scan_path', { path });
+                allFound.push(...found);
+            }
+
+            if (allFound.length === 0) {
+                if (!silent) toast.error("No se detectaron proyectos válidos en las rutas soltadas");
+                return;
+            }
+
+            setState(prev => {
+                const existingPaths = new Set(prev.projects.map(p => p.path as string));
+                const newOnes = allFound.filter(p => !existingPaths.has(p.path as string));
+                
+                if (newOnes.length === 0) {
+                    if (!silent && paths.length > 0) toast.info("Los proyectos soltados ya están en el workspace");
+                    return prev;
+                }
+
+                const updated = [...prev.projects, ...newOnes];
+                
+                // Iniciar watchers para los nuevos proyectos
+                const gitStore = useGitStore.getState();
+                gitStore.initWatchers(newOnes.map(p => p.path as string));
+
+                if (!silent) toast.success(`Añadidos ${newOnes.length} proyectos nuevos`);
+                return { ...prev, projects: updated };
+            });
+        } catch (e) {
+            console.error('Failed to add projects from paths', e);
+            if (!silent) toast.error("Error al escanear rutas soltadas");
+        }
+    }, [state.projects]);
 
     useEffect(() => {
         let unlisten: (() => void) | undefined;
@@ -421,6 +510,35 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     }, [updateProcessStatusStore, state.savedCommands, state.projects]);
 
+    const saveWorkspaceConfig = useCallback(async () => {
+        if (!state.currentPath) return;
+        try {
+            const config = buildWorkspaceConfigFromCurrentState(
+                state.currentPath,
+                uiStore.selectedProjects,
+                uiStore.multiScript,
+                uiStore.globalEnvName,
+                uiStore.vitePreviewOpen,
+                processStore.activeTerminalTab,
+                state.projects.map(p => p.path as string),
+                state.savedCommands,
+                state.savedCommandSteps,
+                state.savedCommandTypes,
+                state.pipelines,
+            );
+            await invoke('write_workspace_config_in_folder', {
+                workspacePath: state.currentPath,
+                content: JSON.stringify(config, null, 2),
+            });
+        } catch (e) {
+            console.error('[Workspace] Save failed', e);
+        }
+    }, [
+        state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
+        uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
+        processStore.activeTerminalTab
+    ]);
+
     const executePipeline = useCallback(async (pipeline: PipelineConfig) => {
         try {
             const resolvedSteps = pipeline.steps.map((step: PipelineStepConfig) => {
@@ -446,8 +564,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     return (
         <WorkspaceContext.Provider value={{
             state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow,
+            addProjectsFromPaths,
             setActiveView, setTargetTerminalTab,
-            executeProjectScript, addSavedCommand, removeSavedCommand, executePipeline
+            executeProjectScript, addSavedCommand, removeSavedCommand, 
+            saveWorkspaceConfig,
+            executePipeline
         }}>
             {children}
         </WorkspaceContext.Provider>

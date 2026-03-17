@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { FolderOpen, ExternalLink, TerminalSquare } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { registerMonacoThemes } from './lib/monacoThemes';
+import { GlobalDropZone } from './components/layout/GlobalDropZone';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
@@ -25,7 +26,7 @@ registerMonacoThemes();
 
 // A wrapper to handle initial workspace loading logic
 function AppContent() {
-  const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
+  const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, addProjectsFromPaths, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
   const configLoadedForPathRef = React.useRef<string | null>(null);
   const initWatchers = useGitStore(s => s.initWatchers);
 
@@ -105,6 +106,10 @@ function AppContent() {
         if (config && typeof config === 'object' && Object.keys(config).length > 0) {
           const projectPaths = state.projects.map((p) => p.path as string);
           applyWorkspaceConfig(config, state.currentPath, projectPaths);
+
+          if (config.allProjectPaths && Array.isArray(config.allProjectPaths)) {
+            addProjectsFromPaths(config.allProjectPaths, true);
+          }
         } else {
           // Generar archivo en automático si no existía (solo version + path)
           invoke('write_workspace_config_in_folder', {
@@ -228,7 +233,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WorkspaceProvider>
-        <AppContent />
+        <GlobalDropZone>
+          <AppContent />
+        </GlobalDropZone>
         <Toaster position="bottom-right" theme="dark" richColors />
       </WorkspaceProvider>
       <ReactQueryDevtools initialIsOpen={false} />

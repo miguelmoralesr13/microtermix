@@ -30,6 +30,8 @@ export interface MicrotermixConfig {
     workspacePath?: string;
     /** Nombres de carpeta de proyectos seleccionados (no rutas completas). */
     selectedProjects?: string[];
+    /** Rutas completas de todos los proyectos en el workspace (para proyectos fuera de la raíz). */
+    allProjectPaths?: string[];
     multiScript?: string;
     globalEnvName?: string;
     gitAccounts?:  GitAccount[];
@@ -51,7 +53,7 @@ export interface MicrotermixConfig {
     sonarConfig?: SonarConfig;
 }
 
-export const WORKSPACE_CONFIG_FILENAME = 'nexus-workspace.json';
+export const WORKSPACE_CONFIG_FILENAME = 'microtermix.json';
 
 
 /** Obtiene solo el nombre de la carpeta del proyecto (último segmento del path). */
@@ -183,6 +185,7 @@ export function buildWorkspaceConfigFromCurrentState(
         version: 1,
         workspacePath,
         selectedProjects: selectedProjects.map(getFolderName),
+        allProjectPaths: projectPaths,
         multiScript,
         globalEnvName,
         gitAccounts: useGitStore.getState().accounts,

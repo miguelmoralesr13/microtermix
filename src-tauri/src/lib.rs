@@ -28,7 +28,7 @@ use tauri::{AppHandle, Manager};
 pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
 pub use crate::state::AppState;
 pub use crate::projects::{
-    get_project_script_bodies, list_test_files, read_project_envs, scan_projects, Project,
+    get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects, Project,
 };
 pub use crate::processes::{
     ensure_directory, execute_pipeline, execute_service_script, get_listening_processes,
@@ -260,7 +260,7 @@ async fn open_standalone_window(
     let workspace_encoded = urlencoding::encode(&workspace_path);
     let url = format!("/?standalone=true&utility={}&workspace={}", utility, workspace_encoded);
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         label,
         tauri::WebviewUrl::App(url.into())
@@ -296,6 +296,7 @@ pub fn run() {
             open_standalone_window,
             open_new_workspace,
             get_initial_workspace_for_window,
+            scan_path,
             scan_projects,
             list_test_files,
             save_workspace_settings,

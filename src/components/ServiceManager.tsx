@@ -5,10 +5,6 @@ import { Header } from './layout/Header';
 import { UtilityRenderer } from './layout/UtilityRenderer';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import { buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
-import { useGitStore } from '../stores/gitStore';
-import { useJiraStore } from '../stores/jiraStore';
-import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore } from '../stores/processStore';
 import { useUIStore } from '../stores/uiStore';
 
@@ -25,27 +21,17 @@ function selectedProjectsKey(workspacePath: string): string {
 }
 
 export const ServiceManager: React.FC = () => {
-    const { state, setTargetTerminalTab, applyWorkspaceConfig, setWorkspacePath, scanWorkspace } = useWorkspace();
+    const { state, setTargetTerminalTab, applyWorkspaceConfig, setWorkspacePath, scanWorkspace, saveWorkspaceConfig } = useWorkspace();
 
     // UI Store
     const {
-        selectedProjects, setSelectedProjects,
-        multiScript, setMultiScript,
-        globalEnvName, setGlobalEnvName,
-        vitePreviewOpen, setVitePreviewOpen
+        selectedProjects, setSelectedProjects
     } = useUIStore();
 
     // Zustand Store
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const activeTerminalTab = useProcessStore(s => s.activeTerminalTab);
     const setActiveTerminalTabStore = useProcessStore(s => s.setActiveTerminalTab);
-
-    const gitAccounts = useGitStore(s => s.accounts);
-    const gitRepoAccounts = useGitStore(s => s.repoAccounts);
-
-    const jiraAccounts = useJiraStore(s => s.accounts);
-    const jiraActiveAccountId = useJiraStore(s => s.activeAccountId);
-    const sonarConfig = useSonarStore(s => s.config);
 
     const processIds = useMemo(() => Object.keys(activeProcesses), [activeProcesses]);
 
@@ -123,63 +109,8 @@ export const ServiceManager: React.FC = () => {
     }, [processIds, state.currentPath, activeTerminalTab, setActiveTerminalTab, setActiveTerminalTabStore]);
 
     const handleSaveWorkspaceConfig = async () => {
-        if (!state.currentPath) return;
-        try {
-            const config = buildWorkspaceConfigFromCurrentState(
-                state.currentPath,
-                selectedProjects,
-                multiScript,
-                globalEnvName,
-                vitePreviewOpen,
-                activeTerminalTab,
-                state.projects.map(p => p.path as string),
-                state.savedCommands,
-                state.savedCommandSteps,
-                state.savedCommandTypes,
-                state.pipelines,
-            );
-            await invoke('write_workspace_config_in_folder', {
-                workspacePath: state.currentPath,
-                content: JSON.stringify(config, null, 2),
-            });
-        } catch (e) {
-            console.error('Save workspace config failed', e);
-        }
+        await saveWorkspaceConfig();
     };
-
-    // ─── Auto-save: escribe microtermix.json automáticamente 1.5s después del último cambio ──
-    const autoSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-    React.useEffect(() => {
-        if (!state.currentPath) return;
-        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = setTimeout(async () => {
-            try {
-                const config = buildWorkspaceConfigFromCurrentState(
-                    state.currentPath!,
-                    selectedProjects,
-                    multiScript,
-                    globalEnvName,
-                    vitePreviewOpen,
-                    activeTerminalTab,
-                    state.projects.map(p => p.path as string),
-                    state.savedCommands,
-                    state.savedCommandSteps,
-                    state.savedCommandTypes,
-                    state.pipelines,
-                );
-                await invoke('write_workspace_config_in_folder', {
-                    workspacePath: state.currentPath,
-                    content: JSON.stringify(config, null, 2),
-                });
-            } catch (_) { /* silencioso — no interrumpir UX */ }
-        }, 1500);
-        return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
-    }, [
-        selectedProjects, multiScript, globalEnvName, vitePreviewOpen,
-        activeTerminalTab, state.currentPath, state.savedCommands, state.savedCommandSteps, state.pipelines,
-        gitAccounts, gitRepoAccounts,
-        jiraAccounts, jiraActiveAccountId, sonarConfig,
-    ]);
 
     const handleLoadWorkspaceConfig = async () => {
         try {
@@ -226,10 +157,7 @@ export const ServiceManager: React.FC = () => {
             if (!config || typeof config !== 'object') return;
             const projectPaths = state.projects.map((p) => p.path as string);
             applyWorkspaceConfig(config, state.currentPath, projectPaths);
-            await invoke('write_workspace_config_in_folder', {
-                workspacePath: state.currentPath,
-                content: JSON.stringify(config, null, 2),
-            });
+            await saveWorkspaceConfig();
         } catch (e) {
             console.error('Load and apply config failed', e);
         }
@@ -255,4 +183,3 @@ export const ServiceManager: React.FC = () => {
         </div>
     );
 };
-

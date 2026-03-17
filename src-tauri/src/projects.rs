@@ -47,141 +47,161 @@ fn detect_java_framework(path: &Path) -> Option<String> {
     None
 }
 
-/// Escanea proyectos hijos directos del directorio raíz.
-#[tauri::command]
-pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
-    let mut projects = Vec::new();
-    let root = Path::new(&root_path);
+/// Intenta detectar si una carpeta específica es un proyecto soportado.
+pub fn detect_project_in_path(path: &Path) -> Option<Project> {
+    if !path.is_dir() { return None; }
+    
+    let name = path.file_name()?.to_string_lossy().to_string();
+    let path_str = path.to_string_lossy().to_string();
+    let mut p_type = "unknown".to_string();
+    let mut framework = None;
+    let mut build_system = None;
+    let mut scripts = Vec::new();
 
-    if !root.is_dir() {
-        return Err("Root path is not a directory".to_string());
+    // 1. NODE / BUN
+    if path.join("package.json").exists() {
+        let has_bun_lock = path.join("bun.lockb").exists() || path.join("bun.lock").exists();
+        let runner = if has_bun_lock { "bun" } 
+                    else if path.join("pnpm-lock.yaml").exists() { "pnpm" }
+                    else if path.join("yarn.lock").exists() { "yarn" }
+                    else { "npm" };
+
+        p_type = (if has_bun_lock { "bun" } else { "node" }).to_string();
+        build_system = Some(runner.to_string());
+        
+        if let Ok(content) = fs::read_to_string(path.join("package.json")) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(scripts_obj) = json.get("scripts").and_then(|s| s.as_object()) {
+                    for key in scripts_obj.keys() {
+                        let cmd = if runner == "npm" { format!("npm run {}", key) } else { format!("{} {}", runner, key) };
+                        scripts.push(cmd);
+                    }
+                }
+            }
+        }
+        if scripts.is_empty() { scripts.push(format!("{} install", runner)); }
+    } 
+    // 2. GO
+    else if path.join("go.mod").exists() {
+        p_type = "go".to_string();
+        build_system = Some("go".to_string());
+        scripts.push("go run .".to_string());
+        scripts.push("go build .".to_string());
+        scripts.push("go test ./...".to_string());
+        scripts.push("go mod tidy".to_string());
+    } 
+    // 3. RUST
+    else if path.join("Cargo.toml").exists() {
+        p_type = "rust".to_string();
+        build_system = Some("cargo".to_string());
+        scripts.push("cargo run".to_string());
+        scripts.push("cargo build".to_string());
+        scripts.push("cargo test".to_string());
+        scripts.push("cargo check".to_string());
+    }
+    // 4. PYTHON
+    else if path.join("requirements.txt").exists() || 
+            path.join("pyproject.toml").exists() || 
+            path.join("Pipfile").exists() ||
+            path.join("setup.py").exists() ||
+            path.join("manage.py").exists() ||
+            path.join("main.py").exists() ||
+            path.join("environment.yml").exists() ||
+            path.join(".python-version").exists() ||
+            path.join("venv").is_dir() ||
+            path.join(".venv").is_dir() {
+        
+        p_type = "python".to_string();
+        build_system = Some(if path.join("pyproject.toml").exists() { "poetry" } else if path.join("Pipfile").exists() { "pipenv" } else { "pip" }.to_string());
+        framework = detect_python_framework(path);
+        let python_cmd = if cfg!(target_os = "windows") { "python" } else { "python3" };
+        
+        match framework.as_deref() {
+            Some("django") => {
+                scripts.push(format!("{} manage.py runserver", python_cmd));
+                scripts.push(format!("{} manage.py migrate", python_cmd));
+            },
+            Some("fastapi") => {
+                scripts.push("uvicorn main:app --reload".to_string());
+            },
+            Some("flask") => {
+                scripts.push(format!("{} -m flask run", python_cmd));
+            },
+            _ => {
+                scripts.push(format!("{} main.py", python_cmd));
+            }
+        }
+        scripts.push(format!("{} -m pytest", python_cmd));
+    }
+    // 5. JAVA (Maven / Gradle)
+    else if path.join("pom.xml").exists() {
+        p_type = "java".to_string();
+        build_system = Some("maven".to_string());
+        framework = detect_java_framework(path);
+        scripts.push("mvn clean install".to_string());
+        if framework.as_deref() == Some("spring-boot") {
+            scripts.push("mvn spring-boot:run".to_string());
+        }
+        scripts.push("mvn test".to_string());
+    }
+    else if path.join("build.gradle").exists() {
+        p_type = "java".to_string();
+        build_system = Some("gradle".to_string());
+        framework = detect_java_framework(path);
+        let gradlew = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
+        let cmd = if path.join(gradlew).exists() { gradlew } else { "gradle" };
+        
+        scripts.push(format!("{} build", cmd));
+        if framework.as_deref() == Some("spring-boot") {
+            scripts.push(format!("{} bootRun", cmd));
+        }
+        scripts.push(format!("{} test", cmd));
     }
 
+    if p_type != "unknown" {
+        Some(Project {
+            name,
+            path: path_str,
+            project_type: p_type,
+            framework,
+            build_system,
+            scripts,
+        })
+    } else {
+        None
+    }
+}
+
+/// Escanea una ruta específica. Si es un proyecto, lo devuelve. Si es una carpeta, escanea sus hijos.
+#[tauri::command]
+pub fn scan_path(path: String) -> Result<Vec<Project>, String> {
+    let root = Path::new(&path);
+    if !root.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+
+    // 1. ¿Es la ruta en sí un proyecto?
+    if let Some(project) = detect_project_in_path(root) {
+        return Ok(vec![project]);
+    }
+
+    // 2. Si no es un proyecto, escaneamos sus hijos directos (como scan_projects original)
+    let mut projects = Vec::new();
     if let Ok(entries) = fs::read_dir(root) {
         for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                let path_str = path.to_string_lossy().to_string();
-                let mut p_type = "unknown".to_string();
-                let mut framework = None;
-                let mut build_system = None;
-                let mut scripts = Vec::new();
-
-                // 1. NODE / BUN
-                if path.join("package.json").exists() {
-                    let has_bun_lock = path.join("bun.lockb").exists() || path.join("bun.lock").exists();
-                    let runner = if has_bun_lock { "bun" } 
-                                else if path.join("pnpm-lock.yaml").exists() { "pnpm" }
-                                else if path.join("yarn.lock").exists() { "yarn" }
-                                else { "npm" };
-
-                    p_type = (if has_bun_lock { "bun" } else { "node" }).to_string();
-                    build_system = Some(runner.to_string());
-                    
-                    if let Ok(content) = fs::read_to_string(path.join("package.json")) {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(scripts_obj) = json.get("scripts").and_then(|s| s.as_object()) {
-                                for key in scripts_obj.keys() {
-                                    let cmd = if runner == "npm" { format!("npm run {}", key) } else { format!("{} {}", runner, key) };
-                                    scripts.push(cmd);
-                                }
-                            }
-                        }
-                    }
-                    if scripts.is_empty() { scripts.push(format!("{} install", runner)); }
-                } 
-                // 2. GO
-                else if path.join("go.mod").exists() {
-                    p_type = "go".to_string();
-                    build_system = Some("go".to_string());
-                    scripts.push("go run .".to_string());
-                    scripts.push("go build .".to_string());
-                    scripts.push("go test ./...".to_string());
-                    scripts.push("go mod tidy".to_string());
-                } 
-                // 3. RUST
-                else if path.join("Cargo.toml").exists() {
-                    p_type = "rust".to_string();
-                    build_system = Some("cargo".to_string());
-                    scripts.push("cargo run".to_string());
-                    scripts.push("cargo build".to_string());
-                    scripts.push("cargo test".to_string());
-                    scripts.push("cargo check".to_string());
-                }
-                // 4. PYTHON
-                else if path.join("requirements.txt").exists() || 
-                        path.join("pyproject.toml").exists() || 
-                        path.join("Pipfile").exists() ||
-                        path.join("setup.py").exists() ||
-                        path.join("manage.py").exists() ||
-                        path.join("main.py").exists() ||
-                        path.join("environment.yml").exists() ||
-                        path.join(".python-version").exists() ||
-                        path.join("venv").is_dir() ||
-                        path.join(".venv").is_dir() {
-                    
-                    p_type = "python".to_string();
-                    build_system = Some(if path.join("pyproject.toml").exists() { "poetry" } else if path.join("Pipfile").exists() { "pipenv" } else { "pip" }.to_string());
-                    framework = detect_python_framework(&path);
-                    let python_cmd = if cfg!(target_os = "windows") { "python" } else { "python3" };
-                    
-                    match framework.as_deref() {
-                        Some("django") => {
-                            scripts.push(format!("{} manage.py runserver", python_cmd));
-                            scripts.push(format!("{} manage.py migrate", python_cmd));
-                        },
-                        Some("fastapi") => {
-                            scripts.push("uvicorn main:app --reload".to_string());
-                        },
-                        Some("flask") => {
-                            scripts.push(format!("{} -m flask run", python_cmd));
-                        },
-                        _ => {
-                            scripts.push(format!("{} main.py", python_cmd));
-                        }
-                    }
-                    scripts.push(format!("{} -m pytest", python_cmd));
-                }
-                // 5. JAVA (Maven / Gradle)
-                else if path.join("pom.xml").exists() {
-                    p_type = "java".to_string();
-                    build_system = Some("maven".to_string());
-                    framework = detect_java_framework(&path);
-                    scripts.push("mvn clean install".to_string());
-                    if framework.as_deref() == Some("spring-boot") {
-                        scripts.push("mvn spring-boot:run".to_string());
-                    }
-                    scripts.push("mvn test".to_string());
-                }
-                else if path.join("build.gradle").exists() {
-                    p_type = "java".to_string();
-                    build_system = Some("gradle".to_string());
-                    framework = detect_java_framework(&path);
-                    let gradlew = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
-                    let cmd = if path.join(gradlew).exists() { gradlew } else { "gradle" };
-                    
-                    scripts.push(format!("{} build", cmd));
-                    if framework.as_deref() == Some("spring-boot") {
-                        scripts.push(format!("{} bootRun", cmd));
-                    }
-                    scripts.push(format!("{} test", cmd));
-                }
-
-                if p_type != "unknown" {
-                    projects.push(Project {
-                        name,
-                        path: path_str,
-                        project_type: p_type,
-                        framework,
-                        build_system,
-                        scripts,
-                    });
-                }
+            let subpath = entry.path();
+            if let Some(project) = detect_project_in_path(&subpath) {
+                projects.push(project);
             }
         }
     }
     Ok(projects)
+}
+
+/// Escanea proyectos hijos directos del directorio raíz (mantenido por compatibilidad).
+#[tauri::command]
+pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
+    scan_path(root_path)
 }
 
 /// Lee todas las `.env*` de un proyecto y devuelve un mapa por entorno.
