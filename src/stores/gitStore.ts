@@ -450,13 +450,13 @@ export const useGitStore = create<GitStore>()(
                         console.log(`⚡ Global Git Watcher: ${path} changed`);
 
                         // Refresco local estrictamente silencioso y forzado
-                        // NO llamamos a fetchAheadBehind aquí porque causa bucle infinito (hace fetch)
                         invalidate(path);
-                        const { fetchStatus, fetchBranches, fetchTimeline } = get();
+                        const { fetchStatus, fetchBranches, fetchTimeline, fetchAheadBehind } = get();
                         Promise.all([
                             fetchStatus(path, true, true),
                             fetchBranches(path, true, true),
                             fetchTimeline(path, true, true),
+                            fetchAheadBehind(path, true, true),
                         ]).catch(console.error);
                     });
 

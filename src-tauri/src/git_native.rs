@@ -390,9 +390,11 @@ pub fn git_commit_native_impl(
 
 pub async fn git_push_native_impl(project_path: String, force: bool) -> Result<String, String> {
     let path = project_path.clone();
+    let account = crate::workspace_config::get_account_for_project(&path);
+    
     tokio::task::spawn_blocking(move || {
         let repo = repo_open(&path)?;
-        let auth = make_auth();
+        let auth = make_auth(account);
 
         let head = repo.head().map_err(|e| e.to_string())?;
         let branch_name = head.shorthand().ok_or("HEAD is detached")?.to_string();
@@ -415,10 +417,12 @@ pub async fn git_push_native_impl(project_path: String, force: bool) -> Result<S
 
 pub async fn git_pull_native_impl(project_path: String) -> Result<String, String> {
     let path = project_path.clone();
+    let account = crate::workspace_config::get_account_for_project(&path);
     
     // 1. Fetch
     let _fetch_res = tokio::task::spawn_blocking({
         let p = path.clone();
+        let acc = account.clone();
         move || {
             let repo = repo_open(&p)?;
             let remote_names = repo.remotes().map_err(|e| e.to_string())?;
@@ -427,7 +431,7 @@ pub async fn git_pull_native_impl(project_path: String) -> Result<String, String
                 .or_else(|| remote_names.iter().flatten().next())
                 .ok_or("No remotes configured")?;
             
-            fetch_remote_native(&repo, remote_name)?;
+            fetch_remote_native(&repo, remote_name, acc)?;
             Ok::<String, String>(remote_name.to_string())
         }
     }).await.map_err(|e| e.to_string())??;
@@ -601,16 +605,28 @@ pub struct AheadBehindResult {
 
 /// Build an `auth_git2` authenticator that reads from the system credential store
 /// (git config credential.helper, SSH agent, etc.).
-fn make_auth() -> auth_git2::GitAuthenticator {
-    auth_git2::GitAuthenticator::new_empty()
-        .add_default_username()
+fn make_auth(account: Option<crate::workspace_config::GitAccount>) -> auth_git2::GitAuthenticator {
+    let mut auth = auth_git2::GitAuthenticator::new_empty();
+    
+    // Si tenemos un token, lo inyectamos directamente.
+    if let Some(acc) = account {
+        let domain = url::Url::parse(&acc.url).ok()
+            .and_then(|u| u.host_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "*".to_string());
+            
+        // Para GitHub/GitLab vía HTTPS, el token suele ser la contraseña.
+        // Usamos "git" como usuario genérico o vacío.
+        auth = auth.add_plaintext_credentials(domain, "git", acc.token);
+    }
+
+    auth.add_default_username()
         .try_cred_helper(true)
         .try_ssh_agent(true)
         .add_default_ssh_keys()
 }
 
-pub fn fetch_remote_native(repo: &git2::Repository, remote_name: &str) -> Result<(), String> {
-    let auth = make_auth();
+pub fn fetch_remote_native(repo: &git2::Repository, remote_name: &str, account: Option<crate::workspace_config::GitAccount>) -> Result<(), String> {
+    let auth = make_auth(account);
     let mut remote = repo.find_remote(remote_name).map_err(|e| e.to_string())?;
     
     // auth.fetch is synchronous network I/O

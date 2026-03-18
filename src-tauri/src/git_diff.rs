@@ -201,6 +201,7 @@ async fn git_cli_fallback(
         // Prevent interactive prompts
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GIT_ASKPASS", "echo")
+        .env("GCM_INTERACTIVE", "never")
         // HTTPS: fail if transfer speed stays below 100 B/s for 10 s
         .env("GIT_HTTP_LOW_SPEED_LIMIT", "100")
         .env("GIT_HTTP_LOW_SPEED_TIME", "10")
@@ -388,8 +389,10 @@ pub async fn git_execute_impl(
             .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
         }
         "fetch" => {
+            let account = crate::workspace_config::get_account_for_project(&project_path);
             tokio::task::spawn_blocking({
                 let p = project_path.clone();
+                let acc = account.clone();
                 move || {
                     let repo = crate::git_native::repo_open(&p)?;
                     let remote_names = repo.remotes().map_err(|e| e.to_string())?;
@@ -397,7 +400,7 @@ pub async fn git_execute_impl(
                         .find(|&r| r == "origin")
                         .or_else(|| remote_names.iter().flatten().next())
                         .ok_or("No remotes configured")?;
-                    crate::git_native::fetch_remote_native(&repo, remote_name)
+                    crate::git_native::fetch_remote_native(&repo, remote_name, acc)
                 }
             }).await.map_err(|e| e.to_string())?
             .map(|_| GitResult { stdout: "Fetched from remote".into(), stderr: String::new(), success: true })

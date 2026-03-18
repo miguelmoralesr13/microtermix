@@ -56,7 +56,8 @@ async fn ensure_fetch_worker(app_handle: AppHandle) {
                             });
 
                             if let Some(remote_name) = origin {
-                                let _ = crate::git_native::fetch_remote_native(&repo, remote_name);
+                                let account = crate::workspace_config::get_account_for_project(&p);
+                                let _ = crate::git_native::fetch_remote_native(&repo, remote_name, account);
                             }
                         }
                     }).await;

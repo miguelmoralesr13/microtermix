@@ -1,6 +1,7 @@
 mod git_diff;
 mod git_native;
 mod git_watcher;
+mod workspace_config;
 mod state;
 mod projects;
 mod processes;

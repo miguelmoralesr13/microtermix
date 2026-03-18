@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen, Eye } from 'lucide-react';
 import { GitlabBranchViewerModal } from './gitlab/GitlabBranchViewerModal';
+import { toast } from 'sonner';
 import { PushPreviewModal } from './PushPreviewModal';
 import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
 import { MergeConfirmModal } from './MergeConfirmModal';
@@ -294,6 +295,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
     const handlePull = async () => {
         setIsPulling(true);
+        setPullError(null);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['pull'] });
 
@@ -307,16 +309,19 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             onRefreshRequest?.();
 
             if (!result.success) {
+                toast.error("Pull Failed", { description: "You may have local changes or history has diverged." });
                 setPullError({
                     message: "Pull Failed: You may have conflicting changes or need to stash/rebase.",
                     raw: result.stderr || result.stdout
                 });
             }
-        } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
+        } catch (e: any) {
+            // e is the string error returned by Rust Result::Err
+            const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : String(e));
             console.error('[Pull] invoke error:', msg);
+            toast.error("Pull Error", { description: msg });
             setPullError({
-                message: "Pull Error",
+                message: "Pull Error: History has diverged or conflicts exist.",
                 raw: msg
             });
         } finally {
@@ -353,7 +358,10 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             fetchAll(projectPath, true);
             setPullError(null);
         } catch (e: any) {
-            alert(`Action failed:\n\n${e.message || String(e)}`);
+            setPullError({
+                message: "Action Failed",
+                raw: e.message || String(e)
+            });
         } finally {
             setIsResolvingPull(false);
         }
