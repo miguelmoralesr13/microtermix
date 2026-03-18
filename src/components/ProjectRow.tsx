@@ -3,8 +3,9 @@ import { useWorkspace, Project } from '../context/WorkspaceContext';
 import { useProcessStore } from '../stores/processStore';
 import { useProjectEnvs } from './useProjectEnvs';
 import { EnvManager } from './EnvManager';
-import { Package, Plus, Play } from 'lucide-react';
+import { Package, Plus, Play, ShieldCheck, ShieldAlert, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { useSonarStore } from '../stores/sonarStore';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -119,6 +120,9 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
         idle: 'bg-transparent',
     };
 
+    const sonarMetrics = useSonarStore(s => s.metricsCache[projectPath]);
+    const qg = sonarMetrics?.qualityGate || 'NONE';
+
     return (
         <>
             <div className={cn(
@@ -143,6 +147,28 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                 {/* Nombre + Badge tipo */}
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggleSelect}>
                     <div className="flex items-center gap-1.5 min-w-0">
+                        {qg !== 'NONE' && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger render={
+                                        <div className="shrink-0">
+                                            {qg === 'OK' ? (
+                                                <ShieldCheck size={14} className="text-emerald-500" />
+                                            ) : (
+                                                <ShieldAlert size={14} className="text-red-500" />
+                                            )}
+                                        </div>
+                                    } />
+                                    <TooltipContent className="p-2 space-y-1 bg-slate-900 border-slate-700">
+                                        <p className="font-bold text-[10px] text-slate-200">Sonar Quality Gate: {qg}</p>
+                                        <div className="flex gap-3 text-[9px]">
+                                            <span className="text-red-400">Bugs: {sonarMetrics?.bugs}</span>
+                                            <span className="text-blue-400">Coverage: {sonarMetrics?.coverage}%</span>
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
                         <span className="text-xs font-semibold text-slate-200 truncate">{project.name}</span>
                         <div className="flex items-center gap-1 overflow-hidden">
                             {project.project_type && (

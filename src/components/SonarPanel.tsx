@@ -15,6 +15,7 @@ import { TerminalView } from './TerminalView';
 import { useGitStore } from '../stores/gitStore';
 import { Badge } from './ui/badge';
 import { useSonarStore } from '../stores/sonarStore';
+import { SonarIssueRemediator } from './SonarIssueRemediator';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ interface SonarMetrics {
 
 interface SonarIssue {
     key: string;
+    rule: string;
     severity: 'BLOCKER' | 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
     type: string;
     message: string;
@@ -196,34 +198,35 @@ export const SonarPanel: React.FC = () => {
         if (saved && projects.some(p => p.path === saved)) return saved;
         return projects.length > 0 ? projects[0].path as string : '';
     });
+
+    const [remediatingIssue, setRemediatingIssue] = useState<SonarIssue | null>(null);
+    const [configModalOpen, setConfigModalOpen] = useState(false);
+
+    // Get from global store
+    const metricsCache = useSonarStore(s => s.metricsCache);
+    const setMetrics = useSonarStore(s => s.setMetrics);
+    const projectLinks = useSonarStore(s => s.projectLinks);
+    const linkProject = useSonarStore(s => s.linkProject);
+    const clearCache = useSonarStore(s => s.clearCache);
+
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath(projects[0].path as string);
     }, [projects, selectedPath]);
+    
     useEffect(() => {
         if (selectedPath) localStorage.setItem(STORAGE_SONAR_PATH, selectedPath);
     }, [selectedPath]);
 
-    // ── Config
-    const [configModalOpen, setConfigModalOpen] = useState(false);
-
     // Per-project: project key + token
-    const [link, setLink] = useState<ProjectLink>(() => selectedPath ? loadLink(selectedPath) : {});
-
+    const link = projectLinks[selectedPath] || {};
+    
     useEffect(() => {
         if (selectedPath) {
-            const loaded = loadLink(selectedPath);
-            setLink(loaded);
             setIssues(loadIssuesCache(selectedPath));
             setTestResult(null);
         }
     }, [selectedPath]);
 
-    // ── Metrics cache
-    const [metricsCache, setMetricsCache] = useState<Record<string, SonarMetrics>>(loadMetricsCache);
-
-    useEffect(() => {
-        try { localStorage.setItem(METRICS_CACHE_KEY, JSON.stringify(metricsCache)); } catch (_) { }
-    }, [metricsCache]);
     const metrics = metricsCache[selectedPath] ?? null;
     const [loadingMetrics, setLoadingMetrics] = useState(false);
 
@@ -344,7 +347,7 @@ export const SonarPanel: React.FC = () => {
                 coverage: parseFloat(getVal('coverage') || '0'),
                 duplications: parseFloat(getVal('duplicated_lines_density') || '0'),
             };
-            setMetricsCache(prev => ({ ...prev, [selectedPath]: result }));
+            setMetrics(selectedPath, result);
             addLog('info', `Metrics OK → ${projectKey}`);
         } catch (e: any) {
             addLog('error', `Metrics failed: ${e.message || e}`);
@@ -366,6 +369,7 @@ export const SonarPanel: React.FC = () => {
             const data = await resp.json() as any;
             const mapped: SonarIssue[] = (data.issues || []).map((i: any) => ({
                 key: i.key,
+                rule: i.rule,
                 severity: i.severity as SonarIssue['severity'],
                 type: i.type || 'CODE_SMELL',
                 message: i.message || '',
@@ -414,17 +418,12 @@ export const SonarPanel: React.FC = () => {
     }, [searchingFor, searchQuery, sonarConfig, baseUrl]);
 
     const handleLinkProject = useCallback((projectPath: string, result: SonarProjectResult) => {
-        const existing = loadLink(projectPath);
-        const newLink: ProjectLink = { ...existing, projectKey: result.key };
-        saveLink(projectPath, newLink);
-        if (projectPath === selectedPath) {
-            setLink(newLink);
-        }
-        setMetricsCache(prev => { const next = { ...prev }; delete next[projectPath]; return next; });
+        linkProject(projectPath, { projectKey: result.key });
+        clearCache(projectPath);
         setSearchingFor(null);
         setSearchResults(null);
         addLog('info', `Vinculado → key: "${result.key}"`);
-    }, [selectedPath, addLog]);
+    }, [linkProject, clearCache, addLog]);
 
     useEffect(() => {
         if (!selectedPath || !projectKey || !effectiveToken || !sonarConfig.serverUrl) return;
@@ -435,13 +434,13 @@ export const SonarPanel: React.FC = () => {
     useEffect(() => {
         if (prevStatusRef.current === 'running' && processStatus === 'stopped') {
             const t = setTimeout(() => {
-                setMetricsCache(prev => { const next = { ...prev }; delete next[selectedPath]; return next; });
+                clearCache(selectedPath);
                 fetchMetricsRef.current();
             }, 3000);
             return () => clearTimeout(t);
         }
         prevStatusRef.current = processStatus;
-    }, [processStatus, selectedPath]);
+    }, [processStatus, selectedPath, clearCache]);
 
     const fetchIssuesRef = useRef(fetchIssues);
     useEffect(() => { fetchIssuesRef.current = fetchIssues; });
@@ -471,9 +470,7 @@ export const SonarPanel: React.FC = () => {
     }, [issues]);
 
     const handleOpenIssue = (issue: SonarIssue) => {
-        if (!selectedPath || !issue.component) return;
-        const fullPath = `${selectedPath}/${issue.component}`;
-        invoke('open_in_editor', { path: fullPath, line: issue.line }).catch(console.error);
+        setRemediatingIssue(issue);
     };
 
     return (
@@ -772,6 +769,16 @@ export const SonarPanel: React.FC = () => {
                 <div onClick={() => setIsConsoleOpen(!isConsoleOpen)} className="h-8 px-4 flex items-center justify-between cursor-pointer"><div className="flex items-center gap-2"><TerminalSquare size={12} className={isConsoleOpen ? 'text-orange-500' : 'text-slate-600'} /><span className="text-[10px] font-bold text-slate-600">Activity Console</span></div><ChevronDown size={13} className={`text-slate-600 transition-transform ${isConsoleOpen ? '' : 'rotate-180'}`} /></div>
                 {isConsoleOpen && <div className="flex-1 overflow-y-auto p-2 font-mono text-[10px] bg-[#0a0c10]">{debugLogs.map(l => <div key={l.id} className="flex gap-2"><span className="text-slate-700">[{l.timestamp}]</span><span className={`font-bold uppercase ${l.type === 'error' ? 'text-red-500' : 'text-blue-400'}`}>{l.type}:</span><span className="text-slate-400">{l.message}</span></div>)}</div>}
             </div>
+
+            {/* Modal de Remediación de Issues (3 Paneles) con shadcn/ui */}
+            {remediatingIssue && (
+                <SonarIssueRemediator
+                    isOpen={!!remediatingIssue}
+                    issue={remediatingIssue}
+                    projectPath={selectedPath}
+                    onClose={() => setRemediatingIssue(null)}
+                />
+            )}
         </div>
     );
 };

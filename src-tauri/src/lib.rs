@@ -290,6 +290,16 @@ async fn open_standalone_window(
     Ok(())
 }
 
+#[tauri::command]
+fn write_file(path: String, content: String) -> Result<(), String> {
+    std::fs::write(path, content).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -428,6 +438,8 @@ pub fn run() {
             notes::notes_rename_entry,
             java_manager::list_local_jdks,
             java_manager::download_jdk,
+            write_file,
+            read_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
