@@ -36,12 +36,12 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
         if (serviceId && projectPath && projectPath !== lastPathRef.current) {
             lastPathRef.current = projectPath;
             // Enviar comando CD silencioso
-            const cdCmd = window.navigator.platform.includes('Win') 
-                ? `cd "${projectPath}"\r` 
+            const cdCmd = window.navigator.platform.includes('Win')
+                ? `cd "${projectPath}"\r`
                 : `cd '${projectPath}'\n`;
-            
+
             invoke('write_stdin_line', { serviceId, line: cdCmd }).catch(console.error);
-            
+
             // Opcional: Mostrar un mensaje informativo en la terminal
             if (xtermRef.current) {
                 xtermRef.current.write(`\r\n\x1b[33m--- Switched to: ${projectPath} ---\x1b[0m\r\n`);
@@ -71,7 +71,7 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
             const fitAddon = new FitAddon();
             term.loadAddon(fitAddon);
             term.open(terminalRef.current);
-            
+
             // Forzar reflow antes de fit
             setTimeout(() => {
                 fitAddon.fit();
@@ -101,18 +101,18 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
                 // Solo si es para el mismo proyecto (o si queremos ver todo)
                 // Usamos colores ANSI: 33=Yellow, 0=Reset, 32=Green, 31=Red
                 term.write(`\r\n\x1b[33m⚡ App Executing:\x1b[0m ${command}\x1b[0m\r\n`);
-                
+
                 if (stdout) {
                     // Normalizar saltos de línea para xterm
                     const formattedStdout = stdout.replace(/\n/g, '\r\n');
                     term.write(`\x1b[38;5;244m${formattedStdout}\x1b[0m\r\n`);
                 }
-                
+
                 if (stderr) {
                     const formattedStderr = stderr.replace(/\n/g, '\r\n');
                     term.write(`\x1b[31m${formattedStderr}\x1b[0m\r\n`);
                 }
-                
+
                 term.write(`\r\n`);
             });
 
@@ -140,7 +140,7 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
             isOpen ? "h-64" : "h-9"
         )}>
             {/* Header / Trigger */}
-            <div 
+            <div
                 className="flex items-center justify-between px-3 h-9 cursor-pointer hover:bg-slate-900/50 select-none"
                 onClick={() => isOpen ? setIsOpen(false) : initTerminal()}
             >
@@ -156,8 +156,8 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
             </div>
 
             {/* Terminal Container */}
-            <div 
-                ref={terminalRef} 
+            <div
+                ref={terminalRef}
                 className={cn(
                     "flex-1 w-full overflow-hidden px-2 pb-2",
                     !isOpen && "hidden"
