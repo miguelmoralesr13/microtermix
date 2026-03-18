@@ -12,6 +12,7 @@ use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 use tokio::fs::OpenOptions as TokioOpenOptions;
 use tokio::process::Command as AsyncCommand;
 
+use crate::os_utils::{silent_command, silent_async_command};
 use crate::proxy::{find_vite_config, generate_vite_wrapper};
 use crate::state::{AppState, PipelineState, PipelineStatus, PipelineStep, PipelineStepCondition};
 
@@ -318,7 +319,7 @@ fn resolve_process_info(pid: u32) -> (String, String) {
     #[cfg(target_os = "windows")]
     {
         // Use tasklist to get the name
-        let output = StdCommand::new("tasklist")
+        let output = silent_command("tasklist")
             .args(["/FI", &format!("PID eq {}", pid), "/NH", "/FO", "CSV"])
             .output();
             
@@ -353,7 +354,7 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
     {
         // OPTIMIZACIÓN CRÍTICA: Obtener todos los procesos de una vez para evitar N ejecuciones de tasklist
         let mut process_names = HashMap::new();
-        let tasklist_out = StdCommand::new("tasklist")
+        let tasklist_out = silent_command("tasklist")
             .args(["/NH", "/FO", "CSV"])
             .output();
         
@@ -369,12 +370,8 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
             }
         }
 
-        let mut cmd = StdCommand::new("netstat");
+        let mut cmd = silent_command("netstat");
         cmd.args(["-ano"]);
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000);
-        }
         
         let output = cmd.output().map_err(|e| e.to_string())?;
         let stdout = String::from_utf8_lossy(&output.stdout);
