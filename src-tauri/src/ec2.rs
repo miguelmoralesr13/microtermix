@@ -536,6 +536,7 @@ pub async fn spawn_pty_process(
     service_id: String,
     program: String,
     args: Vec<String>,
+    cwd: Option<String>,
     envs: Option<std::collections::HashMap<String, String>>,
 ) -> Result<(), String> {
     use portable_pty::{native_pty_system, CommandBuilder, PtySize};
@@ -562,6 +563,9 @@ pub async fn spawn_pty_process(
 
     // Build the command (portable-pty uses its own CommandBuilder)
     let mut cmd = CommandBuilder::new(&program);
+    if let Some(ref d) = cwd {
+        cmd.cwd(d);
+    }
     for arg in &args {
         cmd.arg(arg);
     }

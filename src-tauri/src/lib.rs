@@ -346,6 +346,7 @@ pub fn run() {
             watch_repo,
             stop_watching_repo,
             git_watcher::set_active_git_project,
+            crate::processes::spawn_local_git_terminal,
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,

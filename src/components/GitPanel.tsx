@@ -407,8 +407,10 @@ export const GitPanel: React.FC = () => {
                 )}
             </div>
 
-            {/* Bottom: Git Logs Console Drawer */}
-            <GitConsole />
+            {/* Bottom: Global Git Terminal (Persistent) */}
+            {activeTab && (
+                <GitConsole projectPath={activeTab} />
+            )}
 
             {/* Commit Diff Modal */}
             {selectedCommit && activeTab && (

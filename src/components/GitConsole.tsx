@@ -1,156 +1,169 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Terminal } from 'xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { useProcessStore } from '../stores/processStore';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { TerminalSquare, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
-import { ResizableDivider } from './ResizableDivider';
+import { Terminal as TerminalIcon, X, ChevronUp, ChevronDown, Maximize2 } from 'lucide-react';
+import { Button } from './ui/button';
+import { cn } from '../lib/utils';
+import 'xterm/css/xterm.css';
 
-const CONSOLE_HEIGHT_MIN = 120;
-const CONSOLE_HEIGHT_MAX = 600;
-const CONSOLE_HEIGHT_DEFAULT = 220;
-
-interface GitLogPayload {
-    project_path: string;
-    command: string;
-    stdout: string;
-    stderr: string;
+interface GitConsoleProps {
+    projectPath: string;
 }
 
-interface GitLogEntry {
-    id: number;
-    timestamp: Date;
-    payload: GitLogPayload;
-}
+export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [serviceId, setServiceId] = useState<string | null>(null);
+    const terminalRef = useRef<HTMLDivElement>(null);
+    const xtermRef = useRef<Terminal | null>(null);
+    const fitAddonRef = useRef<FitAddon | null>(null);
+    const lastPathRef = useRef<string>(projectPath);
 
-export const GitConsole: React.FC = () => {
-    const [isExpanded, setIsExpanded] = useState(false);
-    const [consoleHeight, setConsoleHeight] = useState(CONSOLE_HEIGHT_DEFAULT);
-    const [logs, setLogs] = useState<GitLogEntry[]>([]);
-    const logsEndRef = useRef<HTMLDivElement>(null);
-    const prevExpandedRef = useRef(false);
-
-    useEffect(() => {
-        const unlisten = listen<GitLogPayload>('git-log', (event) => {
-            const stdout = event.payload.stdout || '';
-            const stderr = event.payload.stderr || '';
-
-            const MAX_LEN = 1000;
-            const truncatedStdout = stdout.length > MAX_LEN
-                ? stdout.substring(0, MAX_LEN) + `\n... [Recortado: ${stdout.length - MAX_LEN} caracteres adicionales]`
-                : stdout;
-
-            const truncatedStderr = stderr.length > MAX_LEN
-                ? stderr.substring(0, MAX_LEN) + `\n... [Recortado: ${stderr.length - MAX_LEN} caracteres adicionales]`
-                : stderr;
-
-            setLogs(prev => [...prev, {
-                id: Date.now() + Math.random(),
-                timestamp: new Date(),
-                payload: {
-                    ...event.payload,
-                    stdout: truncatedStdout,
-                    stderr: truncatedStderr
-                }
-            }].slice(-100)); // Mantener solo los últimos 100 logs para evitar lag
-        });
-
-        return () => {
-            unlisten.then(f => f());
-        };
-    }, []);
-
-    const resizeHeight = useCallback((delta: number) => {
-        setConsoleHeight(h => Math.min(CONSOLE_HEIGHT_MAX, Math.max(CONSOLE_HEIGHT_MIN, h - delta)));
-    }, []);
-
-    useEffect(() => {
-        if (!logsEndRef.current || !isExpanded) {
-            prevExpandedRef.current = isExpanded;
-            return;
+    // Initialize terminal backend (Solo una vez)
+    const initTerminal = async () => {
+        try {
+            const sid = await invoke<string>('spawn_local_git_terminal', { projectPath });
+            setServiceId(sid);
+            setIsOpen(true);
+        } catch (e) {
+            console.error('Failed to spawn git terminal', e);
         }
-        // Use instant scroll when opening (avoids slow animation through full history)
-        // Use smooth scroll only when new logs arrive while already expanded
-        const justOpened = !prevExpandedRef.current;
-        prevExpandedRef.current = isExpanded;
-        logsEndRef.current.scrollIntoView({ behavior: justOpened ? 'instant' : 'smooth' });
-    }, [logs, isExpanded]);
-
-    const handleClear = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        setLogs([]);
     };
 
-    if (!isExpanded) {
-        return (
-            <div
-                onClick={() => setIsExpanded(true)}
-                className="h-10 border-t border-slate-800 bg-slate-900/90 hover:bg-slate-800/90 text-slate-400 hover:text-white flex items-center justify-between px-4 cursor-pointer transition-colors shadow-[0_-4px_15px_rgba(0,0,0,0.5)] z-30 shrink-0"
-            >
-                <div className="flex items-center text-xs font-mono">
-                    <TerminalSquare size={14} className="mr-2 text-microtermix-neon" />
-                    Git Operations Console ({logs.length} logs)
-                </div>
-                <ChevronUp size={16} />
-            </div>
-        );
-    }
+    // Sincronizar directorio cuando cambia el proyecto activo
+    useEffect(() => {
+        if (serviceId && projectPath && projectPath !== lastPathRef.current) {
+            lastPathRef.current = projectPath;
+            // Enviar comando CD silencioso
+            const cdCmd = window.navigator.platform.includes('Win') 
+                ? `cd "${projectPath}"\r` 
+                : `cd '${projectPath}'\n`;
+            
+            invoke('write_stdin_line', { serviceId, line: cdCmd }).catch(console.error);
+            
+            // Opcional: Mostrar un mensaje informativo en la terminal
+            if (xtermRef.current) {
+                xtermRef.current.write(`\r\n\x1b[33m--- Switched to: ${projectPath} ---\x1b[0m\r\n`);
+            }
+        }
+    }, [projectPath, serviceId]);
+
+    useEffect(() => {
+        if (!isOpen || !terminalRef.current || !serviceId) return;
+
+        // Pequeño delay para asegurar que el contenedor tiene sus dimensiones finales
+        const timer = setTimeout(() => {
+            if (!terminalRef.current) return;
+
+            const term = new Terminal({
+                theme: {
+                    background: '#020617',
+                    foreground: '#f8fafc',
+                    cursor: '#38bdf8',
+                },
+                fontFamily: 'Consolas, monospace',
+                fontSize: 12,
+                scrollback: 1000,
+                convertEol: true, // Crucial para Windows
+            });
+
+            const fitAddon = new FitAddon();
+            term.loadAddon(fitAddon);
+            term.open(terminalRef.current);
+            
+            // Forzar reflow antes de fit
+            setTimeout(() => {
+                fitAddon.fit();
+                const { cols, rows } = term;
+                invoke('resize_pty', { serviceId, cols, rows }).catch(console.error);
+            }, 50);
+
+            xtermRef.current = term;
+            fitAddonRef.current = fitAddon;
+
+            // Input handler - ENVIAR raw strings, no lineas completas
+            term.onData(data => {
+                invoke('write_stdin_line', { serviceId, line: data }).catch(console.error);
+            });
+
+            // Output handler
+            const unlistenOutputPromise = listen('pty-output', (event: any) => {
+                if (event.payload.serviceId === serviceId) {
+                    term.write(event.payload.data);
+                }
+            });
+
+            // Git Log handler - MOSTRAR lo que hace la app automáticamente
+            const unlistenLogPromise = listen('git-log', (event: any) => {
+                const { project_path: logPath, command, stdout, stderr } = event.payload;
+                
+                // Solo si es para el mismo proyecto (o si queremos ver todo)
+                // Usamos colores ANSI: 33=Yellow, 0=Reset, 32=Green, 31=Red
+                term.write(`\r\n\x1b[33m⚡ App Executing:\x1b[0m ${command}\x1b[0m\r\n`);
+                
+                if (stdout) {
+                    // Normalizar saltos de línea para xterm
+                    const formattedStdout = stdout.replace(/\n/g, '\r\n');
+                    term.write(`\x1b[38;5;244m${formattedStdout}\x1b[0m\r\n`);
+                }
+                
+                if (stderr) {
+                    const formattedStderr = stderr.replace(/\n/g, '\r\n');
+                    term.write(`\x1b[31m${formattedStderr}\x1b[0m\r\n`);
+                }
+                
+                term.write(`\r\n`);
+            });
+
+            const handleResize = () => fitAddon.fit();
+            window.addEventListener('resize', handleResize);
+
+            // Cleanup
+            (term as any)._unlisten = Promise.all([unlistenOutputPromise, unlistenLogPromise]);
+        }, 100);
+
+        return () => {
+            clearTimeout(timer);
+            if (xtermRef.current) {
+                const term = xtermRef.current;
+                (term as any)._unlisten?.then((unlisten: any) => unlisten());
+                term.dispose();
+                xtermRef.current = null;
+            }
+        };
+    }, [isOpen, serviceId]);
 
     return (
-        <div
-            style={{ height: consoleHeight }}
-            className="border-t border-slate-800 bg-slate-950 flex flex-col shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-30 shrink-0 animate-in slide-in-from-bottom-5 duration-200 min-h-0"
-        >
-            {/* Header */}
-            <div
-                onClick={() => setIsExpanded(false)}
-                className="h-8 shrink-0 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 cursor-pointer select-none"
+        <div className={cn(
+            "border-t border-slate-800 bg-slate-950 transition-all duration-300 flex flex-col",
+            isOpen ? "h-64" : "h-9"
+        )}>
+            {/* Header / Trigger */}
+            <div 
+                className="flex items-center justify-between px-3 h-9 cursor-pointer hover:bg-slate-900/50 select-none"
+                onClick={() => isOpen ? setIsOpen(false) : initTerminal()}
             >
-                <div className="flex items-center text-xs font-bold text-slate-300">
-                    <TerminalSquare size={14} className="mr-2 text-microtermix-neon" />
-                    Git Console
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <TerminalIcon size={14} className={isOpen ? "text-microtermix-neon" : ""} />
+                    Git Terminal
                 </div>
-                <div className="flex items-center space-x-2">
-                    <button onClick={(e) => { e.stopPropagation(); handleClear(e); }} className="p-1 text-slate-500 hover:text-microtermix-danger rounded transition-colors" title="Clear Console">
-                        <Trash2 size={14} />
-                    </button>
-                    <div className="p-1 text-slate-500 hover:text-white">
-                        <ChevronDown size={16} />
-                    </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon-xs" className="h-6 w-6 text-slate-500 hover:text-white">
+                        {isOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </Button>
                 </div>
             </div>
 
-            {/* Resize handle: drag to change height */}
-            <div className="py-1.5 shrink-0 flex items-center justify-center bg-slate-900 cursor-row-resize">
-                <ResizableDivider direction="vertical" onResize={resizeHeight} className="bg-slate-900" />
-            </div>
-
-            {/* Logs Auto-scroll Area */}
-            <div className="flex-1 min-h-0 overflow-auto p-3 font-mono text-xs bg-[#050505]">
-                {logs.length === 0 ? (
-                    <div className="text-slate-600 italic">No Git commands executed in this session yet.</div>
-                ) : (
-                    logs.map(log => (
-                        <div key={log.id} className="mb-4 border-l-2 border-slate-700 pl-3 py-1">
-                            <div className="flex items-center text-slate-500 mb-1 opacity-70">
-                                <span className="mr-3">[{log.timestamp.toLocaleTimeString()}]</span>
-                                <span className="truncate">{log.payload.project_path}</span>
-                            </div>
-                            <div className="text-microtermix-accent font-bold mb-1">
-                                $ {log.payload.command}
-                            </div>
-                            {log.payload.stdout && (
-                                <div className="text-slate-300 whitespace-pre-wrap break-all mt-1">
-                                    {log.payload.stdout}
-                                </div>
-                            )}
-                            {log.payload.stderr && (
-                                <div className="text-microtermix-danger whitespace-pre-wrap break-all mt-1 bg-microtermix-danger/10 p-2 rounded">
-                                    {log.payload.stderr}
-                                </div>
-                            )}
-                        </div>
-                    ))
+            {/* Terminal Container */}
+            <div 
+                ref={terminalRef} 
+                className={cn(
+                    "flex-1 w-full overflow-hidden px-2 pb-2",
+                    !isOpen && "hidden"
                 )}
-                <div ref={logsEndRef} />
-            </div>
+            />
         </div>
     );
 };

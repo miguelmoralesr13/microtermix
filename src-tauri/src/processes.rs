@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::io::{AsyncBufReadExt, BufReader, AsyncWriteExt};
 use tokio::fs::OpenOptions as TokioOpenOptions;
-use tokio::process::Command as AsyncCommand;
 
 use crate::os_utils::{silent_command, silent_async_command};
 use crate::proxy::{find_vite_config, generate_vite_wrapper};
@@ -198,9 +197,9 @@ pub fn get_service_logs(service_id: String, limit: Option<usize>) -> Result<Vec<
 pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> Result<(), String> {
     // Try to open with VS Code if available (supports line/column)
     let mut cmd = if cfg!(target_os = "windows") {
-        StdCommand::new("cmd")
+        silent_command("cmd")
     } else {
-        StdCommand::new("sh")
+        silent_command("sh")
     };
 
     let goto_arg = match (line, column) {
@@ -505,13 +504,8 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
 pub fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = StdCommand::new("taskkill");
+        let mut cmd = silent_command("taskkill");
         cmd.args(["/F", "/PID", &pid.to_string()]);
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x08000000);
-        }
         let status = cmd.status().map_err(|e| e.to_string())?;
         if status.success() {
             Ok(())
@@ -534,7 +528,40 @@ pub fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     }
 }
 
-// ─── Ejecución de servicios ───────────────────────────────────────────────────
+#[tauri::command]
+pub async fn spawn_local_git_terminal(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    project_path: String,
+) -> Result<String, String> {
+    let service_id = "global::git-terminal ".to_string(); // ID único global
+    
+    // Si ya existe, devolvemos el ID y no creamos otra
+    {
+        let procs = state.processes.lock().await;
+        if procs.contains_key(&service_id) {
+            return Ok(service_id);
+        }
+    }
+
+    let (program, args) = if cfg!(target_os = "windows") {
+        ("powershell.exe", vec!["-NoLogo".to_string()])
+    } else {
+        ("sh", vec![])
+    };
+
+    crate::ec2::spawn_pty_process(
+        app,
+        state,
+        service_id.clone(),
+        program.to_string(),
+        args,
+        Some(project_path), // Directorio inicial
+        Some(HashMap::new()),
+    ).await?;
+
+    Ok(service_id)
+}
 
 #[derive(Clone, Serialize)]
 pub struct LogEvent {
@@ -621,15 +648,14 @@ pub async fn execute_service_script(
     }
 
     #[cfg(target_os = "windows")]
-    let mut cmd = AsyncCommand::new("cmd");
+    let mut cmd = silent_async_command("cmd");
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::process::CommandExt;
-        cmd.args(["/C", &script_to_run]).creation_flags(0x08000000);
+        cmd.args(["/C", &script_to_run]);
     }
 
     #[cfg(not(target_os = "windows"))]
-    let mut cmd = AsyncCommand::new("sh");
+    let mut cmd = silent_async_command("sh");
     #[cfg(not(target_os = "windows"))]
     {
         cmd.args(["-c", &script_to_run]);
@@ -730,15 +756,12 @@ pub async fn execute_service_script(
                 #[cfg(target_os = "windows")]
                 {
                     if let Some(pid) = child.id() {
-                        let mut kill_cmd = std::process::Command::new("taskkill");
+                        let mut kill_cmd = silent_command("taskkill");
                         kill_cmd.args(["/F", "/T", "/PID", &pid.to_string()]);
-                        {
-                            use std::os::windows::process::CommandExt;
-                            kill_cmd.creation_flags(0x08000000);
-                        }
-                        let _ = kill_cmd.output();
+                        let _ = kill_cmd.status();
                     }
                 }
+
                 #[cfg(not(target_os = "windows"))]
                 {
                     if let Some(pid) = child.id() {

@@ -219,7 +219,7 @@ pub async fn ssm_start_session(
 
     // Delegate to spawn_pty_process: gives the plugin a real PTY so it can
     // enable raw-mode stdin (required for interactive input to work on Windows).
-    crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, Some(envs)).await
+    crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, None, Some(envs)).await
 }
 
 /// Start an SSM Port Forwarding tunnel to a remote host (e.g. an RDS instance in a private subnet).
@@ -310,5 +310,5 @@ pub async fn ssm_start_port_forward(
         endpoint,
     ];
 
-    crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, Some(envs)).await
+    crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, None, Some(envs)).await
 }
