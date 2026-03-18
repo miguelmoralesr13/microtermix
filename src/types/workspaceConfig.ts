@@ -134,6 +134,17 @@ export function applyWorkspaceConfigToStorage(
             } catch (_) { }
         }
     }
+    
+    // Restaurar asignaciones de cuentas Git (folderName -> fullPath)
+    if (config.repoAccounts) {
+        for (const [folderName, accountId] of Object.entries(config.repoAccounts)) {
+            const resolvedPath = resolveFolderNameToPath(folderName, projectPaths);
+            if (resolvedPath) {
+                useGitStore.getState().setRepoAccount(resolvedPath, accountId);
+            }
+        }
+    }
+
     if (config.savedCommands || config.savedCommandSteps || config.savedCommandTypes) {
         try {
             const current = localStorage.getItem('microtermix-settings');
