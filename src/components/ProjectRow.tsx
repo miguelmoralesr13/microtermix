@@ -3,7 +3,7 @@ import { useWorkspace, Project } from '../context/WorkspaceContext';
 import { useProcessStore } from '../stores/processStore';
 import { useProjectEnvs } from './useProjectEnvs';
 import { EnvManager } from './EnvManager';
-import { Package, Plus, Play, ShieldCheck, ShieldAlert, Shield } from 'lucide-react';
+import { Package, Plus, Play, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useSonarStore } from '../stores/sonarStore';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';

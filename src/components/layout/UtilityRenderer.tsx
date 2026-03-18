@@ -21,6 +21,7 @@ import { RegexTesterPanel } from '../regex/RegexTesterPanel';
 import { NotesPanel } from '../notes/NotesPanel';
 import { SwaggerPanel } from '../swagger/SwaggerPanel';
 import { VisualDesigner } from '../designer/VisualDesigner';
+import { SemgrepPanel } from '../SemgrepPanel';
 
 interface UtilityRendererProps {
     view?: AppView;
@@ -68,6 +69,7 @@ export const UtilityRenderer: React.FC<UtilityRendererProps> = ({ view: forcedVi
         case 'notes': return <NotesPanel />;
         case 'swagger': return <SwaggerPanel />;
         case 'designer': return <VisualDesigner />;
+        case 'semgrep': return <SemgrepPanel />;
         default:
             return (
                 <div className="flex items-center justify-center w-full h-full text-slate-500 italic">

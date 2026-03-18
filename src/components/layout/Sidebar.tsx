@@ -3,7 +3,7 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
     Network, Package, Ghost,  Cloud, Regex,
-    ChevronUp, ChevronDown 
+    ChevronUp, ChevronDown, ShieldAlert
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 
@@ -59,6 +59,7 @@ export const Sidebar: React.FC = () => {
                 {renderNavIcon('services', Server, "Services & Terminals")}
                 {renderNavIcon('tests', FlaskConical, "Tests & Coverage")}
                 {renderNavIcon('sonar', SiSonar, "Sonar Analysis")}
+                {renderNavIcon('semgrep', ShieldAlert, "Semgrep Security")}
                 {renderNavIcon('git', SiGit, "Git")}
                 {renderNavIcon('jira', SiJira, "Jira")}
                 {renderNavIcon('processes', Activity, "Procesos en escucha")}

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
 import { 
-    X, AlertTriangle, Lightbulb, Save, 
-    FileText, Code2, CheckCircle2, ChevronRight,
-    Maximize2, Minimize2, Shield, RefreshCw, ExternalLink
+    AlertTriangle, Lightbulb, Save, 
+    FileText, CheckCircle2,
+    Maximize2, Minimize2, Shield, RefreshCw
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
@@ -39,7 +39,6 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
     const [originalContent, setOriginalContent] = useState<string>('');
     const [ruleDesc, setRuleDesc] = useState<string>('');
     const [loading, setLoading] = useState(true);
-    const [loadingRule, setLoadingRule] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [activePanel, setActiveTab] = useState<'both' | 'edit'>('both');
     
@@ -82,7 +81,6 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                 setOriginalContent(fileData);
 
                 if (issue.rule && sonarConfig.token) {
-                    setLoadingRule(true);
                     const baseUrl = sonarConfig.serverUrl.replace(/\/+$/, '');
                     const url = `${baseUrl}/api/rules/show?key=${encodeURIComponent(issue.rule)}${sonarConfig.organization ? `&organization=${sonarConfig.organization}` : ''}`;
                     
@@ -98,7 +96,6 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                 toast.error(`Error de carga: ${e}`);
             } finally {
                 setLoading(false);
-                setLoadingRule(false);
             }
         };
         loadData();

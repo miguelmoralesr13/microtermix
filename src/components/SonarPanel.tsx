@@ -77,17 +77,8 @@ const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = 
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
-const METRICS_CACHE_KEY = 'microtermix-sonar-metrics-cache';
 const STORAGE_SONAR_PATH = 'microtermix-sonar-selected-path';
 const STORAGE_SONAR_TAB = 'microtermix-sonar-active-tab';
-
-function loadMetricsCache(): Record<string, SonarMetrics> {
-    try {
-        const raw = localStorage.getItem(METRICS_CACHE_KEY);
-        if (raw) return JSON.parse(raw);
-    } catch (_) { }
-    return {};
-}
 
 function issuesCacheKey(path: string) {
     return `microtermix-sonar-issues-${path.replace(/[/\\:]/g, '_')}`;
@@ -108,9 +99,6 @@ function loadLink(path: string): ProjectLink {
         if (raw) return JSON.parse(raw);
     } catch (_) { }
     return {};
-}
-function saveLink(path: string, link: ProjectLink) {
-    try { localStorage.setItem(linkKey(path), JSON.stringify(link)); } catch (_) { }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

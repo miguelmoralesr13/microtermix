@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { useProcessStore } from '../stores/processStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Terminal as TerminalIcon, X, ChevronUp, ChevronDown, Maximize2 } from 'lucide-react';
+import { Terminal as TerminalIcon, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 import 'xterm/css/xterm.css';
@@ -97,7 +96,7 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
 
             // Git Log handler - MOSTRAR lo que hace la app automáticamente
             const unlistenLogPromise = listen('git-log', (event: any) => {
-                const { project_path: logPath, command, stdout, stderr } = event.payload;
+                const { command, stdout, stderr } = event.payload;
                 
                 // Solo si es para el mismo proyecto (o si queremos ver todo)
                 // Usamos colores ANSI: 33=Yellow, 0=Reset, 32=Green, 31=Red

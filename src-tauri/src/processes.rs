@@ -529,6 +529,83 @@ pub fn kill_process_by_pid(pid: u32) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn check_semgrep_installed() -> Result<bool, String> {
+    let mut cmd = silent_command(if cfg!(target_os = "windows") { "cmd" } else { "sh" });
+    
+    if cfg!(target_os = "windows") {
+        cmd.args(["/c", "semgrep --version"]);
+    } else {
+        cmd.args(["-c", "semgrep --version"]);
+    }
+    
+    match cmd.output() {
+        Ok(output) => Ok(output.status.success()),
+        Err(_) => Ok(false),
+    }
+}
+
+#[tauri::command]
+pub async fn run_semgrep_scan(
+    app: AppHandle,
+    project_path: String,
+    config_path: Option<String>
+) -> Result<String, String> {
+    let mut args = vec!["scan".to_string(), "--json".to_string(), "--quiet".to_string()];
+    
+    if let Some(cfg) = config_path {
+        if !cfg.is_empty() {
+            args.push("--config".to_string());
+            args.push(cfg);
+        }
+    }
+
+    let mut cmd = silent_async_command("semgrep");
+    cmd.args(&args);
+    cmd.current_dir(&project_path);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Fallo al iniciar Semgrep: {}", e))?;
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let app_handle = app.clone();
+    let mut json_output = String::new();
+    
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let mut reader = BufReader::new(stdout).lines();
+    let mut err_reader = BufReader::new(stderr).lines();
+
+    // Lectura concurrente de STDOUT y STDERR
+    loop {
+        tokio::select! {
+            result = reader.next_line() => {
+                match result {
+                    Ok(Some(line)) => {
+                        json_output.push_str(&line);
+                        let _ = app_handle.emit("semgrep-log", line);
+                    }
+                    _ => { break; } // Stdout cerrado
+                }
+            }
+            result = err_reader.next_line() => {
+                if let Ok(Some(line)) = result {
+                    let _ = app_handle.emit("semgrep-log", format!("PROG: {}", line));
+                }
+            }
+        }
+    }
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    
+    if status.success() || !json_output.is_empty() {
+        Ok(json_output)
+    } else {
+        Err("Semgrep terminó con error y sin salida JSON.".into())
+    }
+}
+
+#[tauri::command]
 pub async fn spawn_local_git_terminal(
     app: AppHandle,
     state: State<'_, AppState>,

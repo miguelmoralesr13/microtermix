@@ -41,6 +41,7 @@ interface SonarStore {
     linkProject: (path: string, link: SonarProjectLink) => void;
     setMetrics: (path: string, metrics: SonarMetrics) => void;
     clearCache: (path: string) => void;
+    hydrate: (config: Partial<SonarConfig>) => void;
 }
 
 export const useSonarStore = create<SonarStore>()(
@@ -69,6 +70,9 @@ export const useSonarStore = create<SonarStore>()(
                     delete newMetrics[path];
                     return { metricsCache: newMetrics };
                 }),
+
+            hydrate: (cfg) =>
+                set((state) => ({ config: { ...state.config, ...cfg } })),
         }),
         {
             name: 'microtermix-sonar-storage',
