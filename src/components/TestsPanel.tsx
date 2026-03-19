@@ -7,6 +7,7 @@ import {
 import { useWorkspace } from '../context/WorkspaceContext';
 import { TaskTerminal } from './ui/task-terminal';
 import { useTaskStore } from '../stores/taskStore';
+import { useCoverageStore, type CoverageStat, type CoverageSummary } from '../stores/coverageStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -76,7 +77,7 @@ const PRESETS: Record<TestLanguage, { label: string; config: TestConfig }> = {
             language: 'go',
             command: 'go test ./... -v -coverprofile=coverage.out',
             testFilter: '',
-            junitXmlPath: 'report.xml', // Requiere gotestsum
+            junitXmlPath: 'report.xml',
             coverageXmlPath: 'coverage.out',
             coverageHtmlPath: 'coverage.html'
         }
@@ -87,13 +88,6 @@ const PRESETS: Record<TestLanguage, { label: string; config: TestConfig }> = {
     }
 };
 
-interface CoverageStat { covered: number; total: number; }
-interface CoverageSummary {
-    lines: CoverageStat;
-    branches: CoverageStat;
-    functions: CoverageStat;
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STORAGE_TESTS_PATH = 'microtermix-tests-selected-path';
@@ -102,35 +96,25 @@ const STORAGE_TESTS_TAB = 'microtermix-tests-active-tab';
 function detectLanguage(project: any): TestLanguage {
     const type = (project.project_type || '').toLowerCase();
     const framework = (project.framework || '').toLowerCase();
-
-    if (type === 'bun') return 'node'; // Bun use Node preset for now or we could add one
+    if (type === 'bun') return 'node';
     if (type === 'node') return 'node';
     if (type === 'python') return 'python';
     if (type === 'java' || type === 'maven') return 'java';
     if (type === 'go') return 'go';
-
-    // Framework based fallbacks
     if (framework === 'spring-boot') return 'java';
     if (framework === 'django' || framework === 'fastapi' || framework === 'flask') return 'python';
-
     return 'custom';
 }
 
 function buildFinalCommand(config: TestConfig): string {
     const { command, testFilter, language } = config;
     if (!testFilter.trim()) return command;
-
     switch (language) {
-        case 'node':
-            return `${command} -- -t "${testFilter}"`;
-        case 'python':
-            return `${command} -k "${testFilter}"`;
-        case 'java':
-            return `${command} -Dtest=${testFilter}`;
-        case 'go':
-            return `${command} -run ${testFilter}`;
-        default:
-            return `${command} ${testFilter}`;
+        case 'node': return `${command} -- -t "${testFilter}"`;
+        case 'python': return `${command} -k "${testFilter}"`;
+        case 'java': return `${command} -Dtest=${testFilter}`;
+        case 'go': return `${command} -run ${testFilter}`;
+        default: return `${command} ${testFilter}`;
     }
 }
 
@@ -157,8 +141,6 @@ function parseCoverageXml(content: string): CoverageSummary | null {
     try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(content, 'text/xml');
-
-        // 1. Clover (Node)
         const cloverMetrics = doc.querySelector('project > metrics');
         if (cloverMetrics) {
             return {
@@ -167,8 +149,6 @@ function parseCoverageXml(content: string): CoverageSummary | null {
                 functions: { covered: parseInt(cloverMetrics.getAttribute('coveredmethods') || '0'), total: parseInt(cloverMetrics.getAttribute('methods') || '0') },
             };
         }
-
-        // 2. JaCoCo (Java)
         const reportEl = doc.querySelector('report');
         if (reportEl) {
             const getCounter = (type: string): CoverageStat => {
@@ -182,8 +162,6 @@ function parseCoverageXml(content: string): CoverageSummary | null {
             };
             return { lines: getCounter('LINE'), branches: getCounter('BRANCH'), functions: getCounter('METHOD') };
         }
-
-        // 3. Cobertura/Coverage.py (Python)
         const coverageEl = doc.querySelector('coverage');
         if (coverageEl) {
             const linesValid = parseInt(coverageEl.getAttribute('lines-valid') || '0');
@@ -234,6 +212,7 @@ export const TestsPanel: React.FC = () => {
     const { state } = useWorkspace();
     const projects = state.projects;
     const { activeTasks, setTaskStatus } = useTaskStore();
+    const { coverageMap, setCoverage } = useCoverageStore();
 
     const [selectedPath, setSelectedPath] = useState<string>(() => {
         const saved = localStorage.getItem(STORAGE_TESTS_PATH);
@@ -249,7 +228,6 @@ export const TestsPanel: React.FC = () => {
 
     const [config, setConfig] = useState<TestConfig>(() => selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG });
     const [configOpen, setConfigOpen] = useState(false);
-    const [coverageMap, setCoverageMap] = useState<Record<string, CoverageSummary | null>>({});
     const [coverageLoading, setCoverageLoading] = useState(false);
     const [coverageError, setCoverageError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'execution' | 'report'>(() => {
@@ -304,8 +282,6 @@ export const TestsPanel: React.FC = () => {
     const handleSelectProject = (path: string) => {
         stopCoverageServer();
         setSelectedPath(path);
-
-        // Auto-detección si no hay config guardada o es la primera vez
         const saved = localStorage.getItem(configStorageKey(path));
         if (!saved) {
             const project = projects.find(p => p.path === path);
@@ -343,7 +319,6 @@ export const TestsPanel: React.FC = () => {
     };
 
     const handleStop = async () => {
-        // En un futuro podríamos añadir un comando kill_ephemeral_task en Rust
         setTaskStatus(taskId, 'canceled');
     };
 
@@ -356,28 +331,25 @@ export const TestsPanel: React.FC = () => {
             const content = await invoke<string>('read_file_at_path', { path: xmlPath });
             const summary = parseCoverageXml(content);
             if (summary) {
-                setCoverageMap(prev => ({ ...prev, [selectedPath]: summary }));
+                setCoverage(selectedPath, summary);
             } else {
-                setCoverageError('No se pudo parsear el XML. Verifica el formato o la ruta.');
+                setCoverageError('No se pudo parsear el XML.');
             }
         } catch (_) {
-            setCoverageError(`No encontrado: ${config.coverageXmlPath} — ejecuta los tests primero.`);
+            setCoverageError(`No encontrado: ${config.coverageXmlPath}`);
         } finally {
             setCoverageLoading(false);
         }
-    }, [selectedPath, config.coverageXmlPath]);
+    }, [selectedPath, config.coverageXmlPath, setCoverage]);
 
     const prevStatusRef = useRef<typeof processStatus>(undefined);
     useEffect(() => {
         if (prevStatusRef.current === 'running' && processStatus !== 'running') {
             loadCoverage();
-            // Live Server Logic: Recargar iframe si está abierto y el servidor está activo
             if (coverageServerPort && iframeRef.current) {
-                const currentSrc = iframeRef.current.src;
+                const src = iframeRef.current.src;
                 iframeRef.current.src = 'about:blank';
-                setTimeout(() => {
-                    if (iframeRef.current) iframeRef.current.src = currentSrc;
-                }, 50);
+                setTimeout(() => { if (iframeRef.current) iframeRef.current.src = src; }, 50);
             }
         }
         prevStatusRef.current = processStatus;
@@ -410,6 +382,7 @@ export const TestsPanel: React.FC = () => {
             'ml-auto text-[10px] font-semibold rounded-full border-0',
             isRunning ? 'bg-microtermix-success/20 text-microtermix-success' :
                 taskState.status === 'error' ? 'bg-microtermix-danger/20 text-microtermix-danger' :
+                taskState.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' :
                     'bg-slate-700 text-slate-400'
         )}>
             {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse mr-1 inline-block" />}
@@ -419,7 +392,6 @@ export const TestsPanel: React.FC = () => {
 
     return (
         <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900">
-            {/* Header */}
             <div className="shrink-0 px-4 py-3 border-b border-slate-800 flex items-center gap-2">
                 <FlaskConical size={16} className="text-microtermix-neon" />
                 <h2 className="text-sm font-bold text-slate-200">Tests & Coverage</h2>
@@ -483,327 +455,146 @@ export const TestsPanel: React.FC = () => {
                 {/* ── Right ─────────────────────────────────────────────── */}
                 {selectedPath ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-
-                        {/* Action bar */}
                         <div className="shrink-0 px-4 py-2 border-b border-slate-800 flex items-center gap-2 bg-slate-900/80">
                             {isRunning ? (
-                                <Button
-                                    size="sm"
-                                    onClick={handleStop}
-                                    className="bg-microtermix-danger/20 text-microtermix-danger hover:bg-microtermix-danger/30 border border-microtermix-danger/40 font-bold gap-1.5 h-7 text-xs"
-                                >
+                                <Button size="sm" onClick={handleStop} className="bg-microtermix-danger/20 text-microtermix-danger hover:bg-microtermix-danger/30 border border-microtermix-danger/40 font-bold gap-1.5 h-7 text-xs">
                                     <Square size={12} fill="currentColor" /> Stop
                                 </Button>
                             ) : (
-                                <Button
-                                    size="sm"
-                                    onClick={handleRun}
-                                    disabled={!config.command}
-                                    className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold gap-1.5 h-7 text-xs"
-                                >
+                                <Button size="sm" onClick={handleRun} disabled={!config.command} className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold gap-1.5 h-7 text-xs">
                                     <Play size={12} fill="currentColor" /> Run tests
                                 </Button>
                             )}
 
                             <div className="relative flex-1 max-w-xs group">
-                                <Search size={12} className={cn(
-                                    "absolute left-2.5 top-1/2 -translate-y-1/2 transition-colors",
-                                    config.testFilter ? "text-microtermix-neon" : "text-slate-500"
-                                )} />
+                                <Search size={12} className={cn("absolute left-2.5 top-1/2 -translate-y-1/2", config.testFilter ? "text-microtermix-neon" : "text-slate-500")} />
                                 <input
                                     type="text"
                                     value={config.testFilter || ''}
-                                    onChange={e => {
-                                        handleConfigChange({ testFilter: e.target.value });
-                                        setShowSuggestions(true);
-                                    }}
+                                    onChange={e => { handleConfigChange({ testFilter: e.target.value }); setShowSuggestions(true); }}
                                     onFocus={() => setShowSuggestions(true)}
                                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                                    placeholder={
-                                        config.language === 'node' ? "Filtrar (archivo/regex)..." :
-                                            config.language === 'python' ? "Filtrar (archivo/keyword)..." :
-                                                config.language === 'java' ? "Filtrar (ClassName)..." :
-                                                    "Filtrar tests..."
-                                    }
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-1.5 text-[11px] text-slate-300 outline-none focus:border-microtermix-neon/50 focus:ring-1 focus:ring-microtermix-neon/20 transition-all"
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter' && !isRunning) {
-                                            handleRun();
-                                            setShowSuggestions(false);
-                                        }
-                                    }}
+                                    placeholder="Filtrar tests..."
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-md pl-8 pr-7 py-1.5 text-[11px] text-slate-300 outline-none focus:border-microtermix-neon/50 transition-all"
+                                    onKeyDown={e => { if (e.key === 'Enter' && !isRunning) { handleRun(); setShowSuggestions(false); } }}
                                 />
                                 {config.testFilter && (
-                                    <button
-                                        onClick={() => handleConfigChange({ testFilter: '' })}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-microtermix-danger transition-colors p-0.5"
-                                        title="Limpiar filtro"
-                                    >
-                                        <X size={12} />
-                                    </button>
+                                    <button onClick={() => handleConfigChange({ testFilter: '' })} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-microtermix-danger p-0.5"><X size={12} /></button>
                                 )}
-
-                                {/* Autocomplete Dropdown */}
                                 {showSuggestions && suggestions.length > 0 && (
-                                    <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-2xl z-50 max-h-60 overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        <div className="px-2 py-1 text-[9px] font-bold text-slate-500 uppercase tracking-widest bg-slate-950/50 mb-1 border-b border-slate-800">
-                                            Archivos de test detectados
-                                        </div>
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-2xl z-50 max-h-60 overflow-y-auto py-1">
                                         {suggestions.map((file, i) => (
-                                            <button
-                                                key={i}
-                                                className="w-full text-left px-3 py-1.5 text-[10px] text-slate-300 hover:bg-microtermix-neon/10 hover:text-microtermix-neon transition-colors truncate font-mono"
-                                                onClick={() => {
-                                                    handleConfigChange({ testFilter: file });
-                                                    setShowSuggestions(false);
-                                                }}
-                                            >
-                                                {file}
-                                            </button>
+                                            <button key={i} className="w-full text-left px-3 py-1.5 text-[10px] text-slate-300 hover:bg-microtermix-neon/10 hover:text-microtermix-neon truncate font-mono" onClick={() => { handleConfigChange({ testFilter: file }); setShowSuggestions(false); }}>{file}</button>
                                         ))}
                                     </div>
                                 )}
                             </div>
 
                             <Separator orientation="vertical" className="h-4 bg-slate-700" />
-
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={loadCoverage}
-                                disabled={coverageLoading || isRunning}
-                                className="border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5 h-7 text-xs"
-                            >
-                                <RefreshCw size={11} className={coverageLoading ? 'animate-spin' : ''} />
-                                {coverageLoading ? 'Cargando...' : 'Refresh coverage'}
+                            <Button variant="outline" size="sm" onClick={loadCoverage} disabled={coverageLoading || isRunning} className="border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5 h-7 text-xs">
+                                <RefreshCw size={11} className={coverageLoading ? 'animate-spin' : ''} /> {coverageLoading ? 'Cargando...' : 'Refresh coverage'}
                             </Button>
-
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleOpenInAppReport}
-                                disabled={reportLoading || isRunning}
-                                className="border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5 h-7 text-xs"
-                            >
-                                <Monitor size={11} />
-                                {reportLoading ? 'Iniciando...' : 'Open report'}
+                            <Button variant="outline" size="sm" onClick={handleOpenInAppReport} disabled={reportLoading || isRunning} className="border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5 h-7 text-xs">
+                                <Monitor size={11} /> {reportLoading ? 'Iniciando...' : 'Open report'}
                             </Button>
-
-                            <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                onClick={() => setConfigOpen(true)}
-                                className="text-slate-500 hover:text-slate-200 ml-1"
-                                title="Configuración"
-                            >
-                                <Settings size={13} />
-                            </Button>
-
+                            <Button variant="ghost" size="icon-xs" onClick={() => setConfigOpen(true)} className="text-slate-500 hover:text-slate-200 ml-1"><Settings size={13} /></Button>
                             {statusBadge}
                         </div>
 
-                        {/* Tab bar */}
                         <div className="shrink-0 flex border-b border-slate-800 bg-slate-950/40">
                             {(['execution', 'report'] as const).map(tab => (
-                                <button
-                                    key={tab}
-                                    onClick={() => tab === 'report'
-                                        ? (coverageServerPort ? setActiveTab('report') : handleOpenInAppReport())
-                                        : setActiveTab('execution')
-                                    }
-                                    className={cn(
-                                        'flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors',
-                                        activeTab === tab
-                                            ? 'border-microtermix-neon text-microtermix-neon'
-                                            : 'border-transparent text-slate-500 hover:text-slate-300',
-                                    )}
-                                >
-                                    {tab === 'execution'
-                                        ? <><TerminalSquare size={12} /> Ejecución</>
-                                        : <><ExternalLink size={12} /> Reporte
-                                            {coverageServerPort && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-microtermix-success inline-block" />}
-                                        </>
-                                    }
+                                <button key={tab} onClick={() => tab === 'report' ? (coverageServerPort ? setActiveTab('report') : handleOpenInAppReport()) : setActiveTab('execution')}
+                                    className={cn('flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors', activeTab === tab ? 'border-microtermix-neon text-microtermix-neon' : 'border-transparent text-slate-500 hover:text-slate-300')}>
+                                    {tab === 'execution' ? <><TerminalSquare size={12} /> Ejecución</> : <><ExternalLink size={12} /> Reporte {coverageServerPort && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-microtermix-success inline-block" />}</>}
                                 </button>
                             ))}
                         </div>
 
-                        {/* ── Execution tab ──────────────────────────────── */}
                         {activeTab === 'execution' && (
                             <div className="flex-1 flex min-h-0 overflow-hidden">
                                 <div className="flex-1 min-w-0 p-2 flex flex-col overflow-hidden">
                                     <TaskTerminal taskId={taskId} />
                                 </div>
-
-                                {/* Coverage sidebar */}
                                 <div className="w-60 shrink-0 border-l border-slate-800 flex flex-col overflow-y-auto p-4 gap-4 bg-slate-950/30">
                                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Coverage</p>
-
-                                    {coverageError && !coverage && (
-                                        <p className="text-[11px] text-slate-500 italic leading-relaxed">{coverageError}</p>
-                                    )}
-
+                                    {coverageError && !coverage && <p className="text-[11px] text-slate-500 italic leading-relaxed">{coverageError}</p>}
                                     {coverage ? (
                                         <div className="space-y-4">
                                             <CoverageStatBar label="Lines" stat={coverage.lines} />
                                             {coverage.branches.total > 0 && <CoverageStatBar label="Branches" stat={coverage.branches} />}
                                             {coverage.functions.total > 0 && <CoverageStatBar label="Functions" stat={coverage.functions} />}
                                         </div>
-                                    ) : !coverageError && (
-                                        <p className="text-[11px] text-slate-600 italic">
-                                            Sin datos. Ejecuta los tests y haz click en "Refresh coverage".
-                                        </p>
-                                    )}
-
+                                    ) : !coverageError && <p className="text-[11px] text-slate-600 italic">Sin datos. Ejecuta los tests y haz click en "Refresh coverage".</p>}
                                     {coverage && (
-                                        <>
-                                            <Separator className="bg-slate-800" />
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={handleOpenInAppReport}
-                                                disabled={reportLoading}
-                                                className="w-full border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5"
-                                            >
-                                                <Monitor size={12} /> Abrir reporte completo
-                                            </Button>
-                                        </>
+                                        <><Separator className="bg-slate-800" />
+                                        <Button variant="outline" size="sm" onClick={handleOpenInAppReport} disabled={reportLoading} className="w-full border-slate-700 bg-slate-800 text-slate-300 hover:text-slate-100 gap-1.5"><Monitor size={12} /> Abrir reporte completo</Button></>
                                     )}
                                 </div>
                             </div>
                         )}
 
-                        {/* ── Report tab (iframe) ────────────────────────── */}
                         {activeTab === 'report' && (
                             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                                 {coverageServerPort ? (
-                                    <>
-                                        <div className="shrink-0 px-3 py-1.5 bg-slate-950/80 border-b border-slate-800 flex items-center gap-2">
-                                            <span className="text-[10px] font-mono text-slate-500">
-                                                http://127.0.0.1:{coverageServerPort}/
-                                            </span>
-                                            <Button
-                                                variant="ghost"
-                                                size="xs"
-                                                onClick={stopCoverageServer}
-                                                className="ml-auto text-slate-500 hover:text-microtermix-danger h-auto py-0.5"
-                                            >
-                                                Cerrar servidor
-                                            </Button>
-                                        </div>
-                                        <iframe
-                                            key={coverageServerPort}
-                                            src={`http://127.0.0.1:${coverageServerPort}/`}
-                                            className="flex-1 w-full border-0 bg-white"
-                                            title="Coverage Report"
-                                        />
-                                    </>
-                                ) : (
-                                    <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
-                                        <div className="text-center">
-                                            <Monitor size={28} className="mx-auto mb-2 text-slate-700" />
-                                            <p>Haz click en "Open report" para ver el reporte aquí</p>
-                                        </div>
+                                    <><div className="shrink-0 px-3 py-1.5 bg-slate-950/80 border-b border-slate-800 flex items-center gap-2">
+                                        <span className="text-[10px] font-mono text-slate-500">http://127.0.0.1:{coverageServerPort}/</span>
+                                        <Button variant="ghost" size="xs" onClick={stopCoverageServer} className="ml-auto text-slate-500 hover:text-microtermix-danger h-auto py-0.5">Cerrar servidor</Button>
                                     </div>
+                                    <iframe ref={iframeRef} src={`http://127.0.0.1:${coverageServerPort}/`} className="flex-1 w-full border-0 bg-white" title="Coverage Report" /></>
+                                ) : (
+                                    <div className="flex-1 flex items-center justify-center text-slate-600 text-sm"><div className="text-center"><Monitor size={28} className="mx-auto mb-2 text-slate-700" /><p>Haz click en "Open report" para ver el reporte aquí</p></div></div>
                                 )}
                             </div>
                         )}
                     </div>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
-                        Selecciona un proyecto para comenzar
-                    </div>
-                )}
+                ) : <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">Selecciona un proyecto para comenzar</div>}
             </div>
 
-            {/* ── Config Dialog ─────────────────────────────────────────── */}
             <Dialog open={configOpen} onOpenChange={setConfigOpen}>
                 <DialogContent className="max-w-lg bg-slate-900 border-slate-700 p-0" showCloseButton={false}>
                     <DialogHeader className="flex flex-row items-center gap-2 px-4 py-3 border-b border-slate-700">
-                        <Settings size={14} className="text-microtermix-neon" />
-                        <DialogTitle className="text-slate-200 flex-1">Configuración de tests</DialogTitle>
-                        <Button variant="ghost" size="icon-sm" onClick={() => setConfigOpen(false)} className="text-slate-500 hover:text-slate-200">
-                            <X size={15} />
-                        </Button>
+                        <Settings size={14} className="text-microtermix-neon" /><DialogTitle className="text-slate-200 flex-1">Configuración de tests</DialogTitle>
+                        <Button variant="ghost" size="icon-sm" onClick={() => setConfigOpen(false)} className="text-slate-500 hover:text-slate-200"><X size={15} /></Button>
                     </DialogHeader>
-
                     <div className="px-4 py-4 space-y-4">
-                        {/* Presets */}
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Preset de Lenguaje</label>
                             <div className="grid grid-cols-2 gap-2">
                                 {Object.entries(PRESETS).map(([id, preset]) => {
                                     const isActive = config.language === id;
                                     return (
-                                        <Button
-                                            key={id}
-                                            size="xs"
-                                            variant={isActive ? 'default' : 'outline'}
-                                            onClick={() => {
-                                                setConfig(preset.config);
-                                                if (selectedPath) saveConfig(selectedPath, preset.config);
-                                            }}
-                                            className={cn(
-                                                "justify-start gap-2 h-9 px-3",
-                                                isActive
-                                                    ? 'bg-microtermix-neon/20 text-microtermix-neon border-microtermix-neon/40'
-                                                    : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200'
-                                            )}
-                                        >
-                                            <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-microtermix-neon shadow-[0_0_8px_rgba(56,189,248,0.6)]" : "bg-slate-700")} />
-                                            {preset.label}
+                                        <Button key={id} size="xs" variant={isActive ? 'default' : 'outline'} onClick={() => { setConfig(preset.config); if (selectedPath) saveConfig(selectedPath, preset.config); }}
+                                            className={cn("justify-start gap-2 h-9 px-3", isActive ? 'bg-microtermix-neon/20 text-microtermix-neon border-microtermix-neon/40' : 'border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200')}>
+                                            <div className={cn("w-1.5 h-1.5 rounded-full", isActive ? "bg-microtermix-neon shadow-[0_0_8px_rgba(56,189,248,0.6)]" : "bg-slate-700")} />{preset.label}
                                         </Button>
                                     );
                                 })}
                             </div>
                         </div>
-
                         <Separator className="bg-slate-800" />
-
                         <div className="space-y-3">
                             <div>
                                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5 text-microtermix-neon/70">Comando Base</label>
-                                <Input
-                                    value={config.command}
-                                    onChange={e => handleConfigChange({ command: e.target.value })}
-                                    className="bg-slate-950 border-slate-800 focus-visible:border-microtermix-neon text-slate-200 font-mono text-xs"
-                                />
-                                <p className="text-[9px] text-slate-600 mt-1">El filtro se añadirá automáticamente al final según el lenguaje.</p>
+                                <Input value={config.command} onChange={e => handleConfigChange({ command: e.target.value })} className="bg-slate-950 border-slate-800 focus-visible:border-microtermix-neon text-slate-200 font-mono text-xs" />
                             </div>
-
                             <div className="grid grid-cols-2 gap-3 pt-2">
                                 <div>
-                                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">JUnit XML (Resultados)</label>
-                                    <Input
-                                        value={config.junitXmlPath}
-                                        onChange={e => handleConfigChange({ junitXmlPath: e.target.value })}
-                                        className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8"
-                                    />
+                                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">JUnit XML</label>
+                                    <Input value={config.junitXmlPath} onChange={e => handleConfigChange({ junitXmlPath: e.target.value })} className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8" />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Clover/JaCoCo XML</label>
-                                    <Input
-                                        value={config.coverageXmlPath}
-                                        onChange={e => handleConfigChange({ coverageXmlPath: e.target.value })}
-                                        className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8"
-                                    />
+                                    <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Clover XML</label>
+                                    <Input value={config.coverageXmlPath} onChange={e => handleConfigChange({ coverageXmlPath: e.target.value })} className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8" />
                                 </div>
                             </div>
                             <div>
                                 <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">HTML Report Path</label>
-                                <Input
-                                    value={config.coverageHtmlPath}
-                                    onChange={e => handleConfigChange({ coverageHtmlPath: e.target.value })}
-                                    className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8"
-                                />
+                                <Input value={config.coverageHtmlPath} onChange={e => handleConfigChange({ coverageHtmlPath: e.target.value })} className="bg-slate-950 border-slate-800 text-slate-300 font-mono text-[10px] h-8" />
                             </div>
                         </div>
                     </div>
-
                     <div className="flex justify-end px-4 py-3 border-t border-slate-700">
-                        <Button onClick={() => setConfigOpen(false)} className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold">
-                            Listo
-                        </Button>
+                        <Button onClick={() => setConfigOpen(false)} className="bg-microtermix-neon text-slate-900 hover:bg-microtermix-neon/80 font-bold">Listo</Button>
                     </div>
                 </DialogContent>
             </Dialog>
