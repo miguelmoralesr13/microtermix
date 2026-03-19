@@ -535,6 +535,15 @@ pub async fn check_semgrep_installed() -> Result<bool, String> {
     if cfg!(target_os = "windows") {
         cmd.args(["/c", "semgrep --version"]);
     } else {
+        // En Linux/Unix, añadimos ~/.local/bin al PATH por si se instaló con pip
+        if let Ok(home) = std::env::var("HOME") {
+            let local_bin = format!("{}/.local/bin", home);
+            if let Ok(current_path) = std::env::var("PATH") {
+                cmd.env("PATH", format!("{}:{}", local_bin, current_path));
+            } else {
+                cmd.env("PATH", local_bin);
+            }
+        }
         cmd.args(["-c", "semgrep --version"]);
     }
     
@@ -560,6 +569,20 @@ pub async fn run_semgrep_scan(
     }
 
     let mut cmd = silent_async_command("semgrep");
+    
+    // Inyectar PATH en Linux para encontrar semgrep de pip
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(home) = std::env::var("HOME") {
+            let local_bin = format!("{}/.local/bin", home);
+            if let Ok(current_path) = std::env::var("PATH") {
+                cmd.env("PATH", format!("{}:{}", local_bin, current_path));
+            } else {
+                cmd.env("PATH", local_bin);
+            }
+        }
+    }
+
     cmd.args(&args);
     cmd.current_dir(&project_path);
     cmd.stdout(std::process::Stdio::piped());

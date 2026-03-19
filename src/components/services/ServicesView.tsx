@@ -35,6 +35,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     const activeTerminalTab = useProcessStore(s => s.activeTerminalTab);
     const setActiveTerminalTab = useProcessStore(s => s.setActiveTerminalTab);
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
+    const removeProcess = useProcessStore(s => s.removeProcess);
 
     // ─── Local UI State ──────────────────────────────────────────────────
     const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
@@ -253,8 +254,20 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     onTabRestart={handleTabRestart}
                     onTabClose={async (e, serviceId) => {
                         e.preventDefault(); e.stopPropagation();
-                        await invoke('kill_service', { serviceId });
-                        updateProcessStatus(serviceId, 'stopped');
+                        
+                        // 1. Detener el proceso
+                        try {
+                            await invoke('kill_service', { serviceId });
+                        } catch (_) {}
+                        
+                        // 2. Si es la activa, seleccionar otra antes de borrar
+                        if (activeTerminalTab === serviceId) {
+                            const remaining = Object.keys(activeProcesses).filter(id => id !== serviceId);
+                            setActiveTerminalTab(remaining.length > 0 ? remaining[0] : null);
+                        }
+                        
+                        // 3. Eliminar del store (quitar pestaña)
+                        removeProcess(serviceId);
                     }}
                 />
             </div>
