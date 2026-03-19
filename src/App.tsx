@@ -106,8 +106,13 @@ function AppContent() {
       .then((raw) => {
         const config = JSON.parse(raw || '{}');
         if (config && typeof config === 'object' && Object.keys(config).length > 0) {
-          const projectPaths = state.projects.map((p) => p.path as string);
-          applyWorkspaceConfig(config, state.currentPath, projectPaths);
+          // Combine current scanned projects with all paths mentioned in the config to ensure resolution works for external projects
+          const allPotentialPaths = Array.from(new Set([
+            ...state.projects.map((p) => p.path as string),
+            ...(config.allProjectPaths || [])
+          ]));
+          
+          applyWorkspaceConfig(config, state.currentPath, allPotentialPaths);
 
           if (config.allProjectPaths && Array.isArray(config.allProjectPaths)) {
             addProjectsFromPaths(config.allProjectPaths, true);

@@ -56,6 +56,38 @@ export interface MicrotermixConfig {
 export const WORKSPACE_CONFIG_FILENAME = 'microtermix.json';
 
 
+/** Obtiene un identificador persistente para un path. */
+export function getProjectIdentifier(path: string, workspacePath: string): string {
+    if (!path) return '';
+    // Si está dentro de la raíz del workspace, usamos el path relativo para portabilidad
+    if (path.startsWith(workspacePath)) {
+        let rel = path.substring(workspacePath.length);
+        // Normalizar separadores y quitar leading slash
+        rel = rel.replace(/\\/g, '/');
+        if (rel.startsWith('/')) rel = rel.substring(1);
+        return rel || '.';
+    }
+    // Si es externo, no hay de otra que usar el path absoluto
+    return path.replace(/\\/g, '/');
+}
+
+/** Resuelve un identificador al path completo en el workspace actual. */
+export function resolveIdentifierToPath(id: string, projectPaths: string[], workspacePath: string): string | undefined {
+    // 1. Intentar match exacto (por si el ID es un path absoluto o relativo exacto)
+    const exactMatch = projectPaths.find(p => p.replace(/\\/g, '/') === id.replace(/\\/g, '/'));
+    if (exactMatch) return exactMatch;
+
+    // 2. Intentar match por path relativo (si el ID es relativo a la raíz)
+    const relMatch = projectPaths.find(p => {
+        const pId = getProjectIdentifier(p, workspacePath);
+        return pId === id;
+    });
+    if (relMatch) return relMatch;
+
+    // 3. Fallback: match por folder name (legacy o por si acaso)
+    return projectPaths.find(p => getFolderName(p) === id);
+}
+
 /** Obtiene solo el nombre de la carpeta del proyecto (último segmento del path). */
 export function getFolderName(path: string): string {
     const segments = path.replace(/\/+$/, '').split(/[/\\]/).filter(Boolean);
@@ -82,7 +114,7 @@ export function applyWorkspaceConfigToStorage(
     if (config.selectedProjects != null && config.selectedProjects.length > 0) {
         try {
             const resolved = config.selectedProjects
-                .map((name) => resolveFolderNameToPath(name, projectPaths))
+                .map((id) => resolveIdentifierToPath(id, projectPaths, workspacePath))
                 .filter((p): p is string => p != null);
             if (resolved.length) {
                 localStorage.setItem(`microtermix-selected-projects-${pathKey}`, JSON.stringify(resolved));
@@ -107,7 +139,7 @@ export function applyWorkspaceConfigToStorage(
     if (config.activeTerminalTabId != null) {
         try {
             if (config.activeTerminalTabId) {
-                const resolved = resolveFolderNameToPath(config.activeTerminalTabId, projectPaths);
+                const resolved = resolveIdentifierToPath(config.activeTerminalTabId, projectPaths, workspacePath);
                 if (resolved) {
                     localStorage.setItem(`microtermix-active-terminal-tab-${pathKey}`, resolved);
                 }
@@ -115,9 +147,9 @@ export function applyWorkspaceConfigToStorage(
         } catch (_) { }
     }
     if (config.projectEnvs) {
-        for (const [folderName, value] of Object.entries(config.projectEnvs)) {
+        for (const [id, value] of Object.entries(config.projectEnvs)) {
             try {
-                const resolved = resolveFolderNameToPath(folderName, projectPaths);
+                const resolved = resolveIdentifierToPath(id, projectPaths, workspacePath);
                 if (resolved) {
                     localStorage.setItem(`microtermix-envs-${pathKeyFor(resolved)}`, JSON.stringify(value));
                 }
@@ -125,9 +157,9 @@ export function applyWorkspaceConfigToStorage(
         }
     }
     if (config.projectViteWrapper) {
-        for (const [folderName, value] of Object.entries(config.projectViteWrapper)) {
+        for (const [id, value] of Object.entries(config.projectViteWrapper)) {
             try {
-                const resolved = resolveFolderNameToPath(folderName, projectPaths);
+                const resolved = resolveIdentifierToPath(id, projectPaths, workspacePath);
                 if (resolved) {
                     localStorage.setItem(`microtermix-vite-wrapper-${pathKeyFor(resolved)}`, JSON.stringify(value));
                 }
@@ -135,10 +167,10 @@ export function applyWorkspaceConfigToStorage(
         }
     }
     
-    // Restaurar asignaciones de cuentas Git (folderName -> fullPath)
+    // Restaurar asignaciones de cuentas Git (id -> fullPath)
     if (config.repoAccounts) {
-        for (const [folderName, accountId] of Object.entries(config.repoAccounts)) {
-            const resolvedPath = resolveFolderNameToPath(folderName, projectPaths);
+        for (const [id, accountId] of Object.entries(config.repoAccounts)) {
+            const resolvedPath = resolveIdentifierToPath(id, projectPaths, workspacePath);
             if (resolvedPath) {
                 useGitStore.getState().setRepoAccount(resolvedPath, accountId);
             }
@@ -175,19 +207,19 @@ export function buildWorkspaceConfigFromCurrentState(
     const projectViteWrapper: Record<string, { enabled: boolean; remotes: Record<string, string> }> = {};
 
     for (const p of projectPaths) {
-        const folderName = getFolderName(p);
+        const id = getProjectIdentifier(p, workspacePath);
         try {
             const raw = localStorage.getItem(`microtermix-envs-${pathKey(p)}`);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                projectEnvs[folderName] = parsed;
+                projectEnvs[id] = parsed;
             }
         } catch (_) { }
         try {
             const raw = localStorage.getItem(`microtermix-vite-wrapper-${pathKey(p)}`);
             if (raw) {
                 const parsed = JSON.parse(raw);
-                projectViteWrapper[folderName] = parsed;
+                projectViteWrapper[id] = parsed;
             }
         } catch (_) { }
     }
@@ -195,21 +227,21 @@ export function buildWorkspaceConfigFromCurrentState(
     return {
         version: 1,
         workspacePath,
-        selectedProjects: selectedProjects.map(getFolderName),
+        selectedProjects: selectedProjects.map(p => getProjectIdentifier(p, workspacePath)),
         allProjectPaths: projectPaths,
         multiScript,
         globalEnvName,
         gitAccounts: useGitStore.getState().accounts,
         repoAccounts: Object.fromEntries(
             Object.entries(useGitStore.getState().repoAccounts)
-                .map(([path, id]) => [getFolderName(path), id])
+                .map(([path, id]) => [getProjectIdentifier(path, workspacePath), id])
         ),
         vitePreviewOpen,
         savedCommands,
         savedCommandSteps: Object.keys(savedCommandSteps).length ? savedCommandSteps : undefined,
         savedCommandTypes: Object.keys(savedCommandTypes).length ? savedCommandTypes : undefined,
         pipelines: pipelines.length ? pipelines : undefined,
-        activeTerminalTabId: activeTerminalTabId ? getFolderName(activeTerminalTabId) : undefined,
+        activeTerminalTabId: activeTerminalTabId ? getProjectIdentifier(activeTerminalTabId, workspacePath) : undefined,
         projectEnvs: Object.keys(projectEnvs).length ? projectEnvs : undefined,
         projectViteWrapper: Object.keys(projectViteWrapper).length ? projectViteWrapper : undefined,
         jiraAccounts: useJiraStore.getState().accounts,

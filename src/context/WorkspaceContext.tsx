@@ -7,7 +7,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 import type { MicrotermixConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
-import { applyWorkspaceConfigToStorage, resolveFolderNameToPath, buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
+import { applyWorkspaceConfigToStorage, resolveIdentifierToPath, buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
@@ -247,8 +247,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             });
         }
         if (config.repoAccounts) {
-            Object.entries(config.repoAccounts).forEach(([folderName, accountId]) => {
-                const fullPath = resolveFolderNameToPath(folderName, projectPaths);
+            Object.entries(config.repoAccounts).forEach(([id, accountId]) => {
+                const fullPath = resolveIdentifierToPath(id, projectPaths, workspacePath);
                 if (fullPath) gitStore.setRepoAccount(fullPath, accountId);
             });
         }
@@ -576,8 +576,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const executePipeline = useCallback(async (pipeline: PipelineConfig) => {
         try {
             const resolvedSteps = pipeline.steps.map((step: PipelineStepConfig) => {
-                const [folderName, script] = step.serviceId.split('::');
-                const fullPath = resolveFolderNameToPath(folderName, state.projects.map(p => p.path as string));
+                const parts = step.serviceId.split('::');
+                const id = parts[0];
+                const script = parts.slice(1).join('::');
+                const fullPath = resolveIdentifierToPath(id, state.projects.map(p => p.path as string), state.currentPath);
                 return {
                     service_id: `${fullPath}::${script} `,
                     condition: step.condition ? {
@@ -593,7 +595,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         } catch (e) {
             console.error('Failed to execute pipeline', e);
         }
-    }, [state.projects]);
+    }, [state.projects, state.currentPath]);
 
     const removeProjectsByPath = useCallback((pathsToRemove: string[]) => {
         setState(prev => {
