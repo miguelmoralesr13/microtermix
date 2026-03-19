@@ -439,12 +439,7 @@ export const useGitStore = create<GitStore>()(
                 initWatchers: async (projectPaths) => {
                     const { invalidate } = get();
 
-                    // Start watchers in backend for all projects
-                    projectPaths.forEach(path => {
-                        invoke('watch_repo', { projectPath: path }).catch(() => { });
-                    });
-
-                    // Listen for global events
+                    // Listen for global events (triggered by backend only for the active repo)
                     const unlistenPromise = listen('git-changed', (event) => {
                         const path = event.payload as string;
                         console.log(`⚡ Global Git Watcher: ${path} changed`);

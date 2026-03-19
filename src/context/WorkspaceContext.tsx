@@ -363,10 +363,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
                 const updated = [...prev.projects, ...newOnes];
                 
-                // Iniciar watchers para los nuevos proyectos
-                const gitStore = useGitStore.getState();
-                gitStore.initWatchers(newOnes.map(p => p.path as string));
-
                 if (!silent) toast.success(`Añadidos ${newOnes.length} proyectos nuevos`);
                 return { ...prev, projects: updated };
             });

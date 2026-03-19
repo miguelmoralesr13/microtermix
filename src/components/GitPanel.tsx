@@ -123,6 +123,18 @@ export const GitPanel: React.FC = () => {
         }
     };
 
+    // Watcher on-demand: Inicia el watcher solo para el proyecto activo y lo detiene al salir
+    useEffect(() => {
+        if (!activeTab) return;
+        
+        const path = activeTab;
+        invoke('watch_repo', { projectPath: path }).catch(console.error);
+        
+        return () => {
+            invoke('stop_watching_repo', { projectPath: path }).catch(console.error);
+        };
+    }, [activeTab]);
+
     // Focus background fetch worker on the current active project
     useEffect(() => {
         const label = getCurrentWindow().label;

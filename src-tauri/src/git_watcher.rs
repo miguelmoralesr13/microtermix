@@ -16,10 +16,10 @@ pub async fn set_active_git_project(
 ) -> Result<(), String> {
     let mut projects = state.active_git_projects.lock().await;
     if let Some(path) = project_path {
-        app_logs::log_debug("Git Worker", &format!("Window '{}' focused on: {}", window_label, path));
+        app_logs::log_info("Git Watcher", &format!("Focusing window '{}' on project: {}", window_label, path));
         projects.insert(window_label.clone(), path.clone());
     } else {
-        app_logs::log_debug("Git Worker", &format!("Window '{}' is IDLE", window_label));
+        app_logs::log_info("Git Watcher", &format!("Window '{}' is now IDLE (no project focused)", window_label));
         projects.remove(&window_label);
     }
     Ok(())
