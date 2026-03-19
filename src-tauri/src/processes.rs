@@ -941,6 +941,66 @@ pub fn list_diagram_files(path: String) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub async fn execute_ephemeral_task(
+    app: AppHandle,
+    project_path: String,
+    command: String,
+    task_id: String,
+) -> Result<i32, String> {
+    let log_event = format!("task-log:{}", task_id);
+    let finish_event = format!("task-finished:{}", task_id);
+
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = silent_async_command("cmd");
+        c.args(["/c", &command]);
+        c
+    } else {
+        let mut c = silent_async_command("sh");
+        c.args(["-c", &command]);
+        c
+    };
+
+    cmd.current_dir(&project_path);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+
+    let mut child = cmd.spawn().map_err(|e| format!("Fallo al iniciar tarea: {}", e))?;
+    
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let app_stdout = app.clone();
+    let log_ev_stdout = log_event.clone();
+    tokio::spawn(async move {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        while let Ok(n) = reader.read_line(&mut line).await {
+            if n == 0 { break; }
+            let _ = app_stdout.emit(&log_ev_stdout, format!("{}\r", line));
+            line.clear();
+        }
+    });
+
+    let app_stderr = app.clone();
+    let log_ev_stderr = log_event.clone();
+    tokio::spawn(async move {
+        let mut reader = BufReader::new(stderr);
+        let mut line = String::new();
+        while let Ok(n) = reader.read_line(&mut line).await {
+            if n == 0 { break; }
+            let _ = app_stderr.emit(&log_ev_stderr, format!("\x1b[33m{}\x1b[0m\r", line));
+            line.clear();
+        }
+    });
+
+    let status = child.wait().await.map_err(|e: std::io::Error| e.to_string())?;
+    let exit_code = status.code().unwrap_or(0);
+    
+    let _ = app.emit(&finish_event, exit_code);
+    Ok(exit_code)
+}
+
+#[tauri::command]
 pub fn read_file_content(base: String, file: String) -> Result<String, String> {
     let path = Path::new(&base).join(&file);
     fs::read_to_string(path).map_err(|e| e.to_string())

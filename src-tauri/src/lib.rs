@@ -438,6 +438,7 @@ pub fn run() {
             notes::notes_rename_entry,
             java_manager::list_local_jdks,
             java_manager::download_jdk,
+            crate::processes::execute_ephemeral_task,
             crate::processes::run_semgrep_scan,
             crate::processes::check_semgrep_installed,
             write_file,

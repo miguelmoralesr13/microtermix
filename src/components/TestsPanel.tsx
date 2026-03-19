@@ -5,8 +5,8 @@ import {
     Settings, Monitor, TerminalSquare, X, Search,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { useProcessStore } from '../stores/processStore';
-import { TerminalView } from './TerminalView';
+import { TaskTerminal } from './ui/task-terminal';
+import { useTaskStore } from '../stores/taskStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -231,10 +231,9 @@ const CoverageStatBar: React.FC<{ label: string; stat: CoverageStat }> = ({ labe
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const TestsPanel: React.FC = () => {
-    const { state, executeProjectScript } = useWorkspace();
-    const activeProcesses = useProcessStore(s => s.activeProcesses);
-    const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
+    const { state } = useWorkspace();
     const projects = state.projects;
+    const { activeTasks, setTaskStatus } = useTaskStore();
 
     const [selectedPath, setSelectedPath] = useState<string>(() => {
         const saved = localStorage.getItem(STORAGE_TESTS_PATH);
@@ -260,6 +259,7 @@ export const TestsPanel: React.FC = () => {
     useEffect(() => { localStorage.setItem(STORAGE_TESTS_TAB, activeTab); }, [activeTab]);
     const [coverageServerPort, setCoverageServerPort] = useState<number | null>(null);
     const [reportLoading, setReportLoading] = useState(false);
+    const iframeRef = useRef<HTMLIFrameElement>(null);
 
     // ── File Autocomplete state
     const [testFiles, setTestFiles] = useState<string[]>([]);
@@ -271,11 +271,11 @@ export const TestsPanel: React.FC = () => {
     }, [testFiles, config.testFilter, showSuggestions]);
 
     const finalCmd = useMemo(() => buildFinalCommand(config), [config]);
-    const serviceId = useMemo(() => `${selectedPath}::${finalCmd} `, [selectedPath, finalCmd]);
-
-    const processState = activeProcesses[serviceId];
-    const isRunning = processState?.status === 'running';
-    const processStatus = processState?.status;
+    const taskId = useMemo(() => `tests-${selectedPath.replace(/[/\\:]/g, '_')}`, [selectedPath]);
+    
+    const taskState = activeTasks[taskId];
+    const isRunning = taskState?.status === 'running';
+    const processStatus = taskState?.status;
 
     // Fetch test files when project or language changes
     useEffect(() => {
@@ -327,14 +327,24 @@ export const TestsPanel: React.FC = () => {
 
     const handleRun = async () => {
         if (!selectedPath || !config.command) return;
-        await executeProjectScript(selectedPath, finalCmd, { globalEnvName: 'none' });
+        setTaskStatus(taskId, 'running');
+        try {
+            const exitCode = await invoke<number>('execute_ephemeral_task', {
+                projectPath: selectedPath,
+                command: finalCmd,
+                taskId: taskId
+            });
+            setTaskStatus(taskId, exitCode === 0 ? 'success' : 'error', exitCode);
+            loadCoverage();
+        } catch (e) {
+            console.error("Test execution failed", e);
+            setTaskStatus(taskId, 'error');
+        }
     };
 
     const handleStop = async () => {
-        try {
-            await invoke('kill_service', { serviceId });
-            updateProcessStatus(serviceId, 'stopped');
-        } catch (_) { }
+        // En un futuro podríamos añadir un comando kill_ephemeral_task en Rust
+        setTaskStatus(taskId, 'canceled');
     };
 
     const loadCoverage = useCallback(async () => {
@@ -359,9 +369,19 @@ export const TestsPanel: React.FC = () => {
 
     const prevStatusRef = useRef<typeof processStatus>(undefined);
     useEffect(() => {
-        if (prevStatusRef.current === 'running' && processStatus === 'stopped') loadCoverage();
+        if (prevStatusRef.current === 'running' && processStatus !== 'running') {
+            loadCoverage();
+            // Live Server Logic: Recargar iframe si está abierto y el servidor está activo
+            if (coverageServerPort && iframeRef.current) {
+                const currentSrc = iframeRef.current.src;
+                iframeRef.current.src = 'about:blank';
+                setTimeout(() => {
+                    if (iframeRef.current) iframeRef.current.src = currentSrc;
+                }, 50);
+            }
+        }
         prevStatusRef.current = processStatus;
-    }, [processStatus, loadCoverage]);
+    }, [processStatus, loadCoverage, coverageServerPort]);
 
     useEffect(() => {
         if (selectedPath) loadCoverage();
@@ -385,15 +405,15 @@ export const TestsPanel: React.FC = () => {
 
     const coverage = coverageMap[selectedPath] ?? null;
 
-    const statusBadge = processState ? (
+    const statusBadge = taskState ? (
         <Badge className={cn(
             'ml-auto text-[10px] font-semibold rounded-full border-0',
             isRunning ? 'bg-microtermix-success/20 text-microtermix-success' :
-                processState.status === 'error' ? 'bg-microtermix-danger/20 text-microtermix-danger' :
+                taskState.status === 'error' ? 'bg-microtermix-danger/20 text-microtermix-danger' :
                     'bg-slate-700 text-slate-400'
         )}>
             {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse mr-1 inline-block" />}
-            {processState.status}
+            {taskState.status}
         </Badge>
     ) : null;
 
@@ -421,8 +441,8 @@ export const TestsPanel: React.FC = () => {
                             const path = p.path as string;
                             const cov = coverageMap[path];
                             const linesP = cov ? pct(cov.lines) : null;
-                            const sid = `${path}::${config.command} `;
-                            const running = activeProcesses[sid]?.status === 'running';
+                            const tid = `tests-${path.replace(/[/\\:]/g, '_')}`;
+                            const running = activeTasks[tid]?.status === 'running';
                             const isSelected = selectedPath === path;
                             return (
                                 <div
@@ -612,17 +632,7 @@ export const TestsPanel: React.FC = () => {
                         {activeTab === 'execution' && (
                             <div className="flex-1 flex min-h-0 overflow-hidden">
                                 <div className="flex-1 min-w-0 p-2 flex flex-col overflow-hidden">
-                                    {processState ? (
-                                        <TerminalView serviceId={serviceId} />
-                                    ) : (
-                                        <div className="flex-1 flex items-center justify-center text-slate-600 text-sm bg-slate-950 rounded-lg border border-slate-800">
-                                            <div className="text-center">
-                                                <FlaskConical size={28} className="mx-auto mb-2 text-slate-700" />
-                                                <p>Ejecuta los tests para ver el output aquí</p>
-                                                <p className="text-xs mt-1 font-mono text-slate-700">{config.command}</p>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <TaskTerminal taskId={taskId} />
                                 </div>
 
                                 {/* Coverage sidebar */}

@@ -283,7 +283,8 @@ export const SwaggerPanel: React.FC = () => {
                     {detected.format === 'json' ? '→ YAML' : '→ JSON'}
                 </Button>
                 <Button size="sm" variant={preview ? 'outline' : 'ghost'}
-                    onClick={() => setPreview(p => !p)}
+                    onClick={() => setPreview(!preview)}
+
                     className="h-7 text-xs gap-1">
                     {preview ? <><EyeOff size={13} /> Solo editor</> : <><Eye size={13} /> Preview</>}
                 </Button>
