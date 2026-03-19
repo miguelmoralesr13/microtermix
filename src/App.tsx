@@ -11,6 +11,8 @@ import { registerMonacoThemes } from './lib/monacoThemes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
+import { useAppLogStore } from './stores/appLogStore';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -28,6 +30,14 @@ function AppContent() {
   const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, addProjectsFromPaths, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
   const configLoadedForPathRef = React.useRef<string | null>(null);
   const initWatchers = useGitStore(s => s.initWatchers);
+  const initAppLogListener = useAppLogStore(s => s.initListener);
+
+  // Global App Log Listener (Background)
+  React.useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    initAppLogListener().then(fn => unlisten = fn);
+    return () => { if (unlisten) unlisten(); };
+  }, [initAppLogListener]);
 
   // Standalone detection
   const params = new URLSearchParams(window.location.search);

@@ -8,19 +8,20 @@ import { cn } from '@/lib/utils';
 
 export const SystemMonitorPanel: React.FC = () => {
     const { diagnostics, isPolling, startPolling, stopPolling, error } = useSystemStore();
-    const { logs, clearLogs, initListener } = useAppLogStore();
+    const { logs, clearLogs } = useAppLogStore();
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         startPolling(2000);
-        let unlisten: (() => void) | undefined;
-        initListener().then(fn => unlisten = fn);
-        
-        return () => {
-            stopPolling();
-            unlisten?.();
-        };
-    }, [startPolling, stopPolling, initListener]);
+        return () => stopPolling();
+    }, [startPolling, stopPolling]);
+
+    // Auto-scroll to bottom on new logs
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [logs]);
 
     const formatBytes = (bytes: number) => {
         if (bytes === 0) return '0 B';
