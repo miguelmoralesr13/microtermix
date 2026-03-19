@@ -77,20 +77,20 @@ const VERSION_COLORS: Record<SpecVersion, string> = {
 
 // ── Default placeholder ───────────────────────────────────────────────────────
 
-const PLACEHOLDER = `openapi: "3.0.3"
-info:
-  title: Mi API
-  version: "1.0.0"
-paths:
-  /ping:
-    get:
-      summary: Ping
-      responses:
-        "200":
-          description: OK
-`;
+// const PLACEHOLDER = `openapi: "3.0.3"
+// info:
+//   title: Mi API
+//   version: "1.0.0"
+// paths:
+//   /ping:
+//     get:
+//       responses:
+//         "200":
+//   description: OK
+// `;
 
 const EDITOR_MIN_PX = 200;
+
 const PREVIEW_MIN_PX = 200;
 
 // ── Component ─────────────────────────────────────────────────────────────────

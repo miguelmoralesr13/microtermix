@@ -26,7 +26,7 @@ export interface Project {
     scripts?: string[];
 }
 
-export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'tests' | 'sonar' | 'cloudwatch' | 'http' | 'jenkins' | 'lib-cipher' | 'mocks' | 'json-processor' | 'regex' | 'notes' | 'swagger' | 'designer' | 'semgrep';
+export type AppView = 'services' | 'git' | 'jira' | 'processes' | 'proxy' | 'fileServer' | 'tests' | 'sonar' | 'cloudwatch' | 'http' | 'jenkins' | 'lib-cipher' | 'mocks' | 'json-processor' | 'regex' | 'notes' | 'swagger' | 'designer' | 'semgrep' | 'system';
 
 
 export interface WorkspaceState {

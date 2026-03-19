@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::state::{AppState, ServerHandle};
+use crate::app_logs;
 
 /// Finds the byte length of a JS/TS value starting at `s[0]`, stopping when it
 /// reaches a `,` or `}` at depth 0 (outside brackets/parens/braces/strings).
@@ -647,6 +648,8 @@ pub async fn start_proxy(
         .unwrap_or_else(|| "127.0.0.1".to_string());
     let app_clone = app.clone();
     let routes_clone = routes.clone();
+
+    app_logs::log_info("Proxy", &format!("Starting reverse proxy on {}:{} with {} routes.", host, port, routes.len()));
     let intercept_prefix_clone = intercept_prefix.clone();
     let bind_addr = format!("{}:{}", host, port);
     let listener = tokio::net::TcpListener::bind(&bind_addr)
@@ -678,6 +681,7 @@ pub async fn start_proxy(
 pub async fn stop_proxy(state: State<'_, AppState>) -> Result<(), String> {
     let mut guard = state.proxy_abort.lock().await;
     if let Some(h) = guard.take() {
+        app_logs::log_info("Proxy", "Stopping reverse proxy...");
         let _ = h.shutdown_tx.send(());
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), h.join).await;
     }

@@ -52,6 +52,7 @@ pub struct AppState {
     pub git_fetch_worker_started: Arc<AsyncMutex<bool>>,
     pub active_git_projects: Arc<AsyncMutex<HashMap<String, String>>>,
     pub cw_workers: Arc<AsyncMutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
+    pub sys_monitor: Arc<std::sync::Mutex<sysinfo::System>>,
 }
 
 impl AppState {
@@ -70,6 +71,7 @@ impl AppState {
             git_fetch_worker_started: Arc::new(AsyncMutex::new(false)),
             active_git_projects: Arc::new(AsyncMutex::new(HashMap::new())),
             cw_workers: Arc::new(AsyncMutex::new(HashMap::new())),
+            sys_monitor: Arc::new(std::sync::Mutex::new(sysinfo::System::new_all())),
         }
     }
 }

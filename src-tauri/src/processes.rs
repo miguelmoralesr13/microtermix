@@ -771,11 +771,13 @@ pub async fn execute_service_script(
 
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
+    let child_pid = child.id().unwrap_or(0);
+    crate::app_logs::log_info("Executor", &format!("Spawned service [{}] with PID: {}", service_id, child_pid));
+
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
 
     let notify = Arc::new(tokio::sync::Notify::new());
-    let child_pid = child.id().unwrap_or(0);
 
     {
         let mut processes = state.processes.lock().await;
@@ -966,6 +968,9 @@ pub async fn execute_ephemeral_task(
 
     let mut child = cmd.spawn().map_err(|e| format!("Fallo al iniciar tarea: {}", e))?;
     
+    let child_pid = child.id().unwrap_or(0);
+    crate::app_logs::log_info("Executor", &format!("Spawned ephemeral task with PID: {}", child_pid));
+
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
 

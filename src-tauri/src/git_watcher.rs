@@ -4,6 +4,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::state::AppState;
 use std::collections::HashSet;
 
+use crate::app_logs;
+
 // ── Multi-Window Fetch Worker ────────────────────────────────────────────────
 
 #[tauri::command]
@@ -14,11 +16,11 @@ pub async fn set_active_git_project(
 ) -> Result<(), String> {
     let mut projects = state.active_git_projects.lock().await;
     if let Some(path) = project_path {
+        app_logs::log_debug("Git Worker", &format!("Window '{}' focused on: {}", window_label, path));
         projects.insert(window_label.clone(), path.clone());
-        println!("[Git Worker] Window '{}' focused on: {}", window_label, path);
     } else {
+        app_logs::log_debug("Git Worker", &format!("Window '{}' is IDLE", window_label));
         projects.remove(&window_label);
-        println!("[Git Worker] Window '{}' is IDLE", window_label);
     }
     Ok(())
 }
@@ -28,6 +30,8 @@ async fn ensure_fetch_worker(app_handle: AppHandle) {
     let mut started = state.git_fetch_worker_started.lock().await;
     if *started { return; }
     *started = true;
+    
+    app_logs::log_info("Git Worker", "Multi-window fetch worker started.");
 
     let active_projects_map = state.active_git_projects.clone();
 
@@ -42,7 +46,7 @@ async fn ensure_fetch_worker(app_handle: AppHandle) {
             };
 
             if !paths_to_fetch.is_empty() {
-                println!("[Git Worker] Starting fetch cycle for {} unique active projects...", paths_to_fetch.len());
+                app_logs::log_debug("Git Worker", &format!("Starting fetch cycle for {} unique projects", paths_to_fetch.len()));
                 
                 for path in paths_to_fetch {
                     let p = path.clone();
@@ -79,6 +83,8 @@ pub fn start_watching_repo(
     let project_path_clone = project_path.clone();
     let app_handle_clone = app_handle.clone();
     
+    app_logs::log_info("Git Watcher", &format!("Starting watcher for: {}", project_path));
+
     let state = app_handle.state::<AppState>();
     let git_watchers = state.git_watchers.clone();
     let active_projects_map = state.active_git_projects.clone();
@@ -91,6 +97,7 @@ pub fn start_watching_repo(
 
     let root_path = Path::new(&project_path);
     if !root_path.exists() {
+        app_logs::log_error("Git Watcher", &format!("Path does not exist: {}", project_path));
         return Err("Project path does not exist".to_string());
     }
 
@@ -128,6 +135,7 @@ pub fn start_watching_repo(
 
     let active_projects_for_notify = active_projects_map.clone();
     let path_to_watch = project_path.clone();
+    let app_handle_for_event = app_handle_clone.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(_) = rx.recv().await {
             tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
@@ -140,7 +148,9 @@ pub fn start_watching_repo(
             };
 
             if is_active {
-                let _ = app_handle_clone.emit("git-changed", project_path_clone.clone());
+                app_logs::log_debug("Git Watcher", &format!("Change detected in focused project: {}", path_to_watch));
+                app_logs::log_info("Git Watcher", &format!("Notifying frontend of changes in {}", path_to_watch));
+                let _ = app_handle_for_event.emit("git-changed", path_to_watch.clone());
             }
         }
     });
@@ -153,6 +163,7 @@ pub async fn stop_watching_repo(
     state: tauri::State<'_, AppState>,
     project_path: String,
 ) -> Result<(), String> {
+    app_logs::log_info("Git Watcher", &format!("Stopping watcher for: {}", project_path));
     let mut watchers = state.git_watchers.lock().await;
     watchers.remove(&project_path);
     Ok(())

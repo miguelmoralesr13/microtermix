@@ -21,6 +21,8 @@ mod java_manager;
 mod json_processor;
 mod notes;
 mod stepfunctions;
+mod diagnostics;
+mod app_logs;
 
 use std::fs;
 use std::path::Path;
@@ -317,6 +319,11 @@ pub fn run() {
                 });
             }
         })
+        .setup(|app| {
+            app_logs::init_app_logs(app.handle().clone());
+            app_logs::log_info("Microtermix", "Application started.");
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_full_diff,
             open_standalone_window,
@@ -443,6 +450,7 @@ pub fn run() {
             crate::processes::check_semgrep_installed,
             write_file,
             read_file,
+            diagnostics::get_microtermix_performance_data,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
