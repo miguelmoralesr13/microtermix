@@ -8,6 +8,7 @@ import jsYaml from 'js-yaml';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';
+import { useSwaggerStore } from '@/stores/swaggerStore';
 import {
     Eye, EyeOff, FolderOpen, Download, ArrowLeftRight,
     CheckCircle2, XCircle, FileCode2, AlertCircle, Copy,
@@ -96,16 +97,19 @@ const PREVIEW_MIN_PX = 200;
 
 export const SwaggerPanel: React.FC = () => {
     const monacoTheme = useMonacoTheme();
-    const [text, setText]         = useState(PLACEHOLDER);
+    const { 
+        text, setText, 
+        preview, setPreview, 
+        editorPx, setEditorPx 
+    } = useSwaggerStore();
+
     const [copied, setCopied]     = useState(false);
-    const [preview, setPreview]   = useState(true);
     const [specObj, setSpecObj]   = useState<Record<string, unknown> | null>(null);
-    const [detected, setDetected] = useState<DetectedSpec>(() => detectSpec(PLACEHOLDER));
+    const [detected, setDetected] = useState<DetectedSpec>(() => detectSpec(text));
     const [valid, setValid]       = useState(true);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     // Resizable split — stored as editor width in px; null = 50%
-    const [editorPx, setEditorPx]  = useState<number | null>(null);
     const bodyRef                   = useRef<HTMLDivElement>(null);
     const draggingRef               = useRef(false);
 
@@ -154,7 +158,7 @@ export const SwaggerPanel: React.FC = () => {
         }, 300);
     }, []);
 
-    useEffect(() => { scheduleReparse(PLACEHOLDER); }, []);
+    useEffect(() => { scheduleReparse(text); }, []);
 
     const handleChange = (val: string | undefined) => {
         const v = val ?? '';
