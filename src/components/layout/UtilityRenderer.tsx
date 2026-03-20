@@ -23,6 +23,7 @@ import { SwaggerPanel } from '../swagger/SwaggerPanel';
 import { VisualDesigner } from '../designer/VisualDesigner';
 import { SemgrepPanel } from '../SemgrepPanel';
 import { SystemMonitorPanel } from '../SystemMonitorPanel';
+import { ZeplinPanel } from '../ZeplinPanel';
 
 interface UtilityRendererProps {
     view?: AppView;
@@ -72,6 +73,7 @@ export const UtilityRenderer: React.FC<UtilityRendererProps> = ({ view: forcedVi
         case 'designer': return <VisualDesigner />;
         case 'semgrep': return <SemgrepPanel />;
         case 'system': return <SystemMonitorPanel />;
+        case 'zeplin': return <ZeplinPanel />;
         default:
             return (
                 <div className="flex items-center justify-center w-full h-full text-slate-500 italic">

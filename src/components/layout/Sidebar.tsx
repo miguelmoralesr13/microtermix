@@ -3,7 +3,7 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
     Network, Package, Ghost,  Cloud, Regex,
-    ChevronUp, ChevronDown, ShieldAlert, Terminal
+    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 
@@ -75,6 +75,7 @@ export const Sidebar: React.FC = () => {
                 {renderNavIcon('notes', SiMarkdown, "Notas Markdown")}
                 {renderNavIcon('swagger', SiSwagger, "Swagger / OpenAPI Editor")}
                 {renderNavIcon('designer', SiMermaid, "Visual Designer (Mermaid)")}
+                {renderNavIcon('zeplin', Palette, "Zeplin Integration")}
                 
                 {process.env.NODE_ENV === 'development' && (
                     <div className="w-8 h-px bg-slate-800 my-2" />
