@@ -2,6 +2,7 @@ import { NpmRegistry } from './NpmRegistry';
 import { PyPiRegistry } from './PyPiRegistry';
 import { JavaRegistry } from './JavaRegistry';
 import { CargoRegistry } from './CargoRegistry';
+import { GoRegistry } from './GoRegistry';
 import { RegistryStrategy } from './types';
 
 export class RegistryManager {
@@ -11,6 +12,7 @@ export class RegistryManager {
     new PyPiRegistry(),
     new JavaRegistry(),
     new CargoRegistry(),
+    new GoRegistry(),
   ];
 
   private constructor() {}
@@ -34,6 +36,9 @@ export class RegistryManager {
     }
     if (type === 'rust') {
       return this.strategies.find(s => s.id === 'cargo') || null;
+    }
+    if (type === 'go') {
+      return this.strategies.find(s => s.id === 'go') || null;
     }
     return null;
   }

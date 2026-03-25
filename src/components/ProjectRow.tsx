@@ -32,6 +32,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
     const isJava = project.project_type === 'java';
     const isPython = project.project_type === 'python';
     const isRust = project.project_type === 'rust';
+    const isGo = project.project_type === 'go';
 
     const JAVA_PRESETS = [
         { name: 'Mvn: Clean & Install', cmd: 'mvn clean install -DskipTests' },
@@ -99,6 +100,8 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
             }
         } else if (isRust) {
             runNpmCommand('cargo build');
+        } else if (isGo) {
+            runNpmCommand('go mod tidy');
         } else {
             const manager = (project as any).package_manager || 'npm';
             runNpmCommand(`${manager} install`);
@@ -228,11 +231,11 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                         </Popover>
                     )}
 
-                    {(isNode || isPython || isJava || isRust) && (
+                    {(isNode || isPython || isJava || isRust || isGo) && (
                         <>
                             <Tooltip>
                                 <TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); handleNpmInstall(); }} className="text-slate-500 hover:text-microtermix-neon"><Package size={12} /></Button>} />
-                                <TooltipContent>{isPython ? 'pip install' : isJava ? 'Sync (mvn/gradle)' : isRust ? 'cargo build' : 'Install (lockfile)'}</TooltipContent>
+                                <TooltipContent>{isPython ? 'pip install' : isJava ? 'Sync (mvn/gradle)' : isRust ? 'cargo build' : isGo ? 'go mod tidy' : 'Install (lockfile)'}</TooltipContent>
                             </Tooltip>
                             <Tooltip>
                                 <TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); setAddDepsOpen(true); }} className="text-slate-500 hover:text-microtermix-neon"><Plus size={12} /></Button>} />
@@ -260,13 +263,13 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
                                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                                         Project: <span className="text-blue-400 font-bold">{project.name}</span> 
                                         <span className="mx-3 text-slate-800">|</span> 
-                                        Engine: <span className="text-amber-500 font-bold">{isJava ? (isMaven ? 'Maven' : 'Gradle') : isRust ? 'Cargo' : (project as any).package_manager || (isPython ? 'pip' : 'npm')}</span>
+                                        Engine: <span className="text-amber-500 font-bold">{isJava ? (isMaven ? 'Maven' : 'Gradle') : isRust ? 'Cargo' : isGo ? 'Go Modules' : (project as any).package_manager || (isPython ? 'pip' : 'npm')}</span>
                                     </p>
                                 </div>
                             </div>
                         </DialogHeader>
                         <div className="flex-1 min-h-0 bg-slate-950">
-                            <PackageExplorer projectPath={projectPath} projectType={String(project.project_type || 'unknown')} packageManager={isJava ? (isMaven ? 'mvn' : 'gradle') : isRust ? 'cargo' : (project as any).package_manager || (isPython ? 'pip' : 'npm')} onInstall={handleAddDepsInstall} />
+                            <PackageExplorer projectPath={projectPath} projectType={String(project.project_type || 'unknown')} packageManager={isJava ? (isMaven ? 'mvn' : 'gradle') : isRust ? 'cargo' : isGo ? 'go' : (project as any).package_manager || (isPython ? 'pip' : 'npm')} onInstall={handleAddDepsInstall} />
                         </div>
                     </DialogContent>
                 </Dialog>
