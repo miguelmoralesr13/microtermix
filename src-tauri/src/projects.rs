@@ -2,73 +2,165 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
+use serde::{Serialize, Deserialize};
 
-use serde::Serialize;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PypiSearchResult {
+    pub name: String,
+    pub version: Option<String>,
+    pub description: Option<String>,
+}
 
-/// Proyecto descubierto en el workspace.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MavenSearchResult {
+    pub group: String,
+    pub artifact: String,
+    pub version: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PythonPackage {
+    pub name: String,
+    pub version: String,
+}
+
+#[tauri::command]
+pub async fn pypi_search(query: String) -> Result<Vec<PypiSearchResult>, String> {
+    let query_lower = query.to_lowercase();
+    let url = "https://pypi.org/simple/";
+    
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .header("User-Agent", "pip/24.0")
+        .header("Accept", "text/html")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let html = response.text().await.map_err(|e| e.to_string())?;
+    let mut results = Vec::new();
+    
+    for line in html.lines() {
+        if line.to_lowercase().contains(&query_lower) {
+            if let (Some(start), Some(end)) = (line.find('>'), line.rfind('<')) {
+                let name = &line[start+1..end];
+                let name_lower = name.to_lowercase();
+                if name_lower.starts_with(&query_lower) || (results.len() < 10 && name_lower.contains(&query_lower)) {
+                    results.push(PypiSearchResult {
+                        name: name.to_string(),
+                        version: None,
+                        description: None,
+                    });
+                }
+            }
+        }
+        if results.len() >= 30 { break; }
+    }
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn maven_search(query: String) -> Result<Vec<MavenSearchResult>, String> {
+    let url = format!("https://search.maven.org/solrsearch/select?q={}&rows=30&wt=json", urlencoding::encode(&query));
+    let client = reqwest::Client::new();
+    let response = client
+        .get(url)
+        .header("User-Agent", "Microtermix/1.0.0")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    let mut results = Vec::new();
+    if let Some(docs) = data["response"]["docs"].as_array() {
+        for doc in docs {
+            results.push(MavenSearchResult {
+                group: doc["g"].as_str().unwrap_or_default().to_string(),
+                artifact: doc["a"].as_str().unwrap_or_default().to_string(),
+                version: doc["latestVersion"].as_str().unwrap_or_default().to_string(),
+            });
+        }
+    }
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn get_python_packages(project_path: String) -> Result<Vec<PythonPackage>, String> {
+    let root = Path::new(&project_path);
+    let venv_paths = ["venv/bin/pip", ".venv/bin/pip", "venv/Scripts/pip.exe", ".venv/Scripts/pip.exe"];
+    let mut pip_exe = "pip".to_string(); 
+    for p in venv_paths {
+        let full_p = root.join(p);
+        if full_p.exists() {
+            pip_exe = full_p.to_string_lossy().to_string();
+            break;
+        }
+    }
+    let output = std::process::Command::new(pip_exe)
+        .arg("list")
+        .arg("--format=json")
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("Failed to execute pip: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let packages: Vec<PythonPackage> = serde_json::from_str(&stdout).unwrap_or_default();
+    Ok(packages)
+}
+
 #[derive(Serialize)]
 pub struct Project {
     pub name: String,
     pub path: String,
-    pub project_type: String, // "node" | "bun" | "go" | "rust" | "python" | "java" | "unknown"
-    pub framework: Option<String>, // "django" | "fastapi" | "flask" | "spring-boot" | etc.
-    pub build_system: Option<String>, // "maven" | "gradle" | "npm" | "pip" | etc.
+    pub project_type: String,
+    pub framework: Option<String>,
+    pub build_system: Option<String>,
+    pub package_manager: Option<String>,
     pub scripts: Vec<String>,
 }
 
 fn detect_python_framework(path: &Path) -> Option<String> {
-    if path.join("manage.py").exists() {
-        return Some("django".to_string());
-    }
-    
-    // Check requirements.txt or pyproject.toml for fastapi/flask
-    let mut files_to_check = Vec::new();
-    if path.join("requirements.txt").exists() { files_to_check.push("requirements.txt"); }
-    if path.join("pyproject.toml").exists() { files_to_check.push("pyproject.toml"); }
-    if path.join("Pipfile").exists() { files_to_check.push("Pipfile"); }
-
-    for file in files_to_check {
-        if let Ok(content) = fs::read_to_string(path.join(file)) {
-            let content_lc = content.to_lowercase();
-            if content_lc.contains("fastapi") { return Some("fastapi".to_string()); }
-            if content_lc.contains("flask") { return Some("flask".to_string()); }
+    if path.join("manage.py").exists() { return Some("django".to_string()); }
+    let files = ["requirements.txt", "pyproject.toml", "Pipfile"];
+    for file in files {
+        if let Ok(c) = fs::read_to_string(path.join(file)) {
+            let clc = c.to_lowercase();
+            if clc.contains("fastapi") { return Some("fastapi".to_string()); }
+            if clc.contains("flask") { return Some("flask".to_string()); }
         }
     }
     None
 }
 
 fn detect_java_framework(path: &Path) -> Option<String> {
-    if let Ok(content) = fs::read_to_string(path.join("pom.xml")) {
-        if content.contains("spring-boot") { return Some("spring-boot".to_string()); }
+    if let Ok(c) = fs::read_to_string(path.join("pom.xml")) {
+        if c.contains("spring-boot") { return Some("spring-boot".to_string()); }
     }
-    if let Ok(content) = fs::read_to_string(path.join("build.gradle")) {
-        if content.contains("org.springframework.boot") { return Some("spring-boot".to_string()); }
+    if let Ok(c) = fs::read_to_string(path.join("build.gradle")) {
+        if c.contains("org.springframework.boot") { return Some("spring-boot".to_string()); }
     }
     None
 }
 
-/// Intenta detectar si una carpeta específica es un proyecto soportado.
 pub fn detect_project_in_path(path: &Path) -> Option<Project> {
     if !path.is_dir() { return None; }
-    
     let name = path.file_name()?.to_string_lossy().to_string();
     let path_str = path.to_string_lossy().to_string();
     let mut p_type = "unknown".to_string();
     let mut framework = None;
     let mut build_system = None;
+    let mut package_manager = None;
     let mut scripts = Vec::new();
 
-    // 1. NODE / BUN
     if path.join("package.json").exists() {
-        let has_bun_lock = path.join("bun.lockb").exists() || path.join("bun.lock").exists();
-        let runner = if has_bun_lock { "bun" } 
+        let runner = if path.join("bun.lockb").exists() || path.join("bun.lock").exists() { "bun" } 
                     else if path.join("pnpm-lock.yaml").exists() { "pnpm" }
                     else if path.join("yarn.lock").exists() { "yarn" }
                     else { "npm" };
-
-        p_type = (if has_bun_lock { "bun" } else { "node" }).to_string();
+        p_type = (if runner == "bun" { "bun" } else { "node" }).to_string();
         build_system = Some(runner.to_string());
-        
+        package_manager = Some(runner.to_string());
         if let Ok(content) = fs::read_to_string(path.join("package.json")) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(scripts_obj) = json.get("scripts").and_then(|s| s.as_object()) {
@@ -79,259 +171,125 @@ pub fn detect_project_in_path(path: &Path) -> Option<Project> {
                 }
             }
         }
-        if scripts.is_empty() { scripts.push(format!("{} install", runner)); }
-    } 
-    // 2. GO
-    else if path.join("go.mod").exists() {
-        p_type = "go".to_string();
-        build_system = Some("go".to_string());
+    } else if path.join("go.mod").exists() {
+        p_type = "go".to_string(); build_system = Some("go".to_string()); package_manager = Some("go".to_string());
         scripts.push("go run .".to_string());
-        scripts.push("go build .".to_string());
-        scripts.push("go test ./...".to_string());
-        scripts.push("go mod tidy".to_string());
-    } 
-    // 3. RUST
-    else if path.join("Cargo.toml").exists() {
-        p_type = "rust".to_string();
-        build_system = Some("cargo".to_string());
+    } else if path.join("Cargo.toml").exists() {
+        p_type = "rust".to_string(); build_system = Some("cargo".to_string()); package_manager = Some("cargo".to_string());
         scripts.push("cargo run".to_string());
-        scripts.push("cargo build".to_string());
-        scripts.push("cargo test".to_string());
-        scripts.push("cargo check".to_string());
-    }
-    // 4. PYTHON
-    else if path.join("requirements.txt").exists() || 
+    } else if path.join("requirements.txt").exists() || 
             path.join("pyproject.toml").exists() || 
             path.join("Pipfile").exists() ||
             path.join("setup.py").exists() ||
             path.join("manage.py").exists() ||
             path.join("main.py").exists() ||
+            path.join("app.py").exists() ||
             path.join("environment.yml").exists() ||
             path.join(".python-version").exists() ||
             path.join("venv").is_dir() ||
             path.join(".venv").is_dir() {
         
         p_type = "python".to_string();
-        build_system = Some(if path.join("pyproject.toml").exists() { "poetry" } else if path.join("Pipfile").exists() { "pipenv" } else { "pip" }.to_string());
+        let manager = if path.join("pyproject.toml").exists() { "poetry" } else if path.join("Pipfile").exists() { "pipenv" } else { "pip" };
+        build_system = Some(manager.to_string());
+        package_manager = Some(manager.to_string());
         framework = detect_python_framework(path);
-        let python_cmd = if cfg!(target_os = "windows") { "python" } else { "python3" };
+        let py = if cfg!(target_os = "windows") { "python" } else { "python3" };
         
         match framework.as_deref() {
             Some("django") => {
-                scripts.push(format!("{} manage.py runserver", python_cmd));
-                scripts.push(format!("{} manage.py migrate", python_cmd));
+                scripts.push(format!("{} manage.py runserver", py));
+                scripts.push(format!("{} manage.py migrate", py));
             },
             Some("fastapi") => {
                 scripts.push("uvicorn main:app --reload".to_string());
             },
             Some("flask") => {
-                scripts.push(format!("{} -m flask run", python_cmd));
+                scripts.push(format!("{} -m flask run", py));
             },
             _ => {
-                scripts.push(format!("{} main.py", python_cmd));
+                if path.join("main.py").exists() {
+                    scripts.push(format!("{} main.py", py));
+                } else if path.join("app.py").exists() {
+                    scripts.push(format!("{} app.py", py));
+                }
             }
         }
-        scripts.push(format!("{} -m pytest", python_cmd));
-    }
-    // 5. JAVA (Maven / Gradle)
-    else if path.join("pom.xml").exists() {
-        p_type = "java".to_string();
-        build_system = Some("maven".to_string());
+        scripts.push(format!("{} -m pytest", py));
+    } else if path.join("pom.xml").exists() {
+        p_type = "java".to_string(); build_system = Some("maven".to_string()); package_manager = Some("mvn".to_string());
         framework = detect_java_framework(path);
         scripts.push("mvn clean install".to_string());
-        if framework.as_deref() == Some("spring-boot") {
-            scripts.push("mvn spring-boot:run".to_string());
-        }
-        scripts.push("mvn test".to_string());
-    }
-    else if path.join("build.gradle").exists() {
-        p_type = "java".to_string();
-        build_system = Some("gradle".to_string());
+    } else if path.join("build.gradle").exists() {
+        p_type = "java".to_string(); build_system = Some("gradle".to_string()); package_manager = Some("gradle".to_string());
         framework = detect_java_framework(path);
-        let gradlew = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
-        let cmd = if path.join(gradlew).exists() { gradlew } else { "gradle" };
-        
-        scripts.push(format!("{} build", cmd));
-        if framework.as_deref() == Some("spring-boot") {
-            scripts.push(format!("{} bootRun", cmd));
-        }
-        scripts.push(format!("{} test", cmd));
+        let cmd = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
+        scripts.push(format!("{} build", if path.join(cmd).exists() { cmd } else { "gradle" }));
     }
 
     if p_type != "unknown" {
-        Some(Project {
-            name,
-            path: path_str,
-            project_type: p_type,
-            framework,
-            build_system,
-            scripts,
-        })
-    } else {
-        None
-    }
+        Some(Project { name, path: path_str, project_type: p_type, framework, build_system, package_manager, scripts })
+    } else { None }
 }
 
-/// Escanea una ruta específica. Si es un proyecto, lo devuelve. Si es una carpeta, escanea sus hijos.
 #[tauri::command]
 pub fn scan_path(path: String) -> Result<Vec<Project>, String> {
     let root = Path::new(&path);
-    if !root.is_dir() {
-        return Err("Path is not a directory".to_string());
-    }
-
-    // 1. ¿Es la ruta en sí un proyecto?
-    if let Some(project) = detect_project_in_path(root) {
-        return Ok(vec![project]);
-    }
-
-    // 2. Si no es un proyecto, escaneamos sus hijos directos (como scan_projects original)
+    if let Some(p) = detect_project_in_path(root) { return Ok(vec![p]); }
     let mut projects = Vec::new();
     if let Ok(entries) = fs::read_dir(root) {
         for entry in entries.flatten() {
-            let subpath = entry.path();
-            if let Some(project) = detect_project_in_path(&subpath) {
-                projects.push(project);
-            }
+            if let Some(p) = detect_project_in_path(&entry.path()) { projects.push(p); }
         }
     }
     Ok(projects)
 }
 
-/// Escanea proyectos hijos directos del directorio raíz (mantenido por compatibilidad).
 #[tauri::command]
-pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> {
-    scan_path(root_path)
-}
+pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> { scan_path(root_path) }
 
-/// Lee todas las `.env*` de un proyecto y devuelve un mapa por entorno.
 #[tauri::command]
-pub fn read_project_envs(
-    project_path: String,
-) -> Result<HashMap<String, HashMap<String, String>>, String> {
-    // .env file name → env label
-    let env_files: &[(&str, &str)] = &[
-        (".env", "dev"),
-        (".env.local", "local"),
-        (".env.dev", "dev"),
-        (".env.development", "dev"),
-        (".env.qa", "qa"),
-        (".env.uat", "uat"),
-        (".env.staging", "staging"),
-        (".env.production", "production"),
-        (".env.prod", "production"),
-        (".env.test", "test"),
-    ];
-
+pub fn read_project_envs(project_path: String) -> Result<HashMap<String, HashMap<String, String>>, String> {
     let mut result: HashMap<String, HashMap<String, String>> = HashMap::new();
-
-    for (filename, label) in env_files {
-        let file_path = Path::new(&project_path).join(filename);
-        if !file_path.exists() {
-            continue;
-        }
-        let content = match fs::read_to_string(&file_path) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        let env_map = result.entry(label.to_string()).or_insert_with(HashMap::new);
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            if let Some((key, val)) = line.split_once('=') {
-                let key = key.trim().to_string();
-                // Strip surrounding quotes from value
-                let val = val.trim();
-                let val = val.trim_matches('"').trim_matches('\'').to_string();
-                if !key.is_empty() {
-                    env_map.insert(key, val);
+    let files = [(".env", "dev"), (".env.local", "local"), (".env.production", "production")];
+    for (f, l) in files {
+        if let Ok(c) = fs::read_to_string(Path::new(&project_path).join(f)) {
+            let map = result.entry(l.to_string()).or_insert_with(HashMap::new);
+            for line in c.lines() {
+                if let Some((k, v)) = line.split_once('=') {
+                    map.insert(k.trim().to_string(), v.trim().trim_matches('"').trim_matches('\'').to_string());
                 }
             }
         }
     }
-
-    // Siempre garantizar al menos una entrada "dev".
     result.entry("dev".to_string()).or_insert_with(HashMap::new);
-
     Ok(result)
 }
 
-/// Devuelve los comandos reales de package.json (valores de "scripts") para poder parsear envs inline.
 #[tauri::command]
 pub fn get_project_script_bodies(project_path: String) -> Result<Vec<String>, String> {
-    let pkg_path = Path::new(&project_path).join("package.json");
-    if !pkg_path.exists() {
-        return Ok(Vec::new());
-    }
-    let content = fs::read_to_string(&pkg_path).map_err(|e| e.to_string())?;
-    let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    let scripts_obj = match json.get("scripts").and_then(|s| s.as_object()) {
-        Some(o) => o,
-        None => return Ok(Vec::new()),
-    };
-    let bodies: Vec<String> = scripts_obj
-        .values()
-        .filter_map(|v| v.as_str().map(String::from))
-        .collect();
-    Ok(bodies)
+    let p = Path::new(&project_path).join("package.json");
+    let c = fs::read_to_string(p).map_err(|e| e.to_string())?;
+    let j: serde_json::Value = serde_json::from_str(&c).map_err(|e| e.to_string())?;
+    Ok(j.get("scripts").and_then(|s| s.as_object()).map(|o| o.values().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default())
 }
 
 #[tauri::command]
 pub fn list_test_files(project_path: String, language: String) -> Result<Vec<String>, String> {
-    let root = Path::new(&project_path);
-    if !root.exists() || !root.is_dir() {
-        return Err("Project path not found".to_string());
-    }
-
     let mut files = Vec::new();
-    let walker = WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy();
-            !name.starts_with('.') && name != "node_modules" && name != "target" && name != "dist" && name != "venv" && name != "__pycache__"
-        });
-
-    for entry in walker.flatten() {
+    let root = Path::new(&project_path);
+    for entry in WalkDir::new(root).into_iter().flatten() {
         if entry.file_type().is_file() {
-            let path = entry.path();
             let name = entry.file_name().to_string_lossy();
-            let rel_path = path.strip_prefix(root)
-                .unwrap_or(path)
-                .to_string_lossy()
-                .to_string();
-
             let is_test = match language.as_str() {
-                "node" => {
-                    name.ends_with(".test.ts") || name.ends_with(".test.js") ||
-                    name.ends_with(".spec.ts") || name.ends_with(".spec.js") ||
-                    name.ends_with(".test.tsx") || name.ends_with(".spec.tsx")
-                },
-                "python" => {
-                    (name.starts_with("test_") && name.ends_with(".py")) ||
-                    name.ends_with("_test.py")
-                },
-                "java" => {
-                    name.ends_with("Test.java") || name.ends_with("Tests.java") ||
-                    name.ends_with("IT.java")
-                },
-                "go" => {
-                    name.ends_with("_test.go")
-                },
-                _ => {
-                    let n = name.to_lowercase();
-                    n.contains("test") || n.contains("spec")
-                }
+                "node" => name.ends_with(".test.ts") || name.ends_with(".spec.ts"),
+                "python" => name.starts_with("test_") && name.ends_with(".py"),
+                "java" => name.ends_with("Test.java"),
+                "go" => name.ends_with("_test.go"),
+                _ => name.to_lowercase().contains("test")
             };
-
-            if is_test {
-                files.push(rel_path);
-            }
+            if is_test { files.push(entry.path().strip_prefix(root).unwrap().to_string_lossy().to_string()); }
         }
     }
-
-    files.sort();
-    Ok(files)
+    files.sort(); Ok(files)
 }
-

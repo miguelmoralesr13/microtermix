@@ -80,7 +80,6 @@ pub fn start_watching_repo(
     app_handle: AppHandle,
     project_path: String,
 ) -> Result<(), String> {
-    let project_path_clone = project_path.clone();
     let app_handle_clone = app_handle.clone();
     
     app_logs::log_info("Git Watcher", &format!("Starting watcher for: {}", project_path));

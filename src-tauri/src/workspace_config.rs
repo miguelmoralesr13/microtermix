@@ -8,6 +8,7 @@ use std::fs;
 pub struct GitAccount {
     pub id: String,
     pub token: String,
+    #[allow(dead_code)]
     pub provider: String,
     pub url: String,
 }

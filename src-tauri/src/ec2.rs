@@ -756,7 +756,8 @@ pub async fn spawn_pty_shell(
     };
     #[cfg(not(target_os = "windows"))]
     let mut cmd = {
-        let mut c = CommandBuilder::new("sh");
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        let mut c = CommandBuilder::new(&shell);
         c.arg("-c");
         c.arg(&command);
         c

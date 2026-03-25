@@ -1,8 +1,6 @@
 use std::path::Path;
-
 use tauri::{AppHandle, Manager};
-
-use crate::AppState;
+use crate::{AppState, app_logs};
 
 /// Abre un nuevo workspace en una ventana separada y registra el path
 /// para que la nueva ventana lo pueda recuperar al montar el frontend.
@@ -15,7 +13,7 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
     // More robust window label
     let window_label = format!("microtermix-ws-{}", timestamp);
 
-    println!("[open_new_workspace] Registering path for window {}: {}", window_label, path);
+    app_logs::log_info("Workspace", &format!("Registering path for window {}: {}", window_label, path));
 
     {
         let state = app.state::<AppState>();
@@ -28,7 +26,7 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
         .and_then(|n| n.to_str())
         .unwrap_or(path.as_str());
     
-    println!("[open_new_workspace] Building window...");
+    app_logs::log_info("Workspace", "Building window...");
 
     let res = tauri::WebviewWindowBuilder::new(
         &app,
@@ -41,12 +39,12 @@ pub async fn open_new_workspace(app: AppHandle, path: String) -> Result<(), Stri
 
     match res {
         Ok(_) => {
-            println!("[open_new_workspace] Window created successfully");
+            app_logs::log_info("Workspace", "Window created successfully");
             Ok(())
         },
         Err(e) => {
             let err_msg = format!("Failed to build window: {}", e);
-            eprintln!("[open_new_workspace] Error: {}", err_msg);
+            app_logs::log_error("Workspace", &err_msg);
             Err(err_msg)
         }
     }
@@ -60,6 +58,10 @@ pub async fn get_initial_workspace_for_window(
 ) -> Result<Option<String>, String> {
     let state = app.state::<AppState>();
     let mut pending = state.pending_workspace_by_label.lock().await;
-    Ok(pending.remove(&window_label))
+    let res = pending.remove(&window_label);
+    if res.is_none() {
+        app_logs::log_warn("Workspace", &format!("No initial workspace found for window: {}", window_label));
+    }
+    Ok(res)
 }
 

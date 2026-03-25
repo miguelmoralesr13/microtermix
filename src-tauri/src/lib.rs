@@ -32,7 +32,8 @@ use tauri::{AppHandle, Manager};
 pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
 pub use crate::state::AppState;
 pub use crate::projects::{
-    get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects, Project,
+    get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects,
+    pypi_search, get_python_packages, maven_search, Project,
 };
 pub use crate::processes::{
     ensure_directory, execute_pipeline, execute_service_script, get_listening_processes,
@@ -304,6 +305,9 @@ fn read_file(path: String) -> Result<String, String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Ensure PATH is correctly set for finding tools like npx, git, etc.
+    os_utils::fix_path_env();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
@@ -451,6 +455,9 @@ pub fn run() {
             write_file,
             read_file,
             diagnostics::get_microtermix_performance_data,
+            pypi_search,
+            get_python_packages,
+            maven_search,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
