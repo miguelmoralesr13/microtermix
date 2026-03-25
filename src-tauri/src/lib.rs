@@ -33,7 +33,7 @@ pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
 pub use crate::state::AppState;
 pub use crate::projects::{
     get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects,
-    pypi_search, get_python_packages, maven_search, Project,
+    pypi_search, get_python_packages, maven_search, cargo_search, get_cargo_details, Project,
 };
 pub use crate::processes::{
     ensure_directory, execute_pipeline, execute_service_script, get_listening_processes,
@@ -458,6 +458,8 @@ pub fn run() {
             pypi_search,
             get_python_packages,
             maven_search,
+            cargo_search,
+            get_cargo_details,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

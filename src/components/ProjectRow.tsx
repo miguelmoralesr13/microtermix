@@ -139,7 +139,7 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
         const pkgWithVersion = version ? `${packageName}==${version}` : packageName;
         switch (manager) {
             case 'go': command = `go get ${version ? `${packageName}@${version}` : packageName}`; break;
-            case 'cargo': command = `cargo add ${packageName}${version ? ` --version ${version}` : ''}`; break;
+            case 'cargo': command = `cargo add ${packageName}${version ? `@${version}` : ''}`; break;
             case 'pip': command = `if [ -d "venv" ]; then ./venv/bin/pip install ${pkgWithVersion}; elif [ -d ".venv" ]; then ./.venv/bin/pip install ${pkgWithVersion}; else pip install ${pkgWithVersion} --break-system-packages; fi`; break;
             case 'poetry': command = `poetry add ${packageName}${version ? `@${version}` : ''}`; break;
             case 'bun': command = `bun add ${version ? `${packageName}@${version}` : packageName}${isDev ? ' -d' : ''}`; break;
