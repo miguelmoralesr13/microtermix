@@ -175,9 +175,9 @@ export const ProjectRow: React.FC<ProjectRowProps> = ({ project, isSelected, onT
     };
 
     const sonarStore = useSonarStore();
-    const sonarData = sonarStore.projects[projectPath];
+    const sonarData = sonarStore.metricsCache ? sonarStore.metricsCache[projectPath] : null;
     const qg = sonarData?.qualityGate || 'NONE';
-    const sonarMetrics = sonarData?.metrics;
+    const sonarMetrics = sonarData;
 
     return (
         <TooltipProvider delay={400}>
