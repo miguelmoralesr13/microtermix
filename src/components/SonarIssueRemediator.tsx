@@ -10,6 +10,7 @@ import { Button } from './ui/button';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { normalizeSonarUrl } from '../utils/sonarUtils';
 import { useSonarStore } from '../stores/sonarStore';
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from './ui/dialog';
 
@@ -81,7 +82,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                 setOriginalContent(fileData);
 
                 if (issue.rule && sonarConfig.token) {
-                    const baseUrl = sonarConfig.serverUrl.replace(/\/+$/, '');
+                    const baseUrl = normalizeSonarUrl(sonarConfig.serverUrl);
                     const url = `${baseUrl}/api/rules/show?key=${encodeURIComponent(issue.rule)}${sonarConfig.organization ? `&organization=${sonarConfig.organization}` : ''}`;
                     
                     const resp = await tauriFetch(url, { headers: { Authorization: authHeader(sonarConfig.token) } });

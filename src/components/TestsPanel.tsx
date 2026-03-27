@@ -7,185 +7,18 @@ import {
 import { useWorkspace } from '../context/WorkspaceContext';
 import { TaskTerminal } from './ui/task-terminal';
 import { useTaskStore } from '../stores/taskStore';
-import { useCoverageStore, type CoverageStat, type CoverageSummary } from '../stores/coverageStore';
+import { useCoverageStore, type CoverageStat } from '../stores/coverageStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type TestLanguage = 'node' | 'python' | 'java' | 'go' | 'custom';
-
-interface TestConfig {
-    language: TestLanguage;
-    command: string;
-    testFilter: string;
-    junitXmlPath: string;
-    coverageXmlPath: string;
-    coverageHtmlPath: string;
-}
-
-const DEFAULT_CONFIG: TestConfig = {
-    language: 'node',
-    command: 'npm run test',
-    testFilter: '',
-    junitXmlPath: 'junit.xml',
-    coverageXmlPath: 'coverage/clover.xml',
-    coverageHtmlPath: 'coverage/lcov-report/index.html',
-};
-
-const PRESETS: Record<TestLanguage, { label: string; config: TestConfig }> = {
-    node: {
-        label: 'Node (Vitest/Jest)',
-        config: {
-            language: 'node',
-            command: 'npm run test',
-            testFilter: '',
-            junitXmlPath: 'junit.xml',
-            coverageXmlPath: 'coverage/clover.xml',
-            coverageHtmlPath: 'coverage/lcov-report/index.html'
-        }
-    },
-    python: {
-        label: 'Python (Pytest)',
-        config: {
-            language: 'python',
-            command: 'pytest --junitxml=report.xml --cov=. --cov-report=xml --cov-report=html',
-            testFilter: '',
-            junitXmlPath: 'report.xml',
-            coverageXmlPath: 'coverage.xml',
-            coverageHtmlPath: 'htmlcov/index.html'
-        }
-    },
-    java: {
-        label: 'Java (Maven)',
-        config: {
-            language: 'java',
-            command: 'mvn test',
-            testFilter: '',
-            junitXmlPath: 'target/surefire-reports/TEST-*.xml',
-            coverageXmlPath: 'target/site/jacoco/jacoco.xml',
-            coverageHtmlPath: 'target/site/jacoco/index.html'
-        }
-    },
-    go: {
-        label: 'Go',
-        config: {
-            language: 'go',
-            command: 'go test ./... -v -coverprofile=coverage.out',
-            testFilter: '',
-            junitXmlPath: 'report.xml',
-            coverageXmlPath: 'coverage.out',
-            coverageHtmlPath: 'coverage.html'
-        }
-    },
-    custom: {
-        label: 'Custom',
-        config: { ...DEFAULT_CONFIG, language: 'custom' }
-    }
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+import { TestConfig, DEFAULT_CONFIG, PRESETS, detectLanguage, buildFinalCommand, configStorageKey, loadConfig, saveConfig, dirOf, parseCoverageXml, pct, pctColor } from '../utils/testUtils';
+import { TestsDashboard } from './tests/TestsDashboard';
 
 const STORAGE_TESTS_PATH = 'microtermix-tests-selected-path';
 const STORAGE_TESTS_TAB = 'microtermix-tests-active-tab';
-
-function detectLanguage(project: any): TestLanguage {
-    const type = (project.project_type || '').toLowerCase();
-    const framework = (project.framework || '').toLowerCase();
-    if (type === 'bun') return 'node';
-    if (type === 'node') return 'node';
-    if (type === 'python') return 'python';
-    if (type === 'java' || type === 'maven') return 'java';
-    if (type === 'go') return 'go';
-    if (framework === 'spring-boot') return 'java';
-    if (framework === 'django' || framework === 'fastapi' || framework === 'flask') return 'python';
-    return 'custom';
-}
-
-function buildFinalCommand(config: TestConfig): string {
-    const { command, testFilter, language } = config;
-    if (!testFilter.trim()) return command;
-    switch (language) {
-        case 'node': return `${command} -- -t "${testFilter}"`;
-        case 'python': return `${command} -k "${testFilter}"`;
-        case 'java': return `${command} -Dtest=${testFilter}`;
-        case 'go': return `${command} -run ${testFilter}`;
-        default: return `${command} ${testFilter}`;
-    }
-}
-
-function configStorageKey(projectPath: string): string {
-    return `microtermix-test-config-${projectPath.replace(/[/\\:]/g, '_')}`;
-}
-function loadConfig(projectPath: string): TestConfig {
-    try {
-        const raw = localStorage.getItem(configStorageKey(projectPath));
-        if (raw) return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
-    } catch (_) { }
-    return { ...DEFAULT_CONFIG };
-}
-function saveConfig(projectPath: string, config: TestConfig): void {
-    try { localStorage.setItem(configStorageKey(projectPath), JSON.stringify(config)); } catch (_) { }
-}
-function dirOf(filePath: string): string {
-    const normalized = filePath.replace(/\\/g, '/');
-    const idx = normalized.lastIndexOf('/');
-    return idx >= 0 ? normalized.substring(0, idx) : normalized;
-}
-
-function parseCoverageXml(content: string): CoverageSummary | null {
-    try {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(content, 'text/xml');
-        const cloverMetrics = doc.querySelector('project > metrics');
-        if (cloverMetrics) {
-            return {
-                lines: { covered: parseInt(cloverMetrics.getAttribute('coveredstatements') || '0'), total: parseInt(cloverMetrics.getAttribute('statements') || '0') },
-                branches: { covered: parseInt(cloverMetrics.getAttribute('coveredconditionals') || '0'), total: parseInt(cloverMetrics.getAttribute('conditionals') || '0') },
-                functions: { covered: parseInt(cloverMetrics.getAttribute('coveredmethods') || '0'), total: parseInt(cloverMetrics.getAttribute('methods') || '0') },
-            };
-        }
-        const reportEl = doc.querySelector('report');
-        if (reportEl) {
-            const getCounter = (type: string): CoverageStat => {
-                const el = Array.from(doc.querySelectorAll('report > counter')).find(c => c.getAttribute('type') === type);
-                if (el) {
-                    const covered = parseInt(el.getAttribute('covered') || '0');
-                    const missed = parseInt(el.getAttribute('missed') || '0');
-                    return { covered, total: covered + missed };
-                }
-                return { covered: 0, total: 0 };
-            };
-            return { lines: getCounter('LINE'), branches: getCounter('BRANCH'), functions: getCounter('METHOD') };
-        }
-        const coverageEl = doc.querySelector('coverage');
-        if (coverageEl) {
-            const linesValid = parseInt(coverageEl.getAttribute('lines-valid') || '0');
-            const linesCovered = parseInt(coverageEl.getAttribute('lines-covered') || '0');
-            const branchRate = parseFloat(coverageEl.getAttribute('branch-rate') || '0');
-            return {
-                lines: { covered: linesCovered, total: linesValid },
-                branches: { covered: Math.round(branchRate * 100), total: 100 },
-                functions: { covered: 0, total: 0 },
-            };
-        }
-        return null;
-    } catch (_) { return null; }
-}
-
-function pct(stat: CoverageStat): number {
-    if (stat.total === 0) return 0;
-    return Math.round((stat.covered / stat.total) * 100);
-}
-function pctColor(p: number) {
-    if (p >= 80) return { text: 'text-microtermix-success', bar: 'bg-microtermix-success' };
-    if (p >= 60) return { text: 'text-yellow-400', bar: 'bg-yellow-400' };
-    return { text: 'text-microtermix-danger', bar: 'bg-microtermix-danger' };
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -216,8 +49,8 @@ export const TestsPanel: React.FC = () => {
 
     const [selectedPath, setSelectedPath] = useState<string>(() => {
         const saved = localStorage.getItem(STORAGE_TESTS_PATH);
-        if (saved && projects.some(p => p.path === saved)) return saved;
-        return projects.length > 0 ? projects[0].path as string : '';
+        if (saved && (saved === 'dashboard' || projects.some(p => p.path === saved))) return saved;
+        return 'dashboard';
     });
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath(projects[0].path as string);
@@ -226,7 +59,7 @@ export const TestsPanel: React.FC = () => {
         if (selectedPath) localStorage.setItem(STORAGE_TESTS_PATH, selectedPath);
     }, [selectedPath]);
 
-    const [config, setConfig] = useState<TestConfig>(() => selectedPath ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG });
+    const [config, setConfig] = useState<TestConfig>(() => selectedPath && selectedPath !== 'dashboard' ? loadConfig(selectedPath) : { ...DEFAULT_CONFIG });
     const [configOpen, setConfigOpen] = useState(false);
     const [coverageLoading, setCoverageLoading] = useState(false);
     const [coverageError, setCoverageError] = useState<string | null>(null);
@@ -282,6 +115,9 @@ export const TestsPanel: React.FC = () => {
     const handleSelectProject = (path: string) => {
         stopCoverageServer();
         setSelectedPath(path);
+        
+        if (path === 'dashboard') return;
+
         const saved = localStorage.getItem(configStorageKey(path));
         if (!saved) {
             const project = projects.find(p => p.path === path);
@@ -323,7 +159,7 @@ export const TestsPanel: React.FC = () => {
     };
 
     const loadCoverage = useCallback(async () => {
-        if (!selectedPath || !config.coverageXmlPath) return;
+        if (!selectedPath || selectedPath === 'dashboard' || !config.coverageXmlPath) return;
         setCoverageLoading(true);
         setCoverageError(null);
         try {
@@ -402,10 +238,24 @@ export const TestsPanel: React.FC = () => {
                 <div className="w-56 shrink-0 border-r border-slate-800 flex flex-col overflow-hidden bg-slate-950/30">
                     <div className="shrink-0 px-3 py-2 border-b border-slate-800/60 bg-slate-950/50">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                            Proyectos ({projects.length})
+                            Vistas & Proyectos
                         </p>
                     </div>
                     <div className="flex-1 overflow-y-auto">
+                        <div
+                            onClick={() => handleSelectProject('dashboard')}
+                            className={cn(
+                                'flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors border-l-2 mb-1 border-b border-b-slate-800/50',
+                                selectedPath === 'dashboard'
+                                    ? 'bg-microtermix-neon/10 border-microtermix-neon'
+                                    : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600',
+                            )}
+                        >
+                            <p className={cn('text-xs font-bold truncate', selectedPath === 'dashboard' ? 'text-microtermix-neon' : 'text-slate-300')}>
+                                📊 Dashboard General
+                            </p>
+                        </div>
+                        
                         {projects.length === 0 && (
                             <p className="px-3 py-4 text-xs text-slate-600 text-center">Sin proyectos</p>
                         )}
@@ -453,7 +303,9 @@ export const TestsPanel: React.FC = () => {
                 </div>
 
                 {/* ── Right ─────────────────────────────────────────────── */}
-                {selectedPath ? (
+                {selectedPath === 'dashboard' ? (
+                    <TestsDashboard projects={projects} onSelectProject={handleSelectProject} />
+                ) : selectedPath ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                         <div className="shrink-0 px-4 py-2 border-b border-slate-800 flex items-center gap-2 bg-slate-900/80">
                             {isRunning ? (

@@ -23,6 +23,7 @@ mod notes;
 mod stepfunctions;
 mod diagnostics;
 mod app_logs;
+mod http_collections;
 
 use std::fs;
 use std::path::Path;
@@ -76,6 +77,9 @@ pub use crate::git_watcher::{watch_repo, stop_watching_repo};
 pub use crate::stepfunctions::{
     sfn_list_state_machines, sfn_list_executions, sfn_get_execution_history, sfn_start_execution,
     sfn_describe_state_machine, sfn_list_express_executions_from_logs, sfn_get_express_execution_history_from_logs,
+};
+pub use crate::http_collections::{
+    list_http_collections, write_http_collection, delete_http_collection,
 };
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
@@ -455,6 +459,9 @@ pub fn run() {
             write_file,
             read_file,
             diagnostics::get_microtermix_performance_data,
+            list_http_collections,
+            write_http_collection,
+            delete_http_collection,
             pypi_search,
             get_python_packages,
             maven_search,

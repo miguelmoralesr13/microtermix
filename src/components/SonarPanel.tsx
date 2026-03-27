@@ -16,6 +16,8 @@ import { useGitStore } from '../stores/gitStore';
 import { Badge } from './ui/badge';
 import { useSonarStore } from '../stores/sonarStore';
 import { SonarIssueRemediator } from './SonarIssueRemediator';
+import { SonarDashboard } from './sonar/SonarDashboard';
+import { fetchProjectMetrics, getSonarAuthHeader, normalizeSonarUrl } from '../utils/sonarUtils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,17 +32,6 @@ interface ProjectLink {
     token?: string;
 }
 
-interface SonarMetrics {
-    qualityGate: 'OK' | 'ERROR' | 'NONE';
-    reliability: string;
-    security: string;
-    maintainability: string;
-    bugs: number;
-    vulnerabilities: number;
-    codeSmells: number;
-    coverage: number;
-    duplications: number;
-}
 
 interface SonarIssue {
     key: string;
@@ -183,8 +174,8 @@ export const SonarPanel: React.FC = () => {
     // ── Selection
     const [selectedPath, setSelectedPath] = useState<string>(() => {
         const saved = localStorage.getItem(STORAGE_SONAR_PATH);
-        if (saved && projects.some(p => p.path === saved)) return saved;
-        return projects.length > 0 ? projects[0].path as string : '';
+        if (saved && (saved === 'dashboard' || projects.some(p => p.path === saved))) return saved;
+        return 'dashboard';
     });
 
     const [remediatingIssue, setRemediatingIssue] = useState<SonarIssue | null>(null);
@@ -198,7 +189,7 @@ export const SonarPanel: React.FC = () => {
     const clearCache = useSonarStore(s => s.clearCache);
 
     useEffect(() => {
-        if (!selectedPath && projects.length > 0) setSelectedPath(projects[0].path as string);
+        if (!selectedPath && projects.length > 0) setSelectedPath('dashboard');
     }, [projects, selectedPath]);
     
     useEffect(() => {
@@ -251,12 +242,12 @@ export const SonarPanel: React.FC = () => {
     }, [selectedPath, repos]);
 
     const scanCommand = useMemo(() => {
-        const { serverUrl, token, organization } = sonarConfig;
-        let cmd = `npx sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${serverUrl} -Dsonar.token=${token}`;
+        const { token, organization } = sonarConfig;
+        let cmd = `npx sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${baseUrl} -Dsonar.token=${token}`;
         if (organization) cmd += ` -Dsonar.organization=${organization}`;
         if (currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
         return cmd;
-    }, [sonarConfig, projectKey, currentBranch]);
+    }, [sonarConfig, baseUrl, projectKey, currentBranch]);
 
     const serviceId = useMemo(() => `${selectedPath}::${scanCommand} `, [selectedPath, scanCommand]);
     const processState = activeProcesses[serviceId];
@@ -275,20 +266,15 @@ export const SonarPanel: React.FC = () => {
         ]);
     }, []);
 
-    const baseUrl = sonarConfig.serverUrl.replace(/\/+$/, '');
-
-    const authHeader = (token: string) =>
-        sonarConfig.authType === 'bearer'
-            ? `Bearer ${token}`
-            : `Basic ${btoa(token + ':')}`;
+    const baseUrl = useMemo(() => normalizeSonarUrl(sonarConfig.serverUrl), [sonarConfig.serverUrl]);
 
     const handleTestConnection = useCallback(async () => {
         if (!sonarConfig.token || !sonarConfig.serverUrl) {
             setTestResult({ ok: false, message: 'Completa Server URL y Token.' });
             return;
         }
-        const testBase = sonarConfig.serverUrl.replace(/\/+$/, '');
-        const testAuth = authHeader(sonarConfig.token);
+        const testBase = normalizeSonarUrl(sonarConfig.serverUrl);
+        const testAuth = getSonarAuthHeader(sonarConfig.authType, sonarConfig.token);
         const url = `${testBase}/api/authentication/validate`;
         setTestResult({ ok: null, message: 'Probando conexión...' });
         try {
@@ -311,30 +297,8 @@ export const SonarPanel: React.FC = () => {
     const fetchMetrics = useCallback(async () => {
         if (!projectKey || !effectiveToken || !sonarConfig.serverUrl) return;
         setLoadingMetrics(true);
-        const metricKeys = 'alert_status,bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating';
-        const url = `${baseUrl}/api/measures/component?component=${encodeURIComponent(projectKey)}&metricKeys=${metricKeys}`;
         try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(effectiveToken) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
-            const measures = data.component?.measures || [];
-            const getVal = (k: string) => measures.find((m: any) => m.metric === k)?.value;
-            const grade = (v?: string) => {
-                if (!v) return 'N/A';
-                const n = parseFloat(v);
-                return n <= 1 ? 'A' : n <= 2 ? 'B' : n <= 3 ? 'C' : n <= 4 ? 'D' : 'E';
-            };
-            const result: SonarMetrics = {
-                qualityGate: (getVal('alert_status') as any) || 'NONE',
-                reliability: grade(getVal('reliability_rating')),
-                security: grade(getVal('security_rating')),
-                maintainability: grade(getVal('sqale_rating')),
-                bugs: parseInt(getVal('bugs') || '0'),
-                vulnerabilities: parseInt(getVal('vulnerabilities') || '0'),
-                codeSmells: parseInt(getVal('code_smells') || '0'),
-                coverage: parseFloat(getVal('coverage') || '0'),
-                duplications: parseFloat(getVal('duplicated_lines_density') || '0'),
-            };
+            const result = await fetchProjectMetrics(projectKey, sonarConfig, effectiveToken);
             setMetrics(selectedPath, result);
             addLog('info', `Metrics OK → ${projectKey}`);
         } catch (e: any) {
@@ -342,7 +306,7 @@ export const SonarPanel: React.FC = () => {
         } finally {
             setLoadingMetrics(false);
         }
-    }, [selectedPath, projectKey, effectiveToken, sonarConfig, addLog, baseUrl]);
+    }, [selectedPath, projectKey, effectiveToken, sonarConfig, addLog]);
 
     const fetchMetricsRef = useRef(fetchMetrics);
     useEffect(() => { fetchMetricsRef.current = fetchMetrics; });
@@ -352,7 +316,7 @@ export const SonarPanel: React.FC = () => {
         setLoadingIssues(true);
         const url = `${baseUrl}/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}&resolved=false&ps=100`;
         try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(effectiveToken) } });
+            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(sonarConfig.authType, effectiveToken) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             const mapped: SonarIssue[] = (data.issues || []).map((i: any) => ({
@@ -381,7 +345,7 @@ export const SonarPanel: React.FC = () => {
         const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(initialName)}&ps=5`;
         addLog('network', `GET ${url} (auto-link)`);
         try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(sonarConfig.token) } });
+            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(sonarConfig.authType, sonarConfig.token) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
@@ -396,7 +360,7 @@ export const SonarPanel: React.FC = () => {
         setSearchResults(null);
         const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(searchQuery)}&ps=5`;
         try {
-            const resp = await tauriFetch(url, { headers: { Authorization: authHeader(sonarConfig.token) } });
+            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(sonarConfig.authType, sonarConfig.token) } });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const data = await resp.json() as any;
             setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
@@ -496,9 +460,22 @@ export const SonarPanel: React.FC = () => {
             <div className="flex-1 flex min-h-0 overflow-hidden">
                 <div className="w-56 shrink-0 border-r border-slate-800 flex flex-col overflow-hidden bg-slate-950/30">
                     <div className="shrink-0 px-3 py-2 border-b border-slate-800/60 bg-slate-950/50">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Proyectos ({projects.length})</p>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Vistas y Proyectos</p>
                     </div>
                     <div className="flex-1 overflow-y-auto">
+                        <div
+                            onClick={() => setSelectedPath('dashboard')}
+                            className={`flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors border-l-2 mb-1 border-b border-b-slate-800/50 ${
+                                selectedPath === 'dashboard'
+                                    ? 'bg-blue-500/10 border-blue-500'
+                                    : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600'
+                            }`}
+                        >
+                            <p className={`text-xs font-bold truncate ${selectedPath === 'dashboard' ? 'text-blue-400' : 'text-slate-300'}`}>
+                                📊 Dashboard General
+                            </p>
+                        </div>
+
                         {projects.map(p => {
                             const path = p.path as string;
                             const name = p.name as string;
@@ -529,7 +506,9 @@ export const SonarPanel: React.FC = () => {
                     </div>
                 </div>
 
-                {selectedPath ? (
+                {selectedPath === 'dashboard' ? (
+                    <SonarDashboard projects={projects} onSelectProject={setSelectedPath} />
+                ) : selectedPath ? (
                     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                         <div className="shrink-0 px-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
                             <div className="flex">
@@ -557,7 +536,7 @@ export const SonarPanel: React.FC = () => {
                                                         <p className="text-xs text-slate-400 font-mono">{projectKey}</p>
                                                     </div>
                                                 </div>
-                                                <button onClick={() => openUrl(`${sonarConfig.serverUrl}/dashboard?id=${projectKey}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors">
+                                                <button onClick={() => openUrl(`${baseUrl}/dashboard?id=${projectKey}`)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-lg border border-slate-700 transition-colors">
                                                     <ExternalLink size={13} /> Ver en Sonar
                                                 </button>
                                             </div>
@@ -602,7 +581,7 @@ export const SonarPanel: React.FC = () => {
                                             <button onClick={() => openUrl(reportUrl)} className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-microtermix-success text-slate-900 text-xs font-black rounded-lg hover:bg-green-400 transition-colors"><ExternalLink size={13} /> Ver reporte</button>
                                         </div>
                                     )}
-                                    <div className="flex-1 min-h-[200px] border border-slate-800 rounded-xl overflow-hidden">
+                                    <div className="flex-1 min-[200px] border border-slate-800 rounded-xl overflow-hidden">
                                         <TerminalView serviceId={serviceId} />
                                     </div>
                                 </div>

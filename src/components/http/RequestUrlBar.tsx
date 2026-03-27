@@ -19,20 +19,22 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
     onSend,
 }) => {
     return (
-        <div className="p-4 flex flex-col gap-3 border-b border-slate-800 bg-slate-900/50">
-            {/* Request name */}
-            <input
-                type="text"
-                className="bg-transparent border-none text-white font-semibold outline-none focus:ring-1 focus:ring-microtermix-neon rounded px-1 w-full"
-                value={request.name}
-                onChange={(e) => onChange({ ...request, name: e.target.value })}
-                placeholder="Request Name"
-            />
+        <div className="flex flex-col border-b border-slate-800 bg-slate-900/50">
+            {/* Top compact bar for Request Name */}
+            <div className="flex items-center px-4 py-1.5 bg-slate-950/40 border-b border-slate-800/50">
+                <input
+                    type="text"
+                    className="bg-transparent border-none text-slate-300 font-bold text-xs outline-none focus:text-white placeholder:text-slate-600 w-full"
+                    value={request.name}
+                    onChange={(e) => onChange({ ...request, name: e.target.value })}
+                    placeholder="Request Name"
+                />
+            </div>
 
-            {/* Method + URL + Send */}
-            <div className="flex gap-2">
+            {/* Main Action Bar */}
+            <div className="flex items-center gap-2 px-4 py-2">
                 <select
-                    className="bg-slate-950 border border-slate-700 text-microtermix-neon font-bold rounded px-4 py-2 outline-none focus:border-microtermix-neon appearance-none w-28 text-center"
+                    className="bg-slate-950 border border-slate-700 text-microtermix-neon text-xs font-bold rounded px-2 py-1.5 outline-none focus:border-microtermix-neon cursor-pointer appearance-none w-24 text-center shrink-0"
                     value={request.method}
                     onChange={(e) => onChange({ ...request, method: e.target.value as HttpMethod })}
                 >
@@ -41,29 +43,31 @@ export const RequestUrlBar: React.FC<RequestUrlBarProps> = ({
                     ))}
                 </select>
 
-                <VariableInput
-                    value={request.url}
-                    onChange={(val) => onChange({ ...request, url: val })}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter') onSend();
-                    }}
-                    placeholder="https://api.example.com/v1/endpoint"
-                    availableVariables={availableVariables}
-                />
+                <div className="flex-1 min-w-0">
+                    <VariableInput
+                        value={request.url}
+                        onChange={(val) => onChange({ ...request, url: val })}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') onSend();
+                        }}
+                        placeholder="https://api.example.com/v1/endpoint"
+                        availableVariables={availableVariables}
+                    />
+                </div>
 
                 <button
                     onClick={onSend}
                     disabled={loading || !request.url}
-                    className={`flex items-center gap-2 px-6 py-2 rounded font-bold transition-all ${loading || !request.url
-                        ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        : 'bg-microtermix-neon text-slate-900 hover:bg-sky-400 hover:shadow-[0_0_10px_rgba(56,189,248,0.4)]'
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-bold transition-all shrink-0 ${loading || !request.url
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-inner'
+                        : 'bg-microtermix-neon text-slate-900 hover:bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
                         }`}
                 >
                     {loading ? (
                         <span className="animate-pulse">Sending…</span>
                     ) : (
                         <>
-                            <Play size={16} fill="currentColor" /> Send
+                            <Play size={13} fill="currentColor" /> Send
                         </>
                     )}
                 </button>

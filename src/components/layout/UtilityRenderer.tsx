@@ -1,6 +1,7 @@
 import React from 'react';
 import { useWorkspace, AppView } from '../../context/WorkspaceContext';
 import { useUIStore } from '../../stores/uiStore';
+import { useServiceManagerState } from '../../hooks/useServiceManagerState';
 
 // Panels
 import { ServicesView } from '../services/ServicesView';
@@ -30,6 +31,9 @@ interface UtilityRendererProps {
 }
 
 export const UtilityRenderer: React.FC<UtilityRendererProps> = ({ view: forcedView }) => {
+    // Run service manager state syncing for standalone windows
+    useServiceManagerState();
+
     const { state } = useWorkspace();
     const activeView = forcedView || state.activeView;
 

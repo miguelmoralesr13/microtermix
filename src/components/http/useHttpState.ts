@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { invoke } from '@tauri-apps/api/core';
 import { HttpRequest, HttpResponse, HttpCollectionFolder, HttpEnvironment } from './HttpClientState';
 import { parseCurl } from './CurlParser';
-import { resolveVariables } from './PostmanImporter';
+import { resolveVariables, parsePostmanCollection } from './PostmanImporter';
+import { exportToPostman } from './PostmanExporter';
 
 const LS_KEY = 'microtermix_http_client';
 
@@ -18,7 +19,7 @@ function loadPersistedState() {
 // Load once at module init — avoids calling JSON.parse 3x
 const _initialState = loadPersistedState();
 
-export function useHttpState() {
+export function useHttpState(workspacePath: string | null) {
     const [request, setRequest] = useState<HttpRequest>(
         _initialState?.request ?? {
             id: uuidv4(),
@@ -30,6 +31,7 @@ export function useHttpState() {
             body: { type: 'none' },
         }
     );
+
 
     const [response, setResponse] = useState<HttpResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -48,12 +50,129 @@ export function useHttpState() {
     );
     const [showEnvModal, setShowEnvModal] = useState(false);
 
-    // ---- Persist on every change ----
+    // ---- PERSISTENCE ----
+
+    // 1. Initial hydration from Workspace (Rust)
+    useEffect(() => {
+        if (!workspacePath) return;
+
+        const loadFromDisk = async () => {
+            try {
+                const contents = await invoke<string[]>('list_http_collections', { workspacePath });
+                if (contents && contents.length > 0) {
+                    const loadedFolders: HttpCollectionFolder[] = [];
+                    for (const json of contents) {
+                        try {
+                            const folder = await parsePostmanCollection(json);
+                            loadedFolders.push(folder);
+                        } catch (e) {
+                            console.error("[HTTP Sync] Error parsing workspace collection", e);
+                        }
+                    }
+                    if (loadedFolders.length > 0) {
+                        setCollections(loadedFolders);
+                        return;
+                    }
+                }
+                
+                // If we are here, disk is empty. Let's create a default one to start syncing.
+                setCollections([{
+                    id: 'workspace-default-store',
+                    name: 'Workspace Collections',
+                    type: 'collection',
+                    items: []
+                }]);
+            } catch (err) {
+                console.error("[HTTP Sync] Failed to load http collections from disk", err);
+            }
+        };
+
+        loadFromDisk();
+    }, [workspacePath]);
+
+    // 2. LocalStorage Fallback (only for stuff not in workspace, like envs)
     useEffect(() => {
         try {
-            localStorage.setItem(LS_KEY, JSON.stringify({ request, collections, environments, activeEnvId }));
+            localStorage.setItem(LS_KEY, JSON.stringify({ request, environments, activeEnvId }));
         } catch (_) { }
-    }, [request, collections, environments, activeEnvId]);
+    }, [request, environments, activeEnvId]);
+
+    // 3. Workspace Auto-Sync (Disk)
+    useEffect(() => {
+        if (!workspacePath || collections.length === 0) return;
+
+        const timer = setTimeout(async () => {
+            for (const col of collections) {
+                const filename = `${col.name.replace(/[^a-z0-9]/gi, '_')}.json`;
+                const content = exportToPostman(col);
+                
+                try {
+                    await invoke('write_http_collection', { 
+                        workspacePath, 
+                        filename, 
+                        content 
+                    });
+                } catch (e) {
+                    console.error("[HTTP Sync] Error writing collection to disk", e);
+                }
+            }
+        }, 2000); 
+
+        return () => clearTimeout(timer);
+    }, [collections, workspacePath]);
+
+    const lastSyncRef = useRef<string>('');
+
+    // 4. Sync current request back to collections tree before switching if it changed
+    useEffect(() => {
+        if (!request || !request.id || !workspacePath) return;
+        
+        const currentReqStr = JSON.stringify(request);
+        if (lastSyncRef.current === currentReqStr) return;
+
+        const timer = setTimeout(() => {
+             setCollections(prev => {
+                const newCols = [...prev];
+                let found = false;
+                const updateRef = (folder: HttpCollectionFolder): boolean => {
+                    const idx = folder.items.findIndex(i => !('items' in i) && i.id === request.id);
+                    if (idx !== -1) {
+                        const existingStr = JSON.stringify(folder.items[idx]);
+                        if (existingStr !== currentReqStr) {
+                            folder.items[idx] = { ...request };
+                            found = true;
+                        }
+                        return true;
+                    }
+                    for (const child of folder.items) {
+                        if ('items' in child && updateRef(child as HttpCollectionFolder)) return true;
+                    }
+                    return false;
+                };
+
+                for (const col of newCols) {
+                    if (updateRef(col)) break;
+                }
+                
+                if (found) {
+                    lastSyncRef.current = currentReqStr;
+                    return newCols;
+                }
+
+                // Auto-add new/unsaved requests to the first collection
+                if (newCols.length > 0) {
+                    console.log("[HTTP Sync] Auto-adding new request to collection", request.name);
+                    newCols[0].items.push({ ...request });
+                    lastSyncRef.current = currentReqStr;
+                    return newCols;
+                }
+
+                return prev;
+             });
+        }, 1000); 
+
+        return () => clearTimeout(timer);
+    }, [request, collections, workspacePath]);
 
 
     // -----------------------------------------------------------------------

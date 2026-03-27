@@ -17,8 +17,12 @@ import { SaveDialog } from './SaveDialog';
 import { EnvironmentManager } from './EnvironmentManager';
 
 import { parsePostmanCollection } from './PostmanImporter';
+import { useWorkspace } from '../../context/WorkspaceContext';
 
 export const HttpPanel: React.FC = () => {
+    const { state: workspaceState } = useWorkspace();
+    const workspacePath = workspaceState.currentPath;
+
     // Single source of truth for state
     const {
         request, setRequest,
@@ -38,7 +42,7 @@ export const HttpPanel: React.FC = () => {
         findFirstRequest,
         handleSend,
         saveRequestToFolder
-    } = useHttpState();
+    } = useHttpState(workspacePath);
 
     // -----------------------------------------------------------------------
     // Handlers (Component Specific)
@@ -160,9 +164,9 @@ export const HttpPanel: React.FC = () => {
                             />
                         </div>
 
-                        {/* Request Config (Top) ↕ Response (Bottom) */}
+                        {/* Request Config (Left) ↔ Response (Right) */}
                         <div className="flex-1 overflow-hidden">
-                            <ResizablePanel direction="vertical" initialSize={250} minSize={150}>
+                            <ResizablePanel direction="horizontal" initialSize={420} minSize={250}>
                                 <RequestConfigPanel
                                     request={request}
                                     availableVariables={availableVariables}

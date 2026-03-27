@@ -13,7 +13,7 @@ export interface PackageMetadata {
 }
 
 export interface RegistryStrategy {
-  id: 'npm' | 'maven' | 'pypi' | 'go' | 'cargo';
+  id: 'npm' | 'maven' | 'pypi' | 'go' | 'cargo' | 'java';
   fetchPackageInfo(name: string, version?: string): Promise<PackageMetadata>;
   searchPackages(query: string): Promise<Partial<PackageMetadata>[]>;
   getLocalDependencies(projectPath: string): Promise<{name: string, version: string, isDev?: boolean}[]>;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-    ChevronDown, ChevronRight, Play, Square, RotateCcw, Terminal, Loader
+    ChevronDown, ChevronRight, Play, Square, RotateCcw, Terminal, Loader, Database
 } from 'lucide-react';
 import { Ec2Instance, SshDefaults, ec2StateColor, formatLaunchTime } from './ec2Types';
 import { Ec2StateIcon } from './Ec2StateIcon';
@@ -12,12 +12,13 @@ interface Ec2InstanceRowProps {
     pending: string | null;
     onSshConnect: (inst: Ec2Instance, cmd: string) => void;
     onSsmConnect: (inst: Ec2Instance) => void;
+    onTunnelClick: (inst: Ec2Instance) => void;
     connecting: string | null; // which connect mode is active: 'ssh' | 'ssm'
     ssmAvailable: boolean | null; // null=checking, false=not found
 }
 
 export function Ec2InstanceRow({
-    inst, ssh, onAction, pending, onSshConnect, onSsmConnect, connecting, ssmAvailable
+    inst, ssh, onAction, pending, onSshConnect, onSsmConnect, onTunnelClick, connecting, ssmAvailable
 }: Ec2InstanceRowProps) {
     const [expanded, setExpanded] = useState(false);
     const displayName = inst.name ?? inst.instance_id;
@@ -84,9 +85,16 @@ export function Ec2InstanceRow({
                                 <button
                                     onClick={() => onSsmConnect(inst)}
                                     disabled={!!connecting || ssmAvailable === false}
-                                    className="px-2.5 py-1 rounded text-xs bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 hover:bg-microtermix-neon/20 flex items-center gap-1.5 disabled:opacity-40"
+                                    className="px-2.5 py-1 rounded text-xs bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700 flex items-center gap-1.5 disabled:opacity-40"
                                     title={ssmAvailable === false ? 'session-manager-plugin no encontrado. Configura la ruta en Settings.' : 'Conectar via AWS SSM Session Manager (sin puerto 22)'}>
                                     {connecting === 'ssm' ? <Loader size={12} className="animate-spin" /> : <Terminal size={12} />} SSM
+                                </button>
+                                <button
+                                    onClick={() => onTunnelClick(inst)}
+                                    disabled={ssmAvailable === false}
+                                    className="px-2.5 py-1 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 flex items-center gap-1.5 disabled:opacity-40"
+                                    title="Abrir túnel SSM Port Forwarding a base de datos externa">
+                                    <Database size={12} /> TUNNEL
                                 </button>
                             </>}
                         </>
@@ -133,3 +141,4 @@ export function Ec2InstanceRow({
         </div>
     );
 }
+
