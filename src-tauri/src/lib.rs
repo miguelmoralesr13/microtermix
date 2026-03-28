@@ -25,6 +25,7 @@ mod diagnostics;
 mod app_logs;
 mod http_collections;
 mod ecs;
+mod lambda;
 
 use std::fs;
 use std::path::Path;
@@ -84,10 +85,9 @@ pub use crate::http_collections::{
     list_http_collections, write_http_collection, delete_http_collection,
 };
 pub use crate::ecs::{
-    ecs_list_clusters,
-    ecs_list_services,
-    ecs_list_tasks, ecs_get_task_definition, ecs_resolve_secret,
+    ecs_list_clusters, ecs_list_services, ecs_list_tasks, ecs_get_task_definition, ecs_resolve_secret,
 };
+pub use crate::lambda::*;
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
 
@@ -481,6 +481,8 @@ pub fn run() {
             ecs_list_tasks,
             ecs_get_task_definition,
             ecs_resolve_secret,
+            lambda_list_functions,
+            lambda_get_function,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

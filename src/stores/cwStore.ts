@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway' | 'step-functions' | 'ecs';
+type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway' | 'step-functions' | 'ecs' | 'lambda';
 
 interface CwState {
     activeTab: CwTab;
