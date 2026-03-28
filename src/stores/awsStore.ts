@@ -57,6 +57,7 @@ interface AwsActions {
     addTunnel: (tunnel: Omit<SsmTunnel, 'id' | 'active'>) => void;
     removeTunnel: (id: string) => void;
     toggleTunnel: (id: string) => Promise<void>;
+    hydrateTunnels: (tunnels: SsmTunnel[]) => void;
 }
 
 export const useAwsStore = create<AwsState & AwsActions>()(
@@ -92,7 +93,6 @@ export const useAwsStore = create<AwsState & AwsActions>()(
 
                     set(s => ({ ec2: { ...s.ec2, loading: true, error: null } }));
                     try {
-                        // We need to map camelCase to snake_case for the Rust command
                         const rustCreds = {
                             access_key_id: credentials.accessKeyId,
                             secret_access_key: credentials.secretAccessKey,
@@ -180,6 +180,12 @@ export const useAwsStore = create<AwsState & AwsActions>()(
                     }));
                 },
 
+                hydrateTunnels: (tunnels) => {
+                    set(s => ({
+                        ssm: { ...s.ssm, tunnels: (tunnels || []).map(t => ({ ...t, active: false })) }
+                    }));
+                },
+
                 toggleTunnel: async (id) => {
                     const { credentials, ssm } = get();
                     if (!credentials) return;
@@ -228,7 +234,7 @@ export const useAwsStore = create<AwsState & AwsActions>()(
                 name: 'microtermix-aws-store',
                 partialize: (s) => ({
                     credentials: s.credentials,
-                    ssm: s.ssm,
+                    // tunnels no se persisten globalmente por petición del usuario
                     ec2: { ...s.ec2, loading: false },
                     cloudwatch: { ...s.cloudwatch, loading: false },
                 }),

@@ -9,10 +9,11 @@ import { MetricsTab } from './cloudwatch/MetricsTab';
 import { NeedConfig } from './cloudwatch/cwUtils';
 import { ApiGatewayPanel } from './ApiGatewayPanel';
 import { StepFunctionsTab } from './cloudwatch/StepFunctionsTab';
+import { EcsTab } from './cloudwatch/EcsTab';
 import { useCwStore } from '../stores/cwStore';
 import { useAwsStore } from '../stores/awsStore';
 
-type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway' | 'step-functions';
+type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway' | 'step-functions' | 'ecs';
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export const CloudWatchPanel: React.FC = () => {
         { id: 'ec2', label: 'EC2' },
         { id: 'api-gateway', label: 'API Gateway' },
         { id: 'step-functions', label: 'Step Functions' },
+        { id: 'ecs', label: 'ECS / Fargate' },
     ];
 
     return (
@@ -71,6 +73,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tab === 'api-gateway' && isConfigured && <ApiGatewayPanel />}
                 {tab === 'step-functions' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
                 {tab === 'step-functions' && isConfigured && <StepFunctionsTab />}
+                {tab === 'ecs' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
+                {tab === 'ecs' && isConfigured && <EcsTab />}
             </div>
         </div>
     );

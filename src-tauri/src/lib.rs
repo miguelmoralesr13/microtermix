@@ -24,6 +24,7 @@ mod stepfunctions;
 mod diagnostics;
 mod app_logs;
 mod http_collections;
+mod ecs;
 
 use std::fs;
 use std::path::Path;
@@ -55,6 +56,7 @@ pub use crate::cloudwatch::{
     cw_get_log_groups, cw_get_log_streams, cw_get_log_events, cw_filter_log_events,
     cw_list_metrics, cw_get_metric_data, cw_start_tail, cw_stop_tail,
 };
+pub use serde::Serialize;
 pub use crate::http_client::make_http_request;
 pub use crate::ec2::{
     ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
@@ -80,6 +82,11 @@ pub use crate::stepfunctions::{
 };
 pub use crate::http_collections::{
     list_http_collections, write_http_collection, delete_http_collection,
+};
+pub use crate::ecs::{
+    ecs_list_clusters,
+    ecs_list_services,
+    ecs_list_tasks, ecs_get_task_definition, ecs_resolve_secret,
 };
 
 // Deleted proxy, file_server, and processes modules (moved to their respective files)
@@ -469,6 +476,11 @@ pub fn run() {
             get_cargo_details,
             go_search,
             get_go_details,
+            ecs_list_clusters,
+            ecs_list_services,
+            ecs_list_tasks,
+            ecs_get_task_definition,
+            ecs_resolve_secret,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

@@ -121,11 +121,15 @@ function SsmPortForwardModal({ inst, onConfirm, onClose, starting, error }: SsmP
     );
 }
 
-function ActiveTunnelsPanel() {
+function ActiveTunnelsPanel({ instances }: { instances: Ec2Instance[] }) {
     const { ssm, toggleTunnel, removeTunnel } = useAwsStore();
     const [expanded, setExpanded] = useState(true);
 
     if (!ssm?.tunnels || ssm.tunnels.length === 0) return null;
+
+    // Solo mostramos los túneles cuyas instancias estén presentes en la región/cuenta actual
+    const visibleTunnels = ssm.tunnels.filter(t => instances.some(inst => inst.instance_id === t.instanceId));
+    if (visibleTunnels.length === 0) return null;
 
     return (
         <div className="mx-4 mt-2 mb-3 border border-slate-700/50 rounded-lg overflow-hidden bg-slate-900/40 backdrop-blur-sm animate-in fade-in slide-in-from-top-2">
@@ -135,12 +139,12 @@ function ActiveTunnelsPanel() {
             >
                 <Link2 size={13} className="text-purple-400" />
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex-1">Túneles SSM Activos</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[9px] text-slate-500 border border-slate-700 font-mono">{ssm.tunnels.length}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[9px] text-slate-500 border border-slate-700 font-mono">{visibleTunnels.length}</span>
                 {expanded ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
             </div>
             {expanded && (
                 <div className="flex flex-col divide-y divide-slate-800/50">
-                    {ssm.tunnels.map(t => (
+                    {visibleTunnels.map(t => (
                         <div key={t.id} className="flex items-center gap-3 px-3 py-2 bg-slate-900/20 group">
                             <div className="shrink-0">
                                 {t.active ? (
@@ -365,7 +369,7 @@ export function Ec2Tab() {
             </div>
 
             {/* SSM Active Tunnels */}
-            <ActiveTunnelsPanel />
+            <ActiveTunnelsPanel instances={instances} />
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4">

@@ -241,6 +241,8 @@ export const SonarPanel: React.FC = () => {
         return repos[selectedPath]?.status.currentBranch || null;
     }, [selectedPath, repos]);
 
+    const baseUrl = useMemo(() => normalizeSonarUrl(sonarConfig.serverUrl), [sonarConfig.serverUrl]);
+
     const scanCommand = useMemo(() => {
         const { token, organization } = sonarConfig;
         let cmd = `npx sonar-scanner -Dsonar.projectKey=${projectKey} -Dsonar.host.url=${baseUrl} -Dsonar.token=${token}`;
@@ -265,8 +267,6 @@ export const SonarPanel: React.FC = () => {
             ...prev.slice(0, 99),
         ]);
     }, []);
-
-    const baseUrl = useMemo(() => normalizeSonarUrl(sonarConfig.serverUrl), [sonarConfig.serverUrl]);
 
     const handleTestConnection = useCallback(async () => {
         if (!sonarConfig.token || !sonarConfig.serverUrl) {

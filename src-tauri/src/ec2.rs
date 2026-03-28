@@ -10,7 +10,7 @@ pub struct Ec2Credentials {
     pub session_token: Option<String>,
 }
 
-async fn ec2_client(c: &Ec2Credentials) -> aws_sdk_ec2::Client {
+pub async fn aws_config(c: &Ec2Credentials) -> aws_config::SdkConfig {
     use aws_config::Region;
     use aws_credential_types::Credentials;
     let token = c.session_token.as_deref().filter(|s| !s.trim().is_empty()).map(String::from);
@@ -21,11 +21,15 @@ async fn ec2_client(c: &Ec2Credentials) -> aws_sdk_ec2::Client {
         None,
         "microtermix",
     );
-    let cfg = aws_config::from_env()
+    aws_config::from_env()
         .credentials_provider(creds)
         .region(Region::new(c.region.clone()))
         .load()
-        .await;
+        .await
+}
+
+async fn ec2_client(c: &Ec2Credentials) -> aws_sdk_ec2::Client {
+    let cfg = aws_config(c).await;
     aws_sdk_ec2::Client::new(&cfg)
 }
 

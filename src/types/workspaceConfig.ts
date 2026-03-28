@@ -5,6 +5,8 @@ import type { JiraAccount } from '../components/jiraApi';
 import { useJiraStore } from '../stores/jiraStore';
 import type { SonarConfig } from '../stores/sonarStore';
 import { useSonarStore } from '../stores/sonarStore';
+import type { SsmTunnel } from '../stores/awsStore';
+import { useAwsStore } from '../stores/awsStore';
 
 export interface PipelineStepConfig {
     /** folderName::script (the space at end is handled by execution logic) */
@@ -51,6 +53,7 @@ export interface MicrotermixConfig {
     jiraAccounts?: JiraAccount[];
     jiraActiveAccountId?: string | null;
     sonarConfig?: SonarConfig;
+    ssmTunnels?: SsmTunnel[];
 }
 
 export const WORKSPACE_CONFIG_FILENAME = 'microtermix.json';
@@ -247,5 +250,6 @@ export function buildWorkspaceConfigFromCurrentState(
         jiraAccounts: useJiraStore.getState().accounts,
         jiraActiveAccountId: useJiraStore.getState().activeAccountId,
         sonarConfig: useSonarStore.getState().config,
+        ssmTunnels: useAwsStore.getState().ssm.tunnels,
     };
 }

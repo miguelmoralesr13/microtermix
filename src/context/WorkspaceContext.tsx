@@ -16,6 +16,7 @@ import { useSonarStore } from '../stores/sonarStore';
 import { useProcessStore, batchedAppendLogs } from '../stores/processStore';
 import { useToolStore } from '../stores/toolStore';
 import { useUIStore } from '../stores/uiStore';
+import { useAwsStore } from '../stores/awsStore';
 
 export interface Project {
     name: String;
@@ -261,9 +262,14 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             );
         }
 
-        // Hidratar config de Sonar desde workspace JSON
+        // Hidratar config de Sonar de workspace JSON
         if (config.sonarConfig != null) {
             useSonarStore.getState().hydrate(config.sonarConfig);
+        }
+
+        // Hidratar túneles SSM del workspace JSON
+        if (config.ssmTunnels != null) {
+            useAwsStore.getState().hydrateTunnels(config.ssmTunnels);
         }
     }, []);
 
