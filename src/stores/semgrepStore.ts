@@ -15,10 +15,8 @@ interface SemgrepStore {
     findings: Record<string, SemgrepFinding[]>; // projectPath -> findings
     lastScan: Record<string, string>;           // projectPath -> timestamp
     configPath: string;                         // Ruta global persistente del config
-    isScanning: boolean;
     
     setFindings: (path: string, findings: SemgrepFinding[]) => void;
-    setScanning: (val: boolean) => void;
     setConfigPath: (path: string) => void;
     clearFindings: (path: string) => void;
 }
@@ -29,15 +27,12 @@ export const useSemgrepStore = create<SemgrepStore>()(
             findings: {},
             lastScan: {},
             configPath: 'p/default',
-            isScanning: false,
 
             setFindings: (path, findings) =>
                 set((state) => ({
                     findings: { ...state.findings, [path]: findings },
                     lastScan: { ...state.lastScan, [path]: new Date().toISOString() }
                 })),
-
-            setScanning: (val) => set({ isScanning: val }),
 
             setConfigPath: (path) => set({ configPath: path }),
 

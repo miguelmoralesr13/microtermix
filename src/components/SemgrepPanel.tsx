@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { 
     ShieldAlert, ShieldCheck, Play, RefreshCw, 
     AlertTriangle, Bug, Lock, FileCode,
@@ -12,10 +11,9 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
-import { listen } from '@tauri-apps/api/event';
 import { SemgrepFindingRemediator } from './SemgrepFindingRemediator';
-
 import { open } from '@tauri-apps/plugin-dialog';
+import { useSemgrepInstalled, useSemgrepScan } from '../hooks/queries/useSemgrepQueries';
 
 const STORAGE_SEMGREP_PATH = 'microtermix-semgrep-selected-path';
 
@@ -34,19 +32,20 @@ export const SemgrepPanel: React.FC = () => {
             localStorage.setItem(STORAGE_SEMGREP_PATH, selectedPath);
         }
     }, [selectedPath]);
+
     const [remediatingFinding, setRemediatingFinding] = useState<SemgrepFinding | null>(null);
-    const [isInstalled, setIsInstalled] = useState<boolean | null>(null);
     const [logs, setLogs] = useState<string[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState(false);
     const [currentAction, setCurrentAction] = useState<string>('IDLE');
     
     const findingsCache = useSemgrepStore(s => s.findings);
-    const setFindings = useSemgrepStore(s => s.setFindings);
-    const isScanning = useSemgrepStore(s => s.isScanning);
-    const setScanning = useSemgrepStore(s => s.setScanning);
     const lastScan = useSemgrepStore(s => s.lastScan);
     const configPath = useSemgrepStore(s => s.configPath);
     const setConfigPath = useSemgrepStore(s => s.setConfigPath);
+
+    const { data: isInstalled, isLoading: checkingInstalled } = useSemgrepInstalled();
+    const scanMutation = useSemgrepScan();
+    const isScanning = scanMutation.isPending;
 
     const currentFindings = findingsCache[selectedPath] || [];
 
@@ -63,69 +62,24 @@ export const SemgrepPanel: React.FC = () => {
         }
     };
 
-    // Verificar instalación
-    React.useEffect(() => {
-        const check = async () => {
-            try {
-                const installed = await invoke<boolean>('check_semgrep_installed');
-                setIsInstalled(installed);
-            } catch {
-                setIsInstalled(false);
-            }
-        };
-        check();
-    }, []);
-
     const handleRunScan = async () => {
         if (!selectedPath) return;
         
-        setScanning(true);
         setLogs([]);
         setIsConsoleOpen(true);
         setCurrentAction("INITIALIZING");
         toast.info("Lanzando escaneo de seguridad local...");
         
-        // Listener para logs en tiempo real (stdout + stderr concurrentes desde Rust)
-        const unlisten = await listen<string>('semgrep-log', (event) => {
-            const line = event.payload;
-            if (line.startsWith('PROG:')) {
-                const cleanLine = line.replace('PROG:', '').trim();
-                if (cleanLine) setCurrentAction(cleanLine.substring(0, 40).toUpperCase());
-                setLogs(prev => [...prev.slice(-100), `⚡ ${cleanLine}`]);
-            } else {
-                setLogs(prev => [...prev.slice(-100), line]);
-            }
-        });
-
         try {
-            const resultStr = await invoke<string>('run_semgrep_scan', { 
+            await scanMutation.mutateAsync({
                 projectPath: selectedPath,
-                configPath: configPath === 'p/default' ? null : configPath 
+                configPath,
+                onLog: (line) => setLogs(prev => [...prev.slice(-100), line]),
+                onProgress: (action) => setCurrentAction(action)
             });
-            setCurrentAction("PARSING RESULTS");
-
-            const data = JSON.parse(resultStr);
-            
-            const mapped: SemgrepFinding[] = (data.results || []).map((r: any) => ({
-                id: Math.random().toString(36).substr(2, 9),
-                path: r.path,
-                line: r.start.line,
-                message: r.extra.message,
-                severity: r.extra.severity,
-                ruleId: r.check_id,
-                extra: r.extra
-            }));
-            
-            setFindings(selectedPath, mapped);
-            toast.success(`Escaneo completado: ${mapped.length} hallazgos.`);
+            setCurrentAction("COMPLETED");
         } catch (e) {
-            console.error(e);
             setCurrentAction("ERROR");
-            toast.error(`Error en escaneo: ${e}`);
-        } finally {
-            setScanning(false);
-            if (currentAction !== "ERROR") setCurrentAction("COMPLETED");
-            unlisten();
         }
     };
 
@@ -197,7 +151,7 @@ export const SemgrepPanel: React.FC = () => {
                     <div className="min-w-0">
                         <h2 className="text-base font-black text-slate-200 uppercase tracking-tight flex items-center gap-2">
                             Semgrep Security
-                            {isInstalled === null && <RefreshCw size={14} className="animate-spin text-slate-600 ml-2" />}
+                            {checkingInstalled && <RefreshCw size={14} className="animate-spin text-slate-600 ml-2" />}
                         </h2>
                         <div className="flex items-center gap-2 mt-1">
                             <Button 
@@ -270,7 +224,7 @@ export const SemgrepPanel: React.FC = () => {
 
                 {/* Content Area */}
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-slate-900/30">
-                    {isInstalled === null ? (
+                    {checkingInstalled && !isInstalled ? (
                         <div className="flex-1 flex flex-col items-center justify-center gap-3 opacity-20">
                             <Activity size={40} className="animate-pulse text-emerald-500" />
                             <p className="text-[10px] font-black uppercase tracking-[0.2em]">Verificando Entorno...</p>
