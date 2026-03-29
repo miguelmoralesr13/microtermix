@@ -17,7 +17,9 @@ import { Badge } from './ui/badge';
 import { useSonarStore } from '../stores/sonarStore';
 import { SonarIssueRemediator } from './SonarIssueRemediator';
 import { SonarDashboard } from './sonar/SonarDashboard';
-import { fetchProjectMetrics, getSonarAuthHeader, normalizeSonarUrl } from '../utils/sonarUtils';
+import { getSonarAuthHeader, normalizeSonarUrl } from '../utils/sonarUtils';
+import { useSonarMetrics, useSonarIssues, useSonarProjectSearch, sonarKeys, SonarIssue } from '../hooks/queries/useSonarQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,22 +27,6 @@ export interface SonarRule {
     key: string;
     name: string;
     type: string;
-}
-
-interface ProjectLink {
-    projectKey?: string;
-    token?: string;
-}
-
-
-interface SonarIssue {
-    key: string;
-    rule: string;
-    severity: 'BLOCKER' | 'CRITICAL' | 'MAJOR' | 'MINOR' | 'INFO';
-    type: string;
-    message: string;
-    component: string;
-    line?: number;
 }
 
 interface SonarProjectResult {
@@ -55,7 +41,7 @@ interface DebugLog {
     message: string;
 }
 
-// ─── Constants (Moved to top to avoid hoisting issues) ────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const SEVERITY_ORDER: SonarIssue['severity'][] = ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'];
 const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = {
@@ -70,27 +56,6 @@ const SEV_STYLE: Record<string, { bg: string; text: string; border: string }> = 
 
 const STORAGE_SONAR_PATH = 'microtermix-sonar-selected-path';
 const STORAGE_SONAR_TAB = 'microtermix-sonar-active-tab';
-
-function issuesCacheKey(path: string) {
-    return `microtermix-sonar-issues-${path.replace(/[/\\:]/g, '_')}`;
-}
-function loadIssuesCache(path: string): SonarIssue[] {
-    try { const r = localStorage.getItem(issuesCacheKey(path)); return r ? JSON.parse(r) : []; } catch { return []; }
-}
-function saveIssuesCache(path: string, items: SonarIssue[]) {
-    try { localStorage.setItem(issuesCacheKey(path), JSON.stringify(items)); } catch { }
-}
-
-function linkKey(path: string) {
-    return `microtermix-sonar-link-${path.replace(/[/\\:]/g, '_')}`;
-}
-function loadLink(path: string): ProjectLink {
-    try {
-        const raw = localStorage.getItem(linkKey(path));
-        if (raw) return JSON.parse(raw);
-    } catch (_) { }
-    return {};
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -165,9 +130,12 @@ export const SonarPanel: React.FC = () => {
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
     const repos = useGitStore(s => s.repos);
+    const queryClient = useQueryClient();
 
     const sonarConfig = useSonarStore(s => s.config);
     const setSonarConfig = useSonarStore(s => s.setConfig);
+    const projectLinks = useSonarStore(s => s.projectLinks);
+    const linkProject = useSonarStore(s => s.linkProject);
 
     const projects = state.projects;
 
@@ -181,13 +149,6 @@ export const SonarPanel: React.FC = () => {
     const [remediatingIssue, setRemediatingIssue] = useState<SonarIssue | null>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
 
-    // Get from global store
-    const metricsCache = useSonarStore(s => s.metricsCache);
-    const setMetrics = useSonarStore(s => s.setMetrics);
-    const projectLinks = useSonarStore(s => s.projectLinks);
-    const linkProject = useSonarStore(s => s.linkProject);
-    const clearCache = useSonarStore(s => s.clearCache);
-
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath('dashboard');
     }, [projects, selectedPath]);
@@ -198,24 +159,7 @@ export const SonarPanel: React.FC = () => {
 
     // Per-project: project key + token
     const link = projectLinks[selectedPath] || {};
-    
-    useEffect(() => {
-        if (selectedPath) {
-            setIssues(loadIssuesCache(selectedPath));
-            setTestResult(null);
-        }
-    }, [selectedPath]);
-
-    const metrics = metricsCache[selectedPath] ?? null;
-    const [loadingMetrics, setLoadingMetrics] = useState(false);
-
-    // ── Issues
-    const [issues, setIssues] = useState<SonarIssue[]>([]);
-    const [loadingIssues, setLoadingIssues] = useState(false);
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(['MINOR', 'INFO']));
-
-    // ── Rules
-    // rules deleted
+    const projectKey = link.projectKey || (projects.find(p => p.path === selectedPath)?.name as string || '');
 
     // ── UI
     const [activeTab, setActiveTab] = useState<'overview' | 'analysis' | 'issues'>(() => {
@@ -223,25 +167,26 @@ export const SonarPanel: React.FC = () => {
         return (saved === 'overview' || saved === 'analysis' || saved === 'issues') ? saved : 'overview';
     });
     useEffect(() => { localStorage.setItem(STORAGE_SONAR_TAB, activeTab); }, [activeTab]);
+
+    // -- Queries --
+    const { data: metrics, isLoading: loadingMetrics } = useSonarMetrics(selectedPath !== 'dashboard' ? projectKey : undefined);
+    const { data: issues = [], isLoading: loadingIssues } = useSonarIssues(selectedPath !== 'dashboard' && activeTab === 'issues' ? projectKey : undefined);
+
     const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState(false);
     const [testResult, setTestResult] = useState<{ ok: boolean | null; message: string } | null>(null);
 
     // ── Auto-link search
     const [searchingFor, setSearchingFor] = useState<string | null>(null);
-    const [searchResults, setSearchResults] = useState<SonarProjectResult[] | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-
-    // ── Derived config
-    const projectKey = link.projectKey || (projects.find(p => p.path === selectedPath)?.name as string || '');
-    const effectiveToken = link.token || sonarConfig.token;
-
-    const currentBranch = useMemo(() => {
-        if (!selectedPath) return null;
-        return repos[selectedPath]?.status.currentBranch || null;
-    }, [selectedPath, repos]);
+    const { data: searchResults } = useSonarProjectSearch(searchQuery, !!searchingFor);
 
     const baseUrl = useMemo(() => normalizeSonarUrl(sonarConfig.serverUrl), [sonarConfig.serverUrl]);
+
+    const currentBranch = useMemo(() => {
+        if (!selectedPath || selectedPath === 'dashboard') return null;
+        return repos[selectedPath]?.status.currentBranch || null;
+    }, [selectedPath, repos]);
 
     const scanCommand = useMemo(() => {
         const { token, organization } = sonarConfig;
@@ -294,113 +239,22 @@ export const SonarPanel: React.FC = () => {
         }
     }, [sonarConfig]);
 
-    const fetchMetrics = useCallback(async () => {
-        if (!projectKey || !effectiveToken || !sonarConfig.serverUrl) return;
-        setLoadingMetrics(true);
-        try {
-            const result = await fetchProjectMetrics(projectKey, sonarConfig, effectiveToken);
-            setMetrics(selectedPath, result);
-            addLog('info', `Metrics OK → ${projectKey}`);
-        } catch (e: any) {
-            addLog('error', `Metrics failed: ${e.message || e}`);
-        } finally {
-            setLoadingMetrics(false);
-        }
-    }, [selectedPath, projectKey, effectiveToken, sonarConfig, addLog]);
-
-    const fetchMetricsRef = useRef(fetchMetrics);
-    useEffect(() => { fetchMetricsRef.current = fetchMetrics; });
-
-    const fetchIssues = useCallback(async () => {
-        if (!projectKey || !effectiveToken) return;
-        setLoadingIssues(true);
-        const url = `${baseUrl}/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}&resolved=false&ps=100`;
-        try {
-            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(sonarConfig.authType, effectiveToken) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
-            const mapped: SonarIssue[] = (data.issues || []).map((i: any) => ({
-                key: i.key,
-                rule: i.rule,
-                severity: i.severity as SonarIssue['severity'],
-                type: i.type || 'CODE_SMELL',
-                message: i.message || '',
-                component: (i.component || '').split(':').slice(1).join(':') || i.component || '',
-                line: i.line,
-            }));
-            setIssues(mapped);
-            saveIssuesCache(selectedPath, mapped);
-            addLog('info', `${mapped.length} issues abiertos encontrados.`);
-        } catch (e) {
-            addLog('error', `Issues failed: ${e}`);
-        } finally {
-            setLoadingIssues(false);
-        }
-    }, [selectedPath, projectKey, effectiveToken, sonarConfig, addLog, baseUrl]);
-
-    const handleSearch = useCallback(async (projectPath: string, initialName: string) => {
-        setSearchingFor(projectPath);
-        setSearchQuery(initialName);
-        setSearchResults(null);
-        const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(initialName)}&ps=5`;
-        addLog('network', `GET ${url} (auto-link)`);
-        try {
-            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(sonarConfig.authType, sonarConfig.token) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
-            setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
-        } catch (e) {
-            addLog('error', `Search failed: ${e}`);
-            setSearchResults([]);
-        }
-    }, [sonarConfig, addLog, baseUrl]);
-
-    const handleSearchQuery = useCallback(async () => {
-        if (!searchingFor || !searchQuery.trim() || !sonarConfig.token) return;
-        setSearchResults(null);
-        const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(searchQuery)}&ps=5`;
-        try {
-            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(sonarConfig.authType, sonarConfig.token) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
-            setSearchResults((data.components || []).map((c: any) => ({ key: c.key, name: c.name })));
-        } catch (_) {
-            setSearchResults([]);
-        }
-    }, [searchingFor, searchQuery, sonarConfig, baseUrl]);
-
     const handleLinkProject = useCallback((projectPath: string, result: SonarProjectResult) => {
         linkProject(projectPath, { projectKey: result.key });
-        clearCache(projectPath);
+        queryClient.invalidateQueries({ queryKey: sonarKeys.metrics(result.key) });
         setSearchingFor(null);
-        setSearchResults(null);
         addLog('info', `Vinculado → key: "${result.key}"`);
-    }, [linkProject, clearCache, addLog]);
-
-    useEffect(() => {
-        if (!selectedPath || !projectKey || !effectiveToken || !sonarConfig.serverUrl) return;
-        fetchMetricsRef.current();
-    }, [selectedPath, projectKey, effectiveToken]);
+    }, [linkProject, queryClient, addLog]);
 
     const prevStatusRef = useRef<typeof processStatus>(undefined);
     useEffect(() => {
         if (prevStatusRef.current === 'running' && processStatus === 'stopped') {
-            const t = setTimeout(() => {
-                clearCache(selectedPath);
-                fetchMetricsRef.current();
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: sonarKeys.all });
             }, 3000);
-            return () => clearTimeout(t);
         }
         prevStatusRef.current = processStatus;
-    }, [processStatus, selectedPath, clearCache]);
-
-    const fetchIssuesRef = useRef(fetchIssues);
-    useEffect(() => { fetchIssuesRef.current = fetchIssues; });
-    useEffect(() => {
-        if (activeTab === 'issues' && projectKey && effectiveToken) {
-            fetchIssuesRef.current();
-        }
-    }, [activeTab, selectedPath, projectKey, effectiveToken]);
+    }, [processStatus, queryClient]);
 
     const handleRunAnalysis = async () => {
         if (!selectedPath || !projectKey) return;
@@ -420,10 +274,6 @@ export const SonarPanel: React.FC = () => {
         issues.forEach(i => { map[i.severity]?.push(i); });
         return map;
     }, [issues]);
-
-    const handleOpenIssue = (issue: SonarIssue) => {
-        setRemediatingIssue(issue);
-    };
 
     return (
         <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900">
@@ -446,7 +296,7 @@ export const SonarPanel: React.FC = () => {
                     </button>
                     <button
                         onClick={isRunning ? handleStop : handleRunAnalysis}
-                        disabled={!selectedPath || !projectKey}
+                        disabled={!selectedPath || !projectKey || selectedPath === 'dashboard'}
                         className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-md ${isRunning
                             ? 'bg-microtermix-danger hover:bg-red-600 text-white'
                             : 'bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed'}`}
@@ -479,8 +329,7 @@ export const SonarPanel: React.FC = () => {
                         {projects.map(p => {
                             const path = p.path as string;
                             const name = p.name as string;
-                            const qg = metricsCache[path]?.qualityGate;
-                            const savedLink = loadLink(path);
+                            const savedLink = projectLinks[path] || {};
                             const linked = !!savedLink.projectKey;
                             const running = path === selectedPath && isRunning;
                             return (
@@ -494,12 +343,11 @@ export const SonarPanel: React.FC = () => {
                                     <div className="flex-1 min-w-0">
                                         <p className={`text-xs font-medium truncate ${selectedPath === path ? 'text-blue-400' : 'text-slate-300'}`}>{name}</p>
                                         <div className="flex items-center gap-1.5 mt-0.5">
-                                            <QGBadge status={qg} />
                                             {!linked && <span className="text-[9px] text-slate-600 italic">sin vincular</span>}
                                             {running && <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse" />}
                                         </div>
                                     </div>
-                                    <button onClick={e => { e.stopPropagation(); handleSearch(path, name); }} className="p-1 rounded text-slate-600 hover:text-blue-400 opacity-0 group-hover:opacity-100"><Search size={12} /></button>
+                                    <button onClick={e => { e.stopPropagation(); setSearchingFor(path); setSearchQuery(name); }} className="p-1 rounded text-slate-600 hover:text-blue-400 opacity-0 group-hover:opacity-100"><Search size={12} /></button>
                                 </div>
                             );
                         })}
@@ -524,7 +372,12 @@ export const SonarPanel: React.FC = () => {
                         <div className="flex-1 overflow-y-auto p-5">
                             {activeTab === 'overview' && (
                                 <div className="space-y-5">
-                                    {metrics ? (
+                                    {loadingMetrics ? (
+                                        <div className="flex flex-col items-center py-20 gap-3 text-slate-500">
+                                            <RefreshCw className="animate-spin" size={32} />
+                                            <p className="text-xs font-bold uppercase tracking-widest animate-pulse">Obteniendo métricas...</p>
+                                        </div>
+                                    ) : metrics ? (
                                         <>
                                             <div className={`p-5 rounded-2xl border flex items-center justify-between ${metrics.qualityGate === 'OK' ? 'bg-microtermix-success/10 border-microtermix-success/30' : 'bg-microtermix-danger/10 border-microtermix-danger/30'}`}>
                                                 <div className="flex items-center gap-4">
@@ -561,8 +414,8 @@ export const SonarPanel: React.FC = () => {
                                             <Activity size={40} className="text-slate-700 mb-4" />
                                             <p className="text-slate-400 font-medium">No hay métricas disponibles</p>
                                             <p className="text-xs text-slate-600 mt-1 max-w-xs text-center">Ejecuta un análisis o configura tu token para traer los datos del servidor.</p>
-                                            <button onClick={fetchMetrics} disabled={loadingMetrics} className="mt-6 px-4 py-2 bg-slate-800 text-xs font-bold rounded-xl hover:bg-slate-700 text-slate-300 flex items-center gap-2 transition-all">
-                                                <RefreshCw size={14} className={loadingMetrics ? 'animate-spin' : ''} /> Refrescar ahora
+                                            <button onClick={() => queryClient.invalidateQueries({ queryKey: sonarKeys.metrics(projectKey) })} className="mt-6 px-4 py-2 bg-slate-800 text-xs font-bold rounded-xl hover:bg-slate-700 text-slate-300 flex items-center gap-2 transition-all">
+                                                <RefreshCw size={14} /> Refrescar ahora
                                             </button>
                                         </div>
                                     )}
@@ -604,7 +457,7 @@ export const SonarPanel: React.FC = () => {
                                                 {!collapsed && <div className="divide-y divide-slate-800/40">{group.map(i => (
                                                     <div
                                                         key={i.key}
-                                                        onClick={() => handleOpenIssue(i)}
+                                                        onClick={() => setRemediatingIssue(i)}
                                                         className="px-4 py-2.5 hover:bg-slate-800/30 cursor-pointer transition-colors group/issue"
                                                     >
                                                         <div className="flex items-start gap-2">

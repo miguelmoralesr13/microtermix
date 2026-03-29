@@ -35,12 +35,9 @@ export const DEFAULT_SONAR_CONFIG: SonarConfig = {
 interface SonarStore {
     config: SonarConfig;
     projectLinks: Record<string, SonarProjectLink>; // projectPath -> link
-    metricsCache: Record<string, SonarMetrics>;    // projectPath -> metrics
     
     setConfig: (patch: Partial<SonarConfig>) => void;
     linkProject: (path: string, link: SonarProjectLink) => void;
-    setMetrics: (path: string, metrics: SonarMetrics) => void;
-    clearCache: (path: string) => void;
     hydrate: (config: Partial<SonarConfig>) => void;
 }
 
@@ -49,7 +46,6 @@ export const useSonarStore = create<SonarStore>()(
         (set) => ({
             config: { ...DEFAULT_SONAR_CONFIG },
             projectLinks: {},
-            metricsCache: {},
 
             setConfig: (patch) =>
                 set((state) => ({ config: { ...state.config, ...patch } })),
@@ -58,18 +54,6 @@ export const useSonarStore = create<SonarStore>()(
                 set((state) => ({
                     projectLinks: { ...state.projectLinks, [path]: link }
                 })),
-
-            setMetrics: (path, metrics) =>
-                set((state) => ({
-                    metricsCache: { ...state.metricsCache, [path]: metrics }
-                })),
-
-            clearCache: (path) =>
-                set((state) => {
-                    const newMetrics = { ...state.metricsCache };
-                    delete newMetrics[path];
-                    return { metricsCache: newMetrics };
-                }),
 
             hydrate: (cfg) =>
                 set((state) => ({ config: { ...state.config, ...cfg } })),
