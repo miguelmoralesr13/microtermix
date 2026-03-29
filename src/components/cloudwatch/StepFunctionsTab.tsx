@@ -1,16 +1,9 @@
-import React, { useEffect } from 'react';
-import { useSfnStore } from '../../stores/sfnStore';
+import React from 'react';
 import { SfnMachineSelector } from './SfnMachineSelector';
 import { SfnExecutionList } from './SfnExecutionList';
 import { SfnExecutionInspector } from './SfnExecutionInspector';
 
 export const StepFunctionsTab: React.FC = () => {
-  const { fetchMachines } = useSfnStore();
-
-  useEffect(() => {
-    fetchMachines();
-  }, []);
-
   return (
     <div className="flex flex-col h-full bg-slate-950 text-slate-200">
       <div className="flex h-full min-h-0 overflow-hidden">

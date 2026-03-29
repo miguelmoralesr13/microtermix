@@ -21,6 +21,10 @@ import Editor from '@monaco-editor/react';
 import { useMonacoTheme } from '../../hooks/useMonacoTheme';
 import { useCwStore } from '../../stores/cwStore';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { 
+    useSfnMachines, useSfnDefinition, useSfnExecutions, 
+    useSfnHistory, useStartSfnExecution 
+} from '../../hooks/queries/useSfnQueries';
 
 import { 
   Dialog,
@@ -33,18 +37,30 @@ import {
 
 export const SfnExecutionInspector: React.FC = () => {
   const { 
-    steps, 
     selectedExecutionArn, 
-    loadingHistory, 
-    errorHistory,
-    startExecution,
     selectedMachineArn,
-    executions,
-    machines,
-    definition,
-    logGroupName,
-    loadingDefinition
   } = useSfnStore();
+
+  const { data: machines = [] } = useSfnMachines();
+  const selectedMachine = machines.find(m => m.arn === selectedMachineArn);
+  
+  const { data: definitionData, isLoading: loadingDefinition } = useSfnDefinition(selectedMachineArn);
+  const definition = definitionData?.definition;
+  const logGroupName = definitionData?.logGroupName;
+
+  const { data: executions = [] } = useSfnExecutions(
+    selectedMachineArn, 
+    selectedMachine?.machineType, 
+    logGroupName
+  );
+
+  const { data: steps = [], isLoading: loadingHistory, error: errorHistory } = useSfnHistory(
+    selectedExecutionArn, 
+    selectedMachine?.machineType, 
+    logGroupName
+  );
+
+  const startExecutionMutation = useStartSfnExecution();
 
   const { goToLogs } = useCwStore();
   const { setActiveView } = useWorkspace();
@@ -57,7 +73,6 @@ export const SfnExecutionInspector: React.FC = () => {
   const [selectedStateName, setSelectedStateName] = useState<string | null>(null);
   const decorationIds = React.useRef<string[]>([]);
 
-  const selectedMachine = machines.find(m => m.arn === selectedMachineArn);
   const isExpress = selectedMachine?.machineType.includes('EXPRESS');
 
   // Prettify definition for Monaco
@@ -194,7 +209,10 @@ export const SfnExecutionInspector: React.FC = () => {
     try {
         // Validate JSON
         JSON.parse(editedInput);
-        await startExecution(selectedMachineArn, editedInput);
+        await startExecutionMutation.mutateAsync({ 
+            machineArn: selectedMachineArn, 
+            input: editedInput 
+        });
         setEditMode(false);
         setActiveTab('execution');
     } catch (e) {
@@ -328,7 +346,7 @@ export const SfnExecutionInspector: React.FC = () => {
                 ) : errorHistory ? (
                    <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4">
                       <AlertCircle size={32} className="text-rose-500" />
-                      <p className="text-xs text-rose-400 text-center max-w-xs">{errorHistory}</p>
+                      <p className="text-xs text-rose-400 text-center max-w-xs">{String(errorHistory)}</p>
                    </div>
                 ) : (
                    <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
@@ -411,9 +429,14 @@ export const SfnExecutionInspector: React.FC = () => {
                     </Button>
                     <Button 
                       onClick={handleRestart}
+                      disabled={startExecutionMutation.isPending}
                       className="bg-microtermix-neon text-slate-950 hover:bg-microtermix-neon/90 font-bold text-xs h-9 px-6"
                     >
-                      <Play size={14} className="mr-2 fill-current" />
+                      {startExecutionMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play size={14} className="mr-2 fill-current" />
+                      )}
                       Start Execution
                     </Button>
                   </DialogFooter>

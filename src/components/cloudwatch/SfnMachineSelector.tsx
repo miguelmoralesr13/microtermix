@@ -11,16 +11,17 @@ import { Loader2, AlertCircle, RefreshCw, Search, X } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { useSfnMachines, sfnKeys } from '../../hooks/queries/useSfnQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 export const SfnMachineSelector: React.FC = () => {
   const { 
-    machines, 
     selectedMachineArn, 
-    selectMachine, 
-    loadingMachines, 
-    errorMachines,
-    fetchMachines
+    setSelectedMachineArn
   } = useSfnStore();
+
+  const queryClient = useQueryClient();
+  const { data: machines = [], isLoading: loadingMachines, error: errorMachines } = useSfnMachines();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('');
@@ -44,6 +45,10 @@ export const SfnMachineSelector: React.FC = () => {
     setFilter('');
   };
 
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: sfnKeys.machines() });
+  };
+
   if (loadingMachines && machines.length === 0) {
     return (
       <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
@@ -61,13 +66,13 @@ export const SfnMachineSelector: React.FC = () => {
           Error loading machines
         </div>
         <Badge variant="destructive" className="text-[10px] truncate max-w-full">
-          {errorMachines}
+          {String(errorMachines)}
         </Badge>
         <Button 
           variant="outline" 
           size="sm" 
           className="h-7 text-[10px]" 
-          onClick={() => fetchMachines(true)}
+          onClick={handleRefresh}
         >
           <RefreshCw className="h-3 w-3 mr-1" /> Retry
         </Button>
@@ -98,7 +103,7 @@ export const SfnMachineSelector: React.FC = () => {
       </div>
 
       <div className="space-y-2">
-        <Select value={selectedMachineArn || ''} onValueChange={(val) => val && selectMachine(val)}>
+        <Select value={selectedMachineArn || ''} onValueChange={(val) => val && setSelectedMachineArn(val)}>
           <SelectTrigger className="w-full bg-slate-900 border-slate-700 text-xs h-9">
             <SelectValue placeholder={filter ? `Results for "${filter}"` : "Select a State Machine"} />
           </SelectTrigger>
@@ -139,7 +144,7 @@ export const SfnMachineSelector: React.FC = () => {
             variant="ghost" 
             size="sm" 
             className="h-6 px-2 text-[10px] text-slate-400 hover:text-white"
-            onClick={() => fetchMachines(true)}
+            onClick={handleRefresh}
           >
             <RefreshCw className={`h-3 w-3 mr-1 ${loadingMachines ? 'animate-spin' : ''}`} /> 
             Refresh list
@@ -149,4 +154,3 @@ export const SfnMachineSelector: React.FC = () => {
     </div>
   );
 };
-

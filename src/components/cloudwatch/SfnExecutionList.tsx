@@ -6,23 +6,32 @@ import { Loader2, AlertCircle, History, Play, ExternalLink, Info } from 'lucide-
 import { format } from 'date-fns';
 import { useCwStore } from '../../stores/cwStore';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { useSfnExecutions, useSfnMachines, useSfnDefinition } from '../../hooks/queries/useSfnQueries';
 
 export const SfnExecutionList: React.FC = () => {
   const { 
-    executions, 
     selectedExecutionArn, 
-    selectExecution, 
-    loadingExecutions, 
-    errorExecutions,
+    setSelectedExecutionArn, 
     selectedMachineArn,
-    machines,
-    logGroupName
   } = useSfnStore();
+
+  const { data: machines = [] } = useSfnMachines();
+  const selectedMachine = machines.find(m => m.arn === selectedMachineArn);
+  const { data: definitionData } = useSfnDefinition(selectedMachineArn);
+  
+  const { 
+    data: executions = [], 
+    isLoading: loadingExecutions, 
+    error: errorExecutions 
+  } = useSfnExecutions(
+    selectedMachineArn, 
+    selectedMachine?.machineType, 
+    definitionData?.logGroupName
+  );
 
   const { goToLogs } = useCwStore();
   const { setActiveView } = useWorkspace();
 
-  const selectedMachine = machines.find(m => m.arn === selectedMachineArn);
   const isExpress = selectedMachine?.machineType.includes('EXPRESS');
 
   const getStatusBadge = (status: SfnExecution['status']) => {
@@ -56,7 +65,7 @@ export const SfnExecutionList: React.FC = () => {
     );
   }
 
-  // Si tenemos ejecuciones, las mostramos SIEMPRE, incluso si hay un error de fondo (como el de 'Not Supported')
+  // Si tenemos ejecuciones, las mostramos SIEMPRE
   if (executions.length > 0) {
     return (
       <div className="flex flex-col h-full min-h-0">
@@ -76,7 +85,7 @@ export const SfnExecutionList: React.FC = () => {
               {executions.map((e) => (
                 <tr 
                   key={e.executionArn} 
-                  onClick={() => selectExecution(e.executionArn)}
+                  onClick={() => setSelectedExecutionArn(e.executionArn)}
                   className={`cursor-pointer transition-colors hover:bg-slate-800/40 ${
                     selectedExecutionArn === e.executionArn ? 'bg-microtermix-neon/10 border-l-2 border-l-microtermix-neon' : ''
                   }`}
@@ -104,7 +113,8 @@ export const SfnExecutionList: React.FC = () => {
   }
 
   if (errorExecutions) {
-    const isExpressError = errorExecutions.includes("EXPRESS") || errorExecutions.includes("StateMachineTypeNotSupported") || errorExecutions.includes("Log Group");
+    const errorStr = String(errorExecutions);
+    const isExpressError = errorStr.includes("EXPRESS") || errorStr.includes("StateMachineTypeNotSupported") || errorStr.includes("Log Group");
     
     if (isExpressError && selectedMachine) {
       return (
@@ -138,7 +148,7 @@ export const SfnExecutionList: React.FC = () => {
               size="sm"
               className="mt-2 h-8 text-[10px] border-blue-500/30 text-blue-300 hover:bg-blue-500/10"
               onClick={() => {
-                const actualLogGroup = logGroupName || `/aws/vendedlogs/states/${selectedMachine.name}-Logs`;
+                const actualLogGroup = definitionData?.logGroupName || `/aws/vendedlogs/states/${selectedMachine.name}-Logs`;
                 goToLogs(actualLogGroup);
                 setActiveView('cloudwatch');
               }}
@@ -162,61 +172,16 @@ export const SfnExecutionList: React.FC = () => {
       <div className="p-4 flex flex-col gap-4">
         <div className="flex items-start gap-2 text-xs p-3 rounded-md border text-red-400 bg-red-950/20 border-red-900/50">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
-          <span>{errorExecutions}</span>
+          <span>{errorStr}</span>
         </div>
       </div>
     );
   }
 
-  if (executions.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-slate-500">
-        <History size={32} className="mb-4 opacity-20" />
-        <p className="text-xs text-center italic">No executions found for this machine</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="px-4 py-2 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800">
-        Recent Executions
-      </div>
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-xs text-left">
-          <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-sm shadow-sm z-10 border-b border-slate-800">
-            <tr>
-              <th className="px-4 py-2 font-medium text-slate-400">Name / Status</th>
-              <th className="px-4 py-2 font-medium text-slate-400">Date</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/50">
-            {executions.map((e) => (
-              <tr 
-                key={e.executionArn} 
-                onClick={() => selectExecution(e.executionArn)}
-                className={`cursor-pointer transition-colors hover:bg-slate-800/40 ${
-                  selectedExecutionArn === e.executionArn ? 'bg-microtermix-neon/10 border-l-2 border-l-microtermix-neon' : ''
-                }`}
-              >
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-1">
-                    <span className="font-medium text-slate-200 truncate max-w-[150px]" title={e.name}>
-                      {e.name}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(e.status)}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-500 tabular-nums">
-                  {format(e.startDate, 'MMM d, HH:mm:ss')}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div className="flex flex-col items-center justify-center h-full p-8 text-slate-500">
+      <History size={32} className="mb-4 opacity-20" />
+      <p className="text-xs text-center italic">No executions found for this machine</p>
     </div>
   );
 };
