@@ -19,6 +19,7 @@ import { SonarIssueRemediator } from './SonarIssueRemediator';
 import { SonarDashboard } from './sonar/SonarDashboard';
 import { getSonarAuthHeader, normalizeSonarUrl } from '../utils/sonarUtils';
 import { useSonarMetrics, useSonarIssues, useSonarProjectSearch, sonarKeys, SonarIssue } from '../hooks/queries/useSonarQueries';
+import { useGitStatus } from '../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -129,7 +130,6 @@ export const SonarPanel: React.FC = () => {
     const { state, executeProjectScript } = useWorkspace();
     const activeProcesses = useProcessStore(s => s.activeProcesses);
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
-    const repos = useGitStore(s => s.repos);
     const queryClient = useQueryClient();
 
     const sonarConfig = useSonarStore(s => s.config);
@@ -183,10 +183,9 @@ export const SonarPanel: React.FC = () => {
 
     const baseUrl = useMemo(() => normalizeSonarUrl(sonarConfig.serverUrl), [sonarConfig.serverUrl]);
 
-    const currentBranch = useMemo(() => {
-        if (!selectedPath || selectedPath === 'dashboard') return null;
-        return repos[selectedPath]?.status.currentBranch || null;
-    }, [selectedPath, repos]);
+    // Get Git status for the current branch
+    const { data: gitStatus } = useGitStatus(selectedPath !== 'dashboard' ? selectedPath : null);
+    const currentBranch = gitStatus?.currentBranch || null;
 
     const scanCommand = useMemo(() => {
         const { token, organization } = sonarConfig;

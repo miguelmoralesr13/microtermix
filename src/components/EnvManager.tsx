@@ -7,6 +7,8 @@ import { useToolStore } from '../stores/toolStore';
 import { JdkManagerModal } from './JdkManagerModal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { parseInlineEnvsFromScripts } from '../utils/parseInlineEnvs';
+import { useJdks, toolKeys } from '../hooks/queries/useToolQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 /** Parsea contenido tipo .env (KEY=value, líneas vacías y # se ignoran). */
 function parseEnvFileContent(text: string): Record<string, string> {
@@ -33,6 +35,7 @@ interface EnvManagerProps {
 
 export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) => {
     const { state } = useWorkspace();
+    const queryClient = useQueryClient();
     const project = state.projects.find(p => (p.path as string) === projectPath);
     const isJava = project?.project_type === 'java';
 
@@ -44,12 +47,9 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
         reloadFromFiles,
     } = useProjectEnvs(projectPath);
 
-    const { jdks, projectJdks, setProjectJdk, fetchJdks } = useToolStore();
+    const { projectJdks, setProjectJdk } = useToolStore();
+    const { data: jdks = [], isLoading: loadingJdks } = useJdks();
     const [jdkModalOpen, setJdkModalOpen] = useState(false);
-
-    useEffect(() => {
-        if (isJava) fetchJdks();
-    }, [isJava, fetchJdks]);
 
     const [scriptBodies, setScriptBodies] = useState<string[]>([]);
     const [newKey, setNewKey] = useState('');
@@ -242,7 +242,7 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
                                     className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-slate-400 border border-slate-700 rounded-lg hover:border-microtermix-neon hover:text-microtermix-neon transition-colors"
                                 >
                                     <Plus size={12} />
-                                    <span className="font-bold">Descargar JDK</span>
+                                    <span className="font-bold">{loadingJdks ? 'Cargando...' : 'Descargar JDK'}</span>
                                 </button>
                             </div>
                         )}
@@ -275,7 +275,7 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
                                                 </button>
                                                 <button
                                                     onClick={() => { overwriteEnvVars(src, activeEnv); setCopyMenuOpen(false); }}
-                                                    className="w-full text-left px-4 py-2 text-slate-400 hover:bg-slate-700 flex items-center gap-2 text-[11px] transition-colors bg-slate-800/50"
+                                                    className="w-full text-left px-4 py-2.5 text-slate-400 hover:bg-slate-700 flex items-center gap-2 text-[11px] transition-colors bg-slate-800/50"
                                                 >
                                                     <span className="w-2.5 h-2.5 rounded-full shrink-0 opacity-50" style={{ backgroundColor: envColor(src) }} />
                                                     Reemplazar todo con <strong className="text-slate-300">{src}</strong>
