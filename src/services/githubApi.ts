@@ -1,5 +1,6 @@
 // A simple service to fetch PRs and Issues from GitHub
 import { invoke } from '@tauri-apps/api/core';
+import { fetch } from '@tauri-apps/plugin-http';
 
 const GITHUB_API_BASE = 'https://api.github.com';
 

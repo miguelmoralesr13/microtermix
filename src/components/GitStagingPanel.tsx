@@ -2,20 +2,14 @@ import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
-import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
+import { useGitStore, GitStatusEntry } from '../stores/gitStore';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
-
-interface GitStatusEntry {
-    file: string;
-    stateCode: string;
-    isStaged: boolean;
-    isUnstaged: boolean;
-    isConflicted: boolean;
-}
+import { useGitStatus, gitKeys, useGitTimeline } from '../hooks/queries/useGitQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ArrayTreeNode {
     name: string;
@@ -33,7 +27,7 @@ interface GitStagingPanelProps {
     onOpenConflictModal?: () => void;
 }
 
-// ── File tree node — defined OUTSIDE GitStagingPanel so React never remounts it ──
+// ── File tree node ──
 
 interface FileTreeNodeItemProps {
     node: ArrayTreeNode;
@@ -191,15 +185,11 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
     );
 });
 
-// ── buildTree helper — defined outside to avoid recreation ────────────────────
-
 function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
     const root: Record<string, any> = {};
-
     fileList.forEach(f => {
         const parts = f.file.split('/');
         let currentLevel = root;
-
         parts.forEach((part, index) => {
             if (!currentLevel[part]) {
                 currentLevel[part] = {
@@ -222,7 +212,6 @@ function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
             return a.isLeaf ? 1 : -1;
         }).map(node => {
             let checkState: 'checked' | 'unchecked' | 'partial' = 'unchecked';
-
             if (node.isLeaf) {
                 const st = node.status as GitStatusEntry;
                 if (st.isStaged && !st.isUnstaged) checkState = 'checked';
@@ -232,46 +221,29 @@ function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
                 node.children = toArray(node.children);
                 const allChecked = node.children.length > 0 && node.children.every((c: any) => c.checkState === 'checked');
                 const allUnchecked = node.children.length > 0 && node.children.every((c: any) => c.checkState === 'unchecked');
-
                 if (allChecked) checkState = 'checked';
                 else if (allUnchecked) checkState = 'unchecked';
                 else checkState = 'partial';
             }
-
             return { ...node, checkState };
         });
     };
-
     return toArray(root);
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────────
-
 export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onOpenConflictModal }) => {
-    const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
-    const fetchStatus = useGitStore(s => s.fetchStatus);
-    const fetchTimeline = useGitStore(s => s.fetchTimeline);
-    const invalidate = useGitStore(s => s.invalidate);
-
-    const { files, currentBranch, isMergeInProgress } = repo.status;
-    const loading = repo.loading.status;
-
-    // Debounced status refresh — batches rapid staging/unstaging bursts into one fetch
-    const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const refreshStatus = useCallback(() => {
-        if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        debounceTimer.current = setTimeout(() => {
-            invalidate(projectPath, 'status');
-            fetchStatus(projectPath, true);
-        }, 300);
-    }, [projectPath, invalidate, fetchStatus]);
+    const queryClient = useQueryClient();
+    const { data: statusData, isLoading: loading } = useGitStatus(projectPath);
+    
+    const files = statusData?.files || [];
+    const currentBranch = statusData?.currentBranch || '';
+    const isMergeInProgress = statusData?.isMergeInProgress || false;
 
     const [commitMessage, setCommitMessage] = useState('');
     const [isCommitting, setIsCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
 
-    // ── Derived values ────────────────────────────────────────────────────────
     const tree = useMemo(() => buildTree(files), [files]);
     const totalFiles = files.length;
     const isAnythingStaged = useMemo(() => files.some(f => f.isStaged), [files]);
@@ -287,36 +259,27 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const MasterCheckIcon = masterCheckState === 'checked' ? CheckSquare : (masterCheckState === 'partial' ? MinusSquare : Square);
     const masterCheckColor = masterCheckState === 'checked' ? 'text-microtermix-neon' : (masterCheckState === 'partial' ? 'text-microtermix-accent' : 'text-slate-500');
 
-    // Check merge / status / branch is now handled by fetchStatus inside gitStore
-    // which is triggered whenever the sidebar tab mounts or refresh is requested.
+    const handleRefresh = useCallback(() => {
+        queryClient.invalidateQueries({ queryKey: gitKeys.repo(projectPath) });
+    }, [projectPath, queryClient]);
 
     const handleStageToggleAll = useCallback(async (stage: boolean) => {
         setError(null);
         try {
-            if (stage) {
-                await invoke('git_execute', { projectPath, args: ['add', '.'] });
-            } else {
-                await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
-            }
-            refreshStatus();
-        } catch (e: any) {
-            setError(e?.toString() || 'Failed to toggle stage all');
-        }
-    }, [projectPath, refreshStatus]);
+            if (stage) await invoke('git_execute', { projectPath, args: ['add', '.'] });
+            else await invoke('git_execute', { projectPath, args: ['restore', '--staged', '.'] });
+            handleRefresh();
+        } catch (e: any) { setError(e?.toString() || 'Failed to toggle stage all'); }
+    }, [projectPath, handleRefresh]);
 
     const handleToggleNode = useCallback(async (node: ArrayTreeNode) => {
         setError(null);
         try {
-            if (node.checkState === 'checked') {
-                await invoke('git_execute', { projectPath, args: ['restore', '--staged', node.fullPath] });
-            } else {
-                await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
-            }
-            refreshStatus();
-        } catch (e: any) {
-            setError(e?.toString() || 'Failed to toggle stage');
-        }
-    }, [projectPath, refreshStatus]);
+            if (node.checkState === 'checked') await invoke('git_execute', { projectPath, args: ['restore', '--staged', node.fullPath] });
+            else await invoke('git_execute', { projectPath, args: ['add', node.fullPath] });
+            handleRefresh();
+        } catch (e: any) { setError(e?.toString() || 'Failed to toggle stage'); }
+    }, [projectPath, handleRefresh]);
 
     const handleDiscardNode = useCallback(async (node: ArrayTreeNode) => {
         setError(null);
@@ -328,11 +291,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 next.delete(node.fullPath);
                 return next;
             });
-            refreshStatus();
-        } catch (e: any) {
-            setError(e?.toString() || 'Failed to discard changes');
-        }
-    }, [projectPath, refreshStatus]);
+            handleRefresh();
+        } catch (e: any) { setError(e?.toString() || 'Failed to discard changes'); }
+    }, [projectPath, handleRefresh]);
 
     const toggleSelectedForRollback = useCallback((path: string) => {
         setSelectedForRollback((prev) => {
@@ -352,11 +313,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
             }
             setSelectedForRollback(new Set());
-            refreshStatus();
-        } catch (e: any) {
-            setError(e?.toString() || 'Failed to discard selected');
-        }
-    }, [selectedForRollback, projectPath, refreshStatus]);
+            handleRefresh();
+        } catch (e: any) { setError(e?.toString() || 'Failed to discard selected'); }
+    }, [selectedForRollback, projectPath, handleRefresh]);
 
     const handleCommit = useCallback(async () => {
         if (!commitMessage.trim() || !isAnythingStaged) return;
@@ -368,66 +327,43 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 setError(result.stderr || 'Commit failed');
             } else {
                 setCommitMessage('');
-                invalidate(projectPath, 'status');
-                fetchStatus(projectPath, true);
-                invalidate(projectPath, 'timeline');
-                fetchTimeline(projectPath, true);
+                handleRefresh();
             }
         } finally {
             setIsCommitting(false);
         }
-    }, [commitMessage, projectPath, isAnythingStaged, invalidate, fetchStatus, fetchTimeline]);
+    }, [commitMessage, projectPath, isAnythingStaged, handleRefresh]);
 
     const handleAbortMerge = useCallback(async () => {
         try {
             const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
-            if (!res.success) {
-                setError(res.stderr || 'Failed to abort merge');
-            } else {
-                invalidate(projectPath, 'status');
-                fetchStatus(projectPath, true);
-                invalidate(projectPath, 'timeline');
-                fetchTimeline(projectPath, true);
-            }
-        } catch (e: any) {
-            setError(e?.message ?? 'Failed to abort merge');
-        }
-    }, [projectPath, invalidate, fetchStatus, fetchTimeline]);
-
-
-    const handleMasterToggle = useCallback(async () => {
-        if (masterCheckState === 'checked') {
-            await handleStageToggleAll(false);
-        } else {
-            await handleStageToggleAll(true);
-        }
-    }, [masterCheckState, handleStageToggleAll]);
+            if (!res.success) setError(res.stderr || 'Failed to abort merge');
+            else handleRefresh();
+        } catch (e: any) { setError(e?.message ?? 'Failed to abort merge'); }
+    }, [projectPath, handleRefresh]);
 
     return (
         <div className="flex flex-col h-full min-w-0 bg-slate-950 border-l border-slate-800 w-full">
-            {/* Sync Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/50 block">
                 <h3 className="text-sm font-bold text-slate-300 flex items-center">
                     <Layers size={16} className="mr-2 text-microtermix-accent" /> Source Control
                 </h3>
                 <div className="flex space-x-1">
-                    <Button variant="ghost" size="icon-sm" onClick={() => { invalidate(projectPath, 'status'); fetchStatus(projectPath, true); }} className={`text-slate-400 hover:text-white hover:bg-slate-800 ${loading ? 'animate-spin' : ''}`} title="Refresh">
+                    <Button variant="ghost" size="icon-sm" onClick={handleRefresh} className={cn("text-slate-400 hover:text-white", loading && 'animate-spin')} title="Refresh">
                         <RefreshCw size={16} />
                     </Button>
                 </div>
             </div>
 
-            {/* Error Banner */}
             {error && (
                 <div className="p-3 bg-microtermix-danger/10 text-microtermix-danger text-xs border-b border-microtermix-danger/20 max-h-32 overflow-y-auto">
                     {error}
                 </div>
             )}
 
-            {/* File Tree */}
             <div className="flex-1 overflow-y-auto py-2 scrollbar-hide">
                 <div className="flex items-center justify-between px-3 mb-2 flex-wrap gap-2">
-                    <div className="flex items-center cursor-pointer group" onClick={handleMasterToggle}>
+                    <div className="flex items-center cursor-pointer group" onClick={() => handleStageToggleAll(masterCheckState !== 'checked')}>
                         <MasterCheckIcon size={14} className={`${masterCheckColor} group-hover:text-white transition-colors mr-2`} />
                         <span className="text-xs font-bold text-slate-400 group-hover:text-slate-200 uppercase tracking-wider">Changes ({totalFiles})</span>
                     </div>
@@ -438,14 +374,13 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                             onClick={handleDiscardSelected}
                             disabled={loading || selectedForRollback.size === 0}
                             className="flex items-center gap-1.5 rounded bg-microtermix-danger/20 text-microtermix-danger hover:bg-microtermix-danger/30 border border-microtermix-danger/40 disabled:opacity-50"
-                            title="Discard selected files (no confirmation)"
                         >
                             <RotateCcw size={12} />
                             Rollback selected ({selectedForRollback.size})
                         </Button>
                     )}
                 </div>
-                {totalFiles === 0 ? (
+                {totalFiles === 0 && !loading ? (
                     <div className="text-xs text-slate-600 px-8 py-2 italic font-mono">Working tree is clean.</div>
                 ) : (
                     <div>
@@ -465,7 +400,6 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 )}
             </div>
 
-            {/* Commit Box */}
             <div className="p-4 border-t border-slate-800 bg-slate-900/30">
                 {isMergeInProgress && (
                     <div className="mb-3 p-2.5 bg-orange-500/10 border border-orange-500/20 rounded-lg flex flex-col gap-2">
@@ -473,23 +407,12 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                             <span className="text-xs font-bold text-orange-400 flex items-center gap-1">
                                 <AlertTriangle size={12} /> Merge in Progress
                             </span>
-                            <Button
-                                variant="destructive"
-                                size="xs"
-                                onClick={handleAbortMerge}
-                                className="h-6 px-2 text-[10px] font-bold"
-                            >
-                                Abort
-                            </Button>
+                            <Button variant="destructive" size="xs" onClick={handleAbortMerge} className="h-6 px-2 text-[10px] font-bold">Abort</Button>
                         </div>
                         {conflictedFilesCount > 0 && (
-                            <Button
-                                variant="outline"
-                                onClick={onOpenConflictModal}
-                                className="w-full bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/30 text-orange-300 hover:text-orange-200 mt-2 text-xs font-bold font-sans"
-                            >
+                            <Button variant="outline" onClick={onOpenConflictModal} className="w-full bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/30 text-orange-300 mt-2 text-xs font-bold font-sans">
                                 <GitMerge size={12} className="mr-1.5" />
-                                Resolver conflictos ({conflictedFilesCount} {conflictedFilesCount === 1 ? 'archivo' : 'archivos'})
+                                Resolver conflictos ({conflictedFilesCount})
                             </Button>
                         )}
                     </div>
@@ -499,22 +422,14 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                     onChange={(e: any) => setCommitMessage(e.target.value)}
                     placeholder="Commit message (Ctrl+Enter)"
                     className="w-full bg-slate-950 border-slate-800 text-sm text-slate-200 focus-visible:ring-1 focus-visible:ring-microtermix-accent min-h-[80px] mb-3 resize-none"
-                    onKeyDown={(e: any) => {
-                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                            handleCommit();
-                        }
-                    }}
+                    onKeyDown={(e: any) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCommit(); }}
                 />
                 <Button
                     onClick={handleCommit}
                     disabled={isCommitting || !isAnythingStaged || !commitMessage.trim()}
                     className="w-full bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold mb-3 flex items-center justify-center font-sans"
                 >
-                    {isCommitting ? (
-                        <>Committing...</>
-                    ) : (
-                        <><GitCommit size={16} className="mr-2" /> Commit</>
-                    )}
+                    {isCommitting ? <>Committing...</> : <><GitCommit size={16} className="mr-2" /> Commit</>}
                 </Button>
                 <GitJiraCommitButton
                     projectPath={projectPath}
@@ -523,10 +438,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                     currentBranch={currentBranch}
                     onSuccess={() => {
                         setCommitMessage('');
-                        invalidate(projectPath, 'status');
-                        fetchStatus(projectPath, true);
-                        invalidate(projectPath, 'timeline');
-                        fetchTimeline(projectPath, true);
+                        handleRefresh();
                     }}
                 />
             </div>

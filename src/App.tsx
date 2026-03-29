@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { useAppLogStore } from './stores/appLogStore';
+import { useGitWatcher } from "./hooks/queries/useGitQueries";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,7 +30,6 @@ registerMonacoThemes();
 function AppContent() {
   const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, addProjectsFromPaths, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
   const configLoadedForPathRef = React.useRef<string | null>(null);
-  const initWatchers = useGitStore(s => s.initWatchers);
   const initAppLogListener = useAppLogStore(s => s.initListener);
 
   // Global App Log Listener (Background)
@@ -44,21 +44,9 @@ function AppContent() {
   const isStandalone = params.get('standalone') === 'true';
   const standaloneUtility = params.get('utility') as AppView | null;
 
-  // Iniciar watchers globales para Git
-  React.useEffect(() => {
-    if (state.projects.length > 0) {
-      const paths = state.projects.map(p => p.path as string);
-      let cleanup: (() => Promise<void>) | undefined;
-
-      initWatchers(paths).then(c => {
-        cleanup = c;
-      });
-
-      return () => {
-        if (cleanup) cleanup();
-      };
-    }
-  }, [state.projects.length, initWatchers]);
+  // Iniciar watchers globales para Git (React Query)
+  const projectPaths = React.useMemo(() => state.projects.map(p => p.path as string), [state.projects]);
+  useGitWatcher(projectPaths);
 
   React.useEffect(() => {
     const initWorkspace = async () => {

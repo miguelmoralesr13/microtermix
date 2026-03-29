@@ -4,7 +4,7 @@ import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Tr
 import { GitlabBranchViewerModal } from './gitlab/GitlabBranchViewerModal';
 import { toast } from 'sonner';
 import { PushPreviewModal } from './PushPreviewModal';
-import { useGitStore, EMPTY_REPO_DATA } from '../stores/gitStore';
+import { useGitStore } from '../stores/gitStore';
 import { MergeConfirmModal } from './MergeConfirmModal';
 import { PRSection } from './PRSection';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
@@ -12,6 +12,8 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { cn } from '../lib/utils';
+import { useGitBranches, useGitAheadBehind, useGitStatus, gitKeys } from '../hooks/queries/useGitQueries';
+import { useQueryClient } from '@tanstack/react-query';
 import {
     DndContext,
     useDraggable,
@@ -183,17 +185,20 @@ const ActiveBranchDropZone = ({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRequest }) => {
-    const repo = useGitStore(s => s.repos[projectPath] ?? EMPTY_REPO_DATA);
-    const aheadBehind = repo.aheadBehind;
+    const queryClient = useQueryClient();
+    
+    // Queries
+    const { data: branchesData, isLoading: loadingBranches } = useGitBranches(projectPath);
+    const { data: aheadBehind } = useGitAheadBehind(projectPath);
+    const { data: statusData } = useGitStatus(projectPath);
+
+    // Zustand
     const branchFilter = useGitStore(s => s.ui.branchFilter);
     const setUi = useGitStore(s => s.setUi);
-    const fetchAheadBehind = useGitStore(s => s.fetchAheadBehind);
-    const fetchAll = useGitStore(s => s.fetchAll);
-    const invalidate = useGitStore(s => s.invalidate);
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+    const activeAccount = getActiveAccount(projectPath);
 
-
-    const { local: localBranches, remote: remoteBranches, stashes } = repo.branches;
-    const loading = repo.loading.branches;
+    const { local: localBranches = [], remote: remoteBranches = [], stashes = [] } = branchesData || {};
 
     const [showLocal, setShowLocal] = useState(true);
     const [showRemote, setShowRemote] = useState(false);
@@ -224,6 +229,11 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         })
     );
 
+    const handleRefresh = () => {
+        queryClient.invalidateQueries({ queryKey: gitKeys.repo(projectPath) });
+        onRefreshRequest?.();
+    };
+
     const handleCheckout = async (branch: string, isRemote: boolean) => {
         try {
             let checkoutBranch = branch;
@@ -235,7 +245,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             if (res && res.success === false) {
                 alert(res.stderr || res.stdout || 'Error al cambiar de rama');
             } else {
-                onRefreshRequest?.();
+                handleRefresh();
             }
         } catch (e: any) {
             alert(e?.toString() || 'Error al ejecutar checkout');
@@ -245,7 +255,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const handleStashSave = async () => {
         try {
             await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Stashed via Microtermix'] });
-            onRefreshRequest?.();
+            handleRefresh();
         } catch { /* no-op */ }
     };
 
@@ -257,7 +267,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                 if (res?.success === false) {
                     alert(res.stderr || 'Error al aplicar stash');
                 } else {
-                    onRefreshRequest?.();
+                    handleRefresh();
                 }
             }
         } catch (e: any) {
@@ -271,7 +281,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             const idMatch = stashId.match(/stash@\{\d+\}/);
             if (idMatch) {
                 await invoke('git_execute', { projectPath, args: ['stash', 'drop', idMatch[0]] });
-                onRefreshRequest?.();
+                handleRefresh();
             }
         } catch { /* no-op */ }
     };
@@ -282,12 +292,12 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['branch', '-d', branchName] });
             if (result?.success !== false) {
-                onRefreshRequest?.();
+                handleRefresh();
             } else {
                 const msg = result?.stderr || 'Could not delete branch. Not fully merged? Try force delete.';
                 if (confirm(`${msg}\n\nForce delete anyway?`)) {
                     await invoke('git_execute', { projectPath, args: ['branch', '-D', branchName] });
-                    onRefreshRequest?.();
+                    handleRefresh();
                 }
             }
         } catch { /* no-op */ }
@@ -298,15 +308,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         setPullError(null);
         try {
             const result: any = await invoke('git_execute', { projectPath, args: ['pull'] });
-
-            // Esperar un breve instante para que el filesystem se asiente antes de refrescar
             await new Promise(resolve => setTimeout(resolve, 500));
-
-            // Refresco profundo
-            invalidate(projectPath);
-            await fetchAll(projectPath, true);
-            await fetchAheadBehind(projectPath, true);
-            onRefreshRequest?.();
+            handleRefresh();
 
             if (!result.success) {
                 toast.error("Pull Failed", { description: "You may have local changes or history has diverged." });
@@ -316,14 +319,9 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                 });
             }
         } catch (e: any) {
-            // e is the string error returned by Rust Result::Err
             const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : String(e));
-            console.error('[Pull] invoke error:', msg);
             toast.error("Pull Error", { description: msg });
-            setPullError({
-                message: "Pull Error: History has diverged or conflicts exist.",
-                raw: msg
-            });
+            setPullError({ message: "Pull Error", raw: msg });
         } finally {
             setIsPulling(false);
         }
@@ -334,34 +332,19 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             setPullError(null);
             return;
         }
-
         setIsResolvingPull(true);
         try {
             if (action === 'rebase') {
-                const result: any = await invoke('git_execute', { projectPath, args: ['pull', '--rebase', '--autostash'] });
-                // If there's a conflict preventing checkout, it's actually just a rebase conflict.
-                // It's not a terminal error; the rebase has started and now needs resolution. 
-                if (result && !result.success && (result.stderr?.includes('conflict') || result.stderr?.includes('Conflict'))) {
-                    // Do nothing, let the system detect isRebaseInProgress and show the resolution UI
-                    console.log("[Pull Rebase] Detected conflict, deferring to conflict resolution UI");
-                } else if (!result.success && result.stderr) {
-                    throw new Error(result.stderr);
-                }
+                await invoke('git_execute', { projectPath, args: ['pull', '--rebase', '--autostash'] });
             } else if (action === 'stash') {
                 await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Auto-stash before pull'] });
                 await invoke('git_execute', { projectPath, args: ['pull'] });
                 await invoke('git_execute', { projectPath, args: ['stash', 'pop'] });
             }
-            onRefreshRequest?.();
-            // Force status fetch so the conflict modal opens immediately
-            invalidate(projectPath, 'status');
-            fetchAll(projectPath, true);
+            handleRefresh();
             setPullError(null);
         } catch (e: any) {
-            setPullError({
-                message: "Action Failed",
-                raw: e.message || String(e)
-            });
+            setPullError({ message: "Action Failed", raw: e.message || String(e) });
         } finally {
             setIsResolvingPull(false);
         }
@@ -378,28 +361,9 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         const { active, over } = event;
         if (over?.id === 'active-branch-drop') {
             const sourceBranch = active.data.current?.branchName as string | undefined;
-            if (sourceBranch) {
-                setShowMergeModal(sourceBranch);
-            }
+            if (sourceBranch) setShowMergeModal(sourceBranch);
         }
     };
-
-    const handleDragCancel = () => {
-        setIsDraggingAny(false);
-        setActiveDragLabel('');
-    };
-
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                if (pullError) setPullError(null);
-                if (showMergeModal) setShowMergeModal(null);
-                if (showPushModal) setShowPushModal(false);
-            }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, [pullError, showMergeModal, showPushModal]);
 
     const SectionHeader: React.FC<{ title: string; count: number; isExpanded: boolean; onToggle: () => void }> = ({ title, count, isExpanded, onToggle }) => (
         <div
@@ -414,299 +378,111 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     );
 
     const activeBranch = localBranches.find(b => b.active);
-    const getActiveAccount = useGitStore(s => s.getActiveAccount);
-    const activeAccount = getActiveAccount(projectPath);
-    // Strip remote prefix (e.g. "origin/main" → "main") and merge with local for branch selectors
     const allBranchNames = [...new Set([
         ...localBranches.map(b => b.name),
         ...remoteBranches.map(r => r.replace(/^[^/]+\//, '')),
     ])].sort();
 
     return (
-        <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-        >
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setIsDraggingAny(false)}>
             <div className="w-full h-full min-w-0 bg-slate-950 border-r border-slate-800 flex flex-col">
-                {/* Header Toolbar */}
                 <div className="flex flex-col gap-2 p-3 border-b border-slate-800 bg-slate-900/50">
                     <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-300">Workspace</span>
                         <div className="flex space-x-1">
-                            <Button variant="ghost" size="icon-sm" onClick={handleStashSave} className="text-slate-400 hover:text-microtermix-accent hover:bg-slate-800" title="Stash Changes">
+                            <Button variant="ghost" size="icon-sm" onClick={handleStashSave} className="text-slate-400 hover:text-microtermix-accent" title="Stash Changes">
                                 <Download size={14} />
                             </Button>
                             {stashes.length > 0 && (
-                                <Button variant="ghost" size="icon-sm" onClick={() => handleStashPop(stashes[0])} className="text-slate-400 hover:text-microtermix-success hover:bg-slate-800" title="Pop Latest Stash">
+                                <Button variant="ghost" size="icon-sm" onClick={() => handleStashPop(stashes[0])} className="text-slate-400 hover:text-microtermix-success" title="Pop Latest Stash">
                                     <UploadCloud size={14} />
                                 </Button>
                             )}
-                            <Button
-                                variant="ghost" size="icon-sm"
-                                onClick={handlePull}
-                                disabled={isPulling}
-                                className={[
-                                    'relative cursor-pointer disabled:cursor-not-allowed',
-                                    isPulling ? 'opacity-70' : '',
-                                    aheadBehind?.behind && !isPulling
-                                        ? 'text-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-500/50 shadow-[0_0_8px_rgba(34,211,238,0.45)] animate-pulse hover:bg-cyan-500/20'
-                                        : 'text-slate-400 hover:text-microtermix-success hover:bg-slate-800',
-                                ].join(' ')}
-                                title={aheadBehind?.behind ? `Pull — ${aheadBehind.behind} commit${aheadBehind.behind > 1 ? 's' : ''} behind` : 'Pull'}
-                            >
+                            <Button variant="ghost" size="icon-sm" onClick={handlePull} disabled={isPulling}
+                                className={cn('relative', aheadBehind?.behind && !isPulling && 'text-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-500/50 animate-pulse')}>
                                 {isPulling ? <RefreshCw size={14} className="animate-spin" /> : <DownloadCloud size={14} />}
-                                {!!aheadBehind?.behind && !isPulling && (
-                                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-cyan-500 text-[8px] font-bold text-white rounded-full flex items-center justify-center px-0.5 leading-none">
-                                        {aheadBehind.behind > 9 ? '9+' : aheadBehind.behind}
-                                    </span>
-                                )}
+                                {!!aheadBehind?.behind && !isPulling && <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-cyan-500 text-[8px] font-bold text-white rounded-full flex items-center justify-center px-0.5 leading-none">{aheadBehind.behind > 9 ? '9+' : aheadBehind.behind}</span>}
                             </Button>
-                            <Button
-                                variant="ghost" size="icon-sm"
-                                onClick={() => setShowPushModal(true)}
-                                className={[
-                                    'relative cursor-pointer',
-                                    aheadBehind?.ahead
-                                        ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.45)] animate-pulse hover:bg-amber-500/20'
-                                        : 'text-slate-400 hover:text-microtermix-accent hover:bg-slate-800',
-                                ].join(' ')}
-                                title={aheadBehind?.ahead ? `Push — ${aheadBehind.ahead} commit${aheadBehind.ahead > 1 ? 's' : ''} ahead` : 'Push (Preview commits)'}
-                            >
+                            <Button variant="ghost" size="icon-sm" onClick={() => setShowPushModal(true)}
+                                className={cn('relative', aheadBehind?.ahead && 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/50 animate-pulse')}>
                                 <UploadCloud size={14} />
-                                {!!aheadBehind?.ahead && (
-                                    <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-amber-500 text-[8px] font-bold text-white rounded-full flex items-center justify-center px-0.5 leading-none">
-                                        {aheadBehind.ahead > 9 ? '9+' : aheadBehind.ahead}
-                                    </span>
-                                )}
+                                {!!aheadBehind?.ahead && <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] bg-amber-500 text-[8px] font-bold text-white rounded-full flex items-center justify-center px-0.5 leading-none">{aheadBehind.ahead > 9 ? '9+' : aheadBehind.ahead}</span>}
                             </Button>
-                            <Button variant="ghost" size="icon-sm" onClick={() => onRefreshRequest?.()} className={`text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer ${loading ? 'animate-spin' : ''}`} title="Refresh">
+                            <Button variant="ghost" size="icon-sm" onClick={handleRefresh} className={cn("text-slate-400 hover:text-white", loadingBranches && 'animate-spin')} title="Refresh">
                                 <RefreshCw size={14} />
                             </Button>
                         </div>
                     </div>
-                    {/* Branch filter */}
                     <div className="flex rounded bg-slate-800/80 p-0.5">
                         {(['all', 'local', 'remote'] as const).map((f) => (
-                            <Button
-                                key={f}
-                                variant={branchFilter === f ? 'secondary' : 'ghost'}
-                                size="xs"
-                                onClick={() => setUi({ branchFilter: f })}
-                                className={`flex-1 rounded capitalize transition-colors ${branchFilter === f ? 'bg-microtermix-neon text-microtermix-darker hover:bg-microtermix-neon/90 hover:text-microtermix-darker' : 'text-slate-400 hover:text-slate-200 hover:bg-transparent'}`}
-                            >
-                                {f === 'all' ? 'All' : f === 'local' ? 'Local' : 'Remote'}
+                            <Button key={f} variant={branchFilter === f ? 'secondary' : 'ghost'} size="xs" onClick={() => setUi({ branchFilter: f })}
+                                className={cn('flex-1 rounded capitalize transition-colors', branchFilter === f ? 'bg-microtermix-neon text-microtermix-darker' : 'text-slate-400')}>
+                                {f}
                             </Button>
                         ))}
                     </div>
-                    {/* Branch search */}
                     <div className="relative">
                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" size={12} />
-                        <Input
-                            type="text"
-                            value={branchSearch}
-                            onChange={(e) => setBranchSearch(e.target.value)}
-                            placeholder="Search branches..."
-                            className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-2 text-xs text-slate-200 placeholder:text-slate-500 focus-visible:ring-1 focus-visible:ring-microtermix-neon transition-colors"
-                        />
+                        <Input type="text" value={branchSearch} onChange={(e) => setBranchSearch(e.target.value)} placeholder="Search branches..." className="w-full bg-slate-950 border-slate-800 h-8 pl-7 pr-2 text-xs text-slate-200" />
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto py-2 scrollbar-hide transition-all">
-
-                    {/* Local Branches */}
+                <div className="flex-1 overflow-y-auto py-2 scrollbar-hide">
                     {(branchFilter === 'all' || branchFilter === 'local') && (
                         <>
                             <SectionHeader title="Local" count={filteredLocal.length} isExpanded={showLocal} onToggle={() => setShowLocal(!showLocal)} />
                             {showLocal && (
                                 <div className="mb-2">
-                                    {filteredLocal.length === 0 ? (
-                                        <div className="px-4 py-1 text-xs text-slate-600 italic">
-                                            {localBranches.length === 0 ? 'No local branches.' : 'No branches match search.'}
-                                        </div>
-                                    ) : (
-                                        filteredLocal.map(b =>
-                                            b.active ? (
-                                                <ActiveBranchDropZone
-                                                    key={b.name}
-                                                    branchName={b.name}
-                                                    isDraggingAny={isDraggingAny}
-                                                />
-                                            ) : (
-                                                <DraggableBranchItem
-                                                    key={b.name}
-                                                    id={`local-${b.name}`}
-                                                    branchName={b.name}
-                                                    handleCheckout={handleCheckout}
-                                                    handleDeleteLocalBranch={handleDeleteLocalBranch}
-                                                    setShowMergeModal={setShowMergeModal}
-                                                />
-                                            )
-                                        )
+                                    {filteredLocal.map(b => b.active ? <ActiveBranchDropZone key={b.name} branchName={b.name} isDraggingAny={isDraggingAny} /> : 
+                                        <DraggableBranchItem key={b.name} id={`local-${b.name}`} branchName={b.name} handleCheckout={handleCheckout} handleDeleteLocalBranch={handleDeleteLocalBranch} setShowMergeModal={setShowMergeModal} />
                                     )}
                                 </div>
                             )}
                         </>
                     )}
 
-                    {/* Remote Branches */}
                     {(branchFilter === 'all' || branchFilter === 'remote') && (
                         <>
                             <SectionHeader title="Remote" count={filteredRemote.length} isExpanded={showRemote} onToggle={() => setShowRemote(!showRemote)} />
                             {showRemote && (
                                 <div className="mb-2">
-                                    {filteredRemote.length === 0 ? (
-                                        <div className="px-4 py-1 text-xs text-slate-600 italic">
-                                            {remoteBranches.length === 0 ? 'No remote branches.' : 'No branches match search.'}
-                                        </div>
-                                    ) : (
-                                        filteredRemote.map(r => (
-                                            <DraggableBranchItem
-                                                key={r}
-                                                id={`remote-${r}`}
-                                                branchName={r}
-                                                isRemote
-                                                handleCheckout={handleCheckout}
-                                                setShowMergeModal={setShowMergeModal}
-                                                showViewCode={activeAccount?.provider === 'gitlab'}
-                                                onViewCode={(b) => {
-                                                    const parts = b.split('/');
-                                                    setViewCodeBranch(parts.length > 1 ? parts.slice(1).join('/') : b);
-                                                }}
-                                            />
-                                        ))
-                                    )}
+                                    {filteredRemote.map(r => <DraggableBranchItem key={r} id={`remote-${r}`} branchName={r} isRemote handleCheckout={handleCheckout} setShowMergeModal={setShowMergeModal} showViewCode={activeAccount?.provider === 'gitlab'} onViewCode={(b) => setViewCodeBranch(b.split('/').slice(1).join('/') || b)} />)}
                                 </div>
                             )}
                         </>
                     )}
 
-                    {/* Stashes */}
                     <SectionHeader title="Stashes" count={stashes.length} isExpanded={showStashes} onToggle={() => setShowStashes(!showStashes)} />
                     {showStashes && (
                         <div className="mb-2">
-                            {stashes.length === 0 ? (
-                                <div className="px-4 py-1 text-xs text-slate-600 italic">No stashes.</div>
-                            ) : (
-                                stashes.map(stash => (
-                                    <div
-                                        key={stash}
-                                        onDoubleClick={() => handleStashPop(stash)}
-                                        className="flex items-center px-3 py-1 text-xs cursor-pointer text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 group transition-colors"
-                                    >
-                                        <Archive size={12} className="mr-2 text-slate-500 shrink-0" />
-                                        <span className="truncate flex-1">{stash.split(': ').slice(1).join(': ') || stash}</span>
-                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Tooltip>
-                                                <TooltipTrigger render={
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-xs"
-                                                        onClick={(e) => { e.stopPropagation(); handleStashPop(stash); }}
-                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-accent rounded"
-                                                    >
-                                                        <PackageOpen size={12} />
-                                                    </Button>
-                                                } />
-                                                <TooltipContent>Stash Pop (Apply & Delete)</TooltipContent>
-                                            </Tooltip>
-
-                                            <Tooltip>
-                                                <TooltipTrigger render={
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon-xs"
-                                                        onClick={(e) => { e.stopPropagation(); handleStashDrop(stash); }}
-                                                        className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-danger rounded"
-                                                    >
-                                                        <Trash2 size={12} />
-                                                    </Button>
-                                                } />
-                                                <TooltipContent>Stash Drop (Delete)</TooltipContent>
-                                            </Tooltip>
-                                        </div>
+                            {stashes.map(stash => (
+                                <div key={stash} onDoubleClick={() => handleStashPop(stash)} className="flex items-center px-3 py-1 text-xs cursor-pointer text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 group transition-colors">
+                                    <Archive size={12} className="mr-2 text-slate-500 shrink-0" />
+                                    <span className="truncate flex-1">{stash.split(': ').slice(1).join(': ') || stash}</span>
+                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); handleStashPop(stash); }} className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-accent rounded"><PackageOpen size={12} /></Button>} /><TooltipContent>Stash Pop</TooltipContent></Tooltip>
+                                        <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); handleStashDrop(stash); }} className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-danger rounded"><Trash2 size={12} /></Button>} /><TooltipContent>Stash Drop</TooltipContent></Tooltip>
                                     </div>
-                                ))
-                            )}
+                                </div>
+                            ))}
                         </div>
                     )}
 
-                    {/* Pull Requests / Merge Requests */}
-                    <PRSection
-                        projectPath={projectPath}
-                        account={activeAccount}
-                        activeBranch={activeBranch?.name ?? ''}
-                        branches={allBranchNames}
-                    />
-
+                    <PRSection projectPath={projectPath} account={activeAccount} activeBranch={activeBranch?.name ?? ''} branches={allBranchNames} />
                 </div>
             </div>
 
-            {/* Ghost label while dragging */}
-            <DragOverlay dropAnimation={null}>
-                {isDraggingAny && activeDragLabel ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-microtermix-neon/50 rounded-lg shadow-xl text-xs text-microtermix-neon font-mono select-none">
-                        <GitBranch size={11} />
-                        {activeDragLabel}
-                    </div>
-                ) : null}
-            </DragOverlay>
+            <DragOverlay dropAnimation={null}>{isDraggingAny && activeDragLabel && <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-microtermix-neon/50 rounded-lg shadow-xl text-xs text-microtermix-neon font-mono select-none"><GitBranch size={11} />{activeDragLabel}</div>}</DragOverlay>
 
-            {/* Modals */}
-            {showPushModal && (
-                <PushPreviewModal
-                    projectPath={projectPath}
-                    onClose={() => setShowPushModal(false)}
-                    onRefreshRequest={onRefreshRequest}
-                />
-            )}
-            {showMergeModal && (
-                <MergeConfirmModal
-                    projectPath={projectPath}
-                    sourceBranch={showMergeModal}
-                    currentBranch={activeBranch?.name || ''}
-                    onClose={() => setShowMergeModal(null)}
-                    onMergeComplete={() => onRefreshRequest?.()}
-                />
-            )}
+            {showPushModal && <PushPreviewModal projectPath={projectPath} onClose={() => setShowPushModal(false)} onRefreshRequest={handleRefresh} />}
+            {showMergeModal && <MergeConfirmModal projectPath={projectPath} sourceBranch={showMergeModal} currentBranch={activeBranch?.name || ''} onClose={() => setShowMergeModal(null)} onMergeComplete={handleRefresh} />}
+            {viewCodeBranch && activeAccount && <GitlabBranchViewerModal isOpen={!!viewCodeBranch} onClose={() => setViewCodeBranch(null)} projectPath={projectPath} token={activeAccount.token} branch={viewCodeBranch} apiUrl={activeAccount.url} />}
 
-            {viewCodeBranch && activeAccount && (
-                <GitlabBranchViewerModal
-                    isOpen={!!viewCodeBranch}
-                    onClose={() => setViewCodeBranch(null)}
-                    projectPath={projectPath}
-                    token={activeAccount.token}
-                    branch={viewCodeBranch}
-                    apiUrl={activeAccount.url}
-                />
-            )}
-
-            {/* Pull Error Dialog */}
             <Dialog open={!!pullError} onOpenChange={(open) => !open && setPullError(null)}>
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle className="text-red-500 flex items-center gap-2">
-                            <AlertTriangle size={18} /> Error al hacer Pull
-                        </DialogTitle>
-                        <DialogDescription>
-                            {pullError?.message}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="bg-slate-950 p-3 rounded-md border border-slate-800 font-mono text-xs text-slate-300 max-h-40 overflow-y-auto whitespace-pre-wrap">
-                        {pullError?.raw}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => handlePullAction('abort')} disabled={isResolvingPull}>
-                            Cancelar
-                        </Button>
-                        <Button variant="secondary" onClick={() => handlePullAction('stash')} disabled={isResolvingPull}>
-                            Stash & Pull
-                        </Button>
-                        <Button onClick={() => handlePullAction('rebase')} disabled={isResolvingPull}>
-                            Pull --rebase
-                        </Button>
-                    </DialogFooter>
+                    <DialogHeader><DialogTitle className="text-red-500 flex items-center gap-2"><AlertTriangle size={18} /> Error al hacer Pull</DialogTitle><DialogDescription>{pullError?.message}</DialogDescription></DialogHeader>
+                    <div className="bg-slate-950 p-3 rounded-md border border-slate-800 font-mono text-xs text-slate-300 max-h-40 overflow-y-auto whitespace-pre-wrap">{pullError?.raw}</div>
+                    <DialogFooter><Button variant="outline" onClick={() => setPullError(null)} disabled={isResolvingPull}>Cancelar</Button><Button variant="secondary" onClick={() => handlePullAction('stash')} disabled={isResolvingPull}>Stash & Pull</Button><Button onClick={() => handlePullAction('rebase')} disabled={isResolvingPull}>Pull --rebase</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
         </DndContext>
