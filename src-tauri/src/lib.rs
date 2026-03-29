@@ -26,6 +26,7 @@ mod app_logs;
 mod http_collections;
 mod ecs;
 mod lambda;
+mod s3;
 
 use std::fs;
 use std::path::Path;
@@ -33,6 +34,7 @@ use tauri::{AppHandle, Manager};
 
 // Re-export tipos de diff/git para usarlos en comandos Tauri.
 pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
+pub use crate::s3::{s3_list_buckets, s3_list_objects, s3_download_object};
 pub use crate::state::AppState;
 pub use crate::projects::{
     get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects,
@@ -483,6 +485,9 @@ pub fn run() {
             ecs_resolve_secret,
             lambda_list_functions,
             lambda_get_function,
+            s3_list_buckets,
+            s3_list_objects,
+            s3_download_object,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

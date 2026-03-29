@@ -54,6 +54,7 @@ export interface MicrotermixConfig {
     jiraActiveAccountId?: string | null;
     sonarConfig?: SonarConfig;
     ssmTunnels?: SsmTunnel[];
+    visibleUtilities?: Record<string, boolean>;
 }
 
 export const WORKSPACE_CONFIG_FILENAME = 'microtermix.json';
@@ -204,6 +205,7 @@ export function buildWorkspaceConfigFromCurrentState(
     savedCommandSteps: Record<string, CommandStep[]> = {},
     savedCommandTypes: Record<string, string> = {},
     pipelines: PipelineConfig[] = [],
+    visibleUtilities: Record<string, boolean> = {},
 ): MicrotermixConfig {
     const pathKey = (p: string) => p.replace(/[/\\:]/g, '_');
     const projectEnvs: Record<string, { activeEnv: string; envs: Record<string, Record<string, string>> }> = {};
@@ -251,5 +253,6 @@ export function buildWorkspaceConfigFromCurrentState(
         jiraActiveAccountId: useJiraStore.getState().activeAccountId,
         sonarConfig: useSonarStore.getState().config,
         ssmTunnels: useAwsStore.getState().ssm.tunnels,
+        visibleUtilities: Object.keys(visibleUtilities).length ? visibleUtilities : undefined,
     };
 }

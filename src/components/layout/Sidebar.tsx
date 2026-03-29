@@ -1,9 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { useUIStore } from '../../stores/uiStore';
+import { SettingsModal } from '../SettingsModal';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
     Network, Package, Ghost,  Cloud, Regex,
-    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette
+    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette,
+    Settings
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 
@@ -12,6 +15,7 @@ import {
 
 export const Sidebar: React.FC = () => {
     const { state, setActiveView } = useWorkspace();
+    const { visibleUtilities } = useUIStore();
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollUp, setCanScrollUp] = useState(false);
     const [canScrollDown, setCanScrollDown] = useState(false);
@@ -30,6 +34,7 @@ export const Sidebar: React.FC = () => {
     }, []);
 
     const renderNavIcon = (viewName: any, Icon: any, title: string) => {
+        if (visibleUtilities[viewName] === false) return null;
         const isActive = state.activeView === viewName;
         return (
             <div
@@ -81,6 +86,11 @@ export const Sidebar: React.FC = () => {
                     <div className="w-8 h-px bg-slate-800 my-2" />
                 )}
                 {process.env.NODE_ENV === 'development' && renderNavIcon('system', Terminal, "System & App Monitor")}
+            </div>
+
+            {/* Configuración */}
+            <div className="w-full flex flex-col items-center py-4 border-t border-slate-800">
+                <SettingsModal />
             </div>
 
             {/* Indicador Inferior */}

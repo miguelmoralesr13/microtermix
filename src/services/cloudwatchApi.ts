@@ -47,6 +47,19 @@ export interface CwDatapoint {
     value: number;
 }
 
+export interface S3Bucket {
+    name: string;
+    creation_date: number | null;
+}
+
+export interface S3Object {
+    key: string;
+    size: number;
+    last_modified: number | null;
+    storage_class: string;
+    is_folder: bool;
+}
+
 // ── Credential serialisation (camelCase → snake_case for Rust) ────────────────
 
 function toRust(cfg: CwCredentials) {
@@ -149,5 +162,27 @@ export function cwGetMetricData(
         }
 
         export function cwStopTail(workerId: string): Promise<void> {
-        return invoke('cw_stop_tail', { workerId });
+            return invoke('cw_stop_tail', { workerId });
+        }
+
+        export function s3ListBuckets(cfg: CwCredentials): Promise<S3Bucket[]> {
+            return invoke('s3_list_buckets', { credentials: toRust(cfg) });
+        }
+
+        export function s3ListObjects(cfg: CwCredentials, bucket: string, prefix?: string, delimiter?: string): Promise<S3Object[]> {
+            return invoke('s3_list_objects', {
+                credentials: toRust(cfg),
+                bucket,
+                prefix: prefix ?? null,
+                delimiter: delimiter ?? null,
+            });
+        }
+
+        export function s3DownloadObject(cfg: CwCredentials, bucket: string, key: string, localPath: string): Promise<void> {
+            return invoke('s3_download_object', {
+                credentials: toRust(cfg),
+                bucket,
+                key,
+                localPath,
+            });
         }

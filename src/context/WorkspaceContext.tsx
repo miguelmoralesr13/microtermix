@@ -198,6 +198,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                     state.savedCommandSteps,
                     state.savedCommandTypes,
                     state.pipelines,
+                    uiStore.visibleUtilities,
                 );
                 
                 await invoke('write_workspace_config_in_folder', {
@@ -213,6 +214,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }, [
         state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
         uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
+        uiStore.visibleUtilities,
         processStoreTerminalTab,
         gitStore.accounts, gitStore.repoAccounts,
         jiraStore.accounts, jiraStore.activeAccountId,
@@ -271,7 +273,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         if (config.ssmTunnels != null) {
             useAwsStore.getState().hydrateTunnels(config.ssmTunnels);
         }
-    }, []);
+
+        if (config.visibleUtilities) {
+            uiStore.setVisibleUtilities(config.visibleUtilities);
+        }
+    }, [uiStore]);
 
     const scanWorkspace = useCallback(async (path: string): Promise<Project[]> => {
         try {
@@ -561,6 +567,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 state.savedCommandSteps,
                 state.savedCommandTypes,
                 state.pipelines,
+                uiStore.visibleUtilities,
             );
             await invoke('write_workspace_config_in_folder', {
                 workspacePath: state.currentPath,
@@ -572,6 +579,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }, [
         state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
         uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
+        uiStore.visibleUtilities,
         processStoreTerminalTab
     ]);
 
