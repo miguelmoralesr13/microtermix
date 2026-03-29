@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
     Monitor, RefreshCw, Play, Square, RotateCcw,
@@ -8,31 +8,9 @@ import { useAwsStore } from '../stores/awsStore';
 import { CwCredentials } from '../services/cloudwatchApi';
 import { parseAwsCredentialBlock } from './cloudwatch/cwUtils';
 import { Button } from './ui/button';
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface Ec2Tag {
-    key: string;
-    value: string;
-}
-
-interface Ec2Instance {
-    instance_id: string;
-    name: string | null;
-    state: string;
-    state_code: number;
-    instance_type: string;
-    public_ip: string | null;
-    private_ip: string | null;
-    key_name: string | null;
-    launch_time: string | null;
-    availability_zone: string | null;
-    image_id: string | null;
-    platform: string | null;
-    vpc_id: string | null;
-    subnet_id: string | null;
-    tags: Ec2Tag[];
-}
+import { useEc2Instances, useEc2Actions, awsKeys } from '../hooks/queries/useAwsQueries';
+import { useQueryClient } from '@tanstack/react-query';
+import { Ec2Instance } from './cloudwatch/ec2Types';
 
 interface SshDefaults {
     username: string;
@@ -50,8 +28,6 @@ interface ActiveTunnelData {
     status: 'connecting' | 'active' | 'stopped';
 }
 
-// ── localStorage ───────────────────────────────────────────────────────────────
-
 const SSH_KEY = 'microtermix-ec2-ssh';
 
 function loadSshDefaults(): SshDefaults {
@@ -65,8 +41,6 @@ function loadSshDefaults(): SshDefaults {
 function saveSshDefaults(s: SshDefaults) {
     localStorage.setItem(SSH_KEY, JSON.stringify(s));
 }
-
-// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function stateColor(state: string): string {
     switch (state) {
@@ -96,8 +70,6 @@ function formatLaunchTime(iso: string | null): string {
     if (isNaN(d.getTime())) return iso;
     return d.toLocaleString();
 }
-
-// ── Components ────────────────────────────────────────────────────────────────
 
 interface SsmPortForwardModalProps {
     inst: Ec2Instance;
@@ -247,7 +219,7 @@ interface InstanceRowProps {
     ssh: SshDefaults;
     creds: CwCredentials;
     onAction: (action: 'start' | 'stop' | 'reboot', id: string) => void;
-    pending: string | null;
+    pending: boolean;
     onTunnelStarted: (tunnel: ActiveTunnelData) => void;
 }
 
@@ -391,12 +363,14 @@ function SettingsTab({ ssh, setSsh, onSave }: { ssh: SshDefaults; setSsh: (s: Ss
 }
 
 function InstancesTab({ ssh }: { ssh: SshDefaults }) {
-    const { credentials, ec2, fetchInstances, startInstance, stopInstance, addTunnel } = useAwsStore();
+    const { credentials, addTunnel } = useAwsStore();
     const [search, setSearch] = useState('');
+    const queryClient = useQueryClient();
+    
+    const { data: instances = [], isLoading } = useEc2Instances();
+    const { startInstance, stopInstance, isStarting, isStopping } = useEc2Actions();
 
-    useEffect(() => { if (credentials) fetchInstances(); }, [credentials, fetchInstances]);
-
-    const filtered = ec2.instances.filter(i => {
+    const filtered = instances.filter(i => {
         const q = search.toLowerCase();
         return (i.name ?? '').toLowerCase().includes(q) || i.instance_id.toLowerCase().includes(q) || (i.public_ip ?? '').includes(q);
     });
@@ -408,12 +382,20 @@ function InstancesTab({ ssh }: { ssh: SshDefaults }) {
                     <Search size={13} className="text-slate-500" />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filtrar..." className="bg-transparent text-xs outline-none w-full" />
                 </div>
-                <button onClick={() => fetchInstances(true)} disabled={ec2.loading} className="p-2 text-slate-400 hover:text-microtermix-neon"><RefreshCw size={16} className={ec2.loading ? 'animate-spin' : ''} /></button>
+                <button onClick={() => queryClient.invalidateQueries({ queryKey: awsKeys.instances() })} disabled={isLoading} className="p-2 text-slate-400 hover:text-microtermix-neon"><RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} /></button>
             </div>
             <ActiveTunnelsPanel />
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
                 {filtered.map(inst => (
-                    <InstanceRow key={inst.instance_id} inst={inst} ssh={ssh} creds={credentials!} onAction={(a, id) => a === 'start' ? startInstance(id) : stopInstance(id)} pending={null} onTunnelStarted={t => addTunnel({ name: t.instanceName, instanceId: t.instanceId, remoteHost: t.remoteHost, remotePort: t.remotePort, localPort: t.localPort })} />
+                    <InstanceRow 
+                        key={inst.instance_id} 
+                        inst={inst} 
+                        ssh={ssh} 
+                        creds={credentials!} 
+                        onAction={(a, id) => a === 'start' ? startInstance(id) : stopInstance(id)} 
+                        pending={isStarting || isStopping} 
+                        onTunnelStarted={t => addTunnel({ name: t.instanceName, instanceId: t.instanceId, remoteHost: t.remoteHost, remotePort: t.remotePort, localPort: t.localPort })} 
+                    />
                 ))}
             </div>
         </div>
