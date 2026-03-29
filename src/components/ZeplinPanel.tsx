@@ -27,8 +27,6 @@ export const ZeplinPanel: React.FC = () => {
     const { data: projects = [], isLoading: loadingProjects } = useZeplinProjects();
     const { screens, flows, sections, isLoading: loadingData } = useZeplinProjectData(currentProjectId || undefined);
 
-    const currentProject = projects.find(p => p.id === currentProjectId);
-
     if (selectedScreenId) return <ZeplinCanvas />;
     if (selectedFlowId) return <ZeplinFlowDiagram />;
 
@@ -274,8 +272,8 @@ const ZeplinFlowDiagram: React.FC = () => {
                     <svg className="absolute inset-0 pointer-events-none" style={{ width: '10000px', height: '10000px' }}>
                         <defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#38bdf8" /></marker></defs>
                         {flowData.connectors?.map((conn: any) => {
-                            const s = flowData.nodes.find((n: any) => n.id === (conn.source.id || conn.source));
-                            const t = flowData.nodes.find((n: any) => n.id === (conn.target.id || conn.target));
+                            const s = flowData.nodes?.find((n: any) => n.id === (conn.source.id || conn.source));
+                            const t = flowData.nodes?.find((n: any) => n.id === (conn.target.id || conn.target));
                             if (!s || !t) return null;
                             const x1 = s.position.x + 187; const y1 = s.position.y + 400; const x2 = t.position.x + 187; const y2 = t.position.y + 400;
                             return <path key={conn.id} d={`M ${x1} ${y1} C ${x1 + (x2-x1)/2} ${y1}, ${x1 + (x2-x1)/2} ${y2}, ${x2} ${y2}`} stroke="#38bdf8" strokeWidth="4" strokeOpacity="0.3" fill="none" markerEnd="url(#arrowhead)" />;

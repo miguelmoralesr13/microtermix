@@ -57,7 +57,7 @@ export interface S3Object {
     size: number;
     last_modified: number | null;
     storage_class: string;
-    is_folder: bool;
+    is_folder: boolean;
 }
 
 // ── Credential serialisation (camelCase → snake_case for Rust) ────────────────

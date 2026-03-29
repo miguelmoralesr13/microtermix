@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useJiraStore } from '../../stores/jiraStore';
-import { RefreshCw, Search, X, AlertCircle, Plus, ChevronRight, Timer } from 'lucide-react';
+import { RefreshCw, Search, AlertCircle, Plus, ChevronRight, Timer } from 'lucide-react';
+import * as api from '../jiraApi';
 import {
     JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
-    loadConfig, saveConfig, testConnection,
-    statusColor, assignIssue,
+    statusColor,
     isReleased,
 } from '../jiraApi';
 import { TempoLogModal } from '../TempoLogModal';
@@ -13,15 +13,15 @@ import { DiscardSubtasksModal, DiscardSubtasksTarget } from './DiscardSubtasksMo
 import { HierarchyCard } from './HierarchyCard';
 import { TaskDetailModal } from './TaskDetailModal';
 import { CreateSubTaskModal } from './CreateSubTaskModal';
-import { EpicDetailModal } from './EpicDetailModal';
 import { LinkedIssuesModal } from './LinkedIssuesModal';
 import { cn } from '../../lib/utils';
 import { useJiraIssues, useJiraIssue, useJiraTransitions, jiraKeys } from '../../hooks/queries/useJiraQueries';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export function StoriesView() {
     const queryClient = useQueryClient();
-    const cfg = loadConfig();
+    const cfg = api.loadConfig();
     const project = cfg.storiesProject || cfg.defaultProject;
 
     const [myAccountId, setMyAccountId] = useState<string>(() => cfg.defaultAssigneeId ?? '');
@@ -29,11 +29,11 @@ export function StoriesView() {
     useEffect(() => {
         if (!cfg.baseUrl || !cfg.email || !cfg.apiToken) return;
         if (cfg.defaultAssigneeId) { setMyAccountId(cfg.defaultAssigneeId); return; }
-        testConnection()
+        api.testConnection()
             .then(me => {
                 if (me.accountId) {
-                    const updated = { ...loadConfig(), defaultAssigneeId: me.accountId };
-                    saveConfig(updated);
+                    const updated = { ...api.loadConfig(), defaultAssigneeId: me.accountId };
+                    api.saveConfig(updated);
                     setMyAccountId(me.accountId);
                 }
             })
@@ -50,8 +50,7 @@ export function StoriesView() {
     const [epicSearch, setEpicSearch] = useState('');
     const [epicSearchInput, setEpicSearchInput] = useState('');
     const [storySearch, setStorySearch] = useState('');
-    const [storyFilterAssignee, setStoryFilterAssignee] = useState('');
-    const [storyFilterStatus, setStoryFilterStatus] = useState('');
+    const [storyFilterStatus] = useState('');
     const [showStoryFilters, setShowStoryFilters] = useState(false);
     const [hideReleased, setHideReleased] = useState(() => localStorage.getItem('jira_hide_released') !== 'false');
 
@@ -63,25 +62,22 @@ export function StoriesView() {
         return jql;
     }, [project, epicSearch]);
 
-    const { data: epics = [], isLoading: loadingEpics, error: epicError } = useJiraIssues(epicJql, !!project);
+    const { data: epics = [], isLoading: loadingEpics } = useJiraIssues(epicJql, !!project);
 
     const selectedEpicKey = storeSelection.epicKey;
-    const { data: selectedEpic } = useJiraIssue(selectedEpicKey);
 
     const bStoryJql = useMemo(() => `project = "${project}" AND issuetype = "${cfg.businessStoryType || 'Business Story'}" AND (parent = "${selectedEpicKey}" OR "Epic Link" = "${selectedEpicKey}")`, [selectedEpicKey, project, cfg.businessStoryType]);
-    const { data: businessStories = [], isLoading: loadingBusinessStories, error: businessStoryError } = useJiraIssues(bStoryJql, !!selectedEpicKey);
+    const { data: businessStories = [], isLoading: loadingBusinessStories } = useJiraIssues(bStoryJql, !!selectedEpicKey);
 
     const selectedBusinessStoryKey = storeSelection.businessStoryKey;
-    const { data: selectedBusinessStory } = useJiraIssue(selectedBusinessStoryKey);
 
     const techStoryJql = useMemo(() => `project = "${project}" AND issuetype = "${cfg.storyType || 'Story'}" AND issue in linkedIssues("${selectedBusinessStoryKey}")`, [selectedBusinessStoryKey, project, cfg.storyType]);
-    const { data: stories = [], isLoading: loadingTechStories, error: storyError } = useJiraIssues(techStoryJql, !!selectedBusinessStoryKey);
+    const { data: stories = [], isLoading: loadingTechStories } = useJiraIssues(techStoryJql, !!selectedBusinessStoryKey);
 
     const selectedStoryKey = storeSelection.storyKey;
-    const { data: selectedStory } = useJiraIssue(selectedStoryKey);
 
     const taskJql = useMemo(() => `parent = "${selectedStoryKey}"`, [selectedStoryKey]);
-    const { data: tasks = [], isLoading: loadingTasks, error: taskError } = useJiraIssues(taskJql, !!selectedStoryKey);
+    const { data: tasks = [], isLoading: loadingTasks } = useJiraIssues(taskJql, !!selectedStoryKey);
 
     const [selectedTaskKey, setSelectedTaskKey] = useState<string | null>(null);
     const { data: selectedTask } = useJiraIssue(selectedTaskKey);
@@ -106,14 +102,11 @@ export function StoriesView() {
     };
 
     const [createForStory, setCreateForStory] = useState<JiraIssue | null>(null);
-    const [detailEpic, setDetailEpic] = useState<JiraIssue | null>(null);
     const [linkedIssuesTarget, setLinkedIssuesTarget] = useState<string | null>(null);
     const [showTempoModal, setShowTempoModal] = useState(false);
     const [apiLog, setApiLog] = useState<JiraApiLogEntry[]>([]);
-    const [expandedLog, setExpandedLog] = useState<number | null>(null);
     const [logVisible, setLogVisible] = useState(true);
     const [transitioningTask, setTransitioningTask] = useState<string | null>(null);
-    const [transitionError, setTransitionError] = useState<string | null>(null);
     const [transitionTarget, setTransitionTarget] = useState<TransitionTarget | null>(null);
     const [discardSubtasksTarget, setDiscardSubtasksTarget] = useState<DiscardSubtasksTarget | null>(null);
     const [taskDetailTarget, setTaskDetailTarget] = useState<JiraIssue | null>(null);
@@ -170,12 +163,11 @@ export function StoriesView() {
 
     const handleTransition = async (task: JiraIssue, status: string, comment?: string, fields?: Record<string, any>) => {
         setTransitioningTask(task.key);
-        setTransitionError(null);
         try {
             await api.transitionIssue(task.key, status, comment, fields);
             handleRefreshAll();
         } catch (e: any) {
-            setTransitionError(e?.message ?? 'Error al cambiar estado');
+            toast.error(e?.message ?? 'Error al cambiar estado');
         } finally {
             setTransitioningTask(null);
         }
@@ -199,9 +191,8 @@ export function StoriesView() {
     const sortedStories = sortWithPins(stories.filter(s => {
         if (hideReleased && isReleased(s)) return false;
         const matchText = !storySearch.trim() || (s.key.toLowerCase().includes(storySearch.toLowerCase()) || s.fields.summary.toLowerCase().includes(storySearch.toLowerCase()));
-        const matchAssignee = !storyFilterAssignee || (storyFilterAssignee === 'me' ? s.fields.assignee?.accountId === myAccountId : !s.fields.assignee);
         const matchStatus = !storyFilterStatus || s.fields.status.name.toLowerCase() === storyFilterStatus.toLowerCase();
-        return matchText && matchAssignee && matchStatus;
+        return matchText && matchStatus;
     }), storePinnedStories);
     const filteredTasks = hideReleased ? tasks.filter(t => !isReleased(t)) : tasks;
 
@@ -233,7 +224,7 @@ export function StoriesView() {
                     </div>
                     <div className={colBodyCls}>
                         {!selectedEpicKey ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona un Epic</p> : loadingBusinessStories ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedBusinessStories.map(bStory => (
-                            <HierarchyCard key={bStory.id} issue={bStory} selected={selectedBusinessStoryKey === bStory.key} onSelect={() => handleSelectBusinessStory(bStory)} onDetail={() => setTaskDetailTarget(bStory)} onLinkedIssues={() => setLinkedIssuesTarget(bStory.key)} />
+                            <HierarchyCard key={bStory.id} issue={bStory} selected={selectedBusinessStoryKey === bStory.key} pinned={false} onPin={() => {}} onSelect={() => handleSelectBusinessStory(bStory)} onDetail={() => setTaskDetailTarget(bStory)} onLinkedIssues={() => setLinkedIssuesTarget(bStory.key)} />
                         ))}
                     </div>
                 </div>
@@ -264,7 +255,7 @@ export function StoriesView() {
                     <div className={colHeaderCls}><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tasks {selectedStoryKey ? `(${tasks.length})` : ''}</p></div>
                     <div className={colBodyCls}>
                         {!selectedStoryKey ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una Story</p> : loadingTasks ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : filteredTasks.map(task => (
-                            <HierarchyCard key={task.id} issue={task} selected={selectedTaskKey === task.key} onSelect={() => setSelectedTaskKey(prev => prev === task.key ? null : task.key)} onDetail={() => { setSelectedTaskKey(task.key); setTaskDetailTarget(task); }} />
+                            <HierarchyCard key={task.id} issue={task} selected={selectedTaskKey === task.key} pinned={false} onPin={() => {}} onSelect={() => setSelectedTaskKey(prev => prev === task.key ? null : task.key)} onDetail={() => { setSelectedTaskKey(task.key); setTaskDetailTarget(task); }} />
                         ))}
                     </div>
                 </div>
@@ -317,7 +308,7 @@ export function StoriesView() {
             {showTempoModal && selectedTask && <TempoLogModal issue={selectedTask} authorAccountId={myAccountId} onClose={() => setShowTempoModal(false)} onSuccess={() => setShowTempoModal(false)} />}
             {transitionTarget && <TransitionFieldsModal target={transitionTarget} onClose={() => setTransitionTarget(null)} onConfirm={async (c, f) => { await handleTransition(transitionTarget.task, transitionTarget.transition.toName, c, f); setTransitionTarget(null); }} />}
             {discardSubtasksTarget && <DiscardSubtasksModal target={discardSubtasksTarget} onClose={() => setDiscardSubtasksTarget(null)} onConfirm={async () => { const { story, transition } = discardSubtasksTarget; setDiscardSubtasksTarget(null); await handleTransition(story, transition.toName); }} />}
-            {taskDetailTarget && <TaskDetailModal task={taskDetailTarget} onClose={() => setTaskDetailTarget(null)} onTransition={(tr, loc) => handleTransitionClick(taskDetailTarget, tr, loc)} onAssign={async () => { await assignIssue(taskDetailTarget.key, myAccountId); handleRefreshAll(); }} />}
+            {taskDetailTarget && <TaskDetailModal task={taskDetailTarget} onClose={() => setTaskDetailTarget(null)} onTransition={(tr, loc) => handleTransitionClick(taskDetailTarget, tr, loc)} onAssign={async () => { await api.assignIssue(taskDetailTarget.key, myAccountId); handleRefreshAll(); }} />}
         </div>
     );
 }

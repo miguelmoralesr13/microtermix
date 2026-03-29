@@ -645,16 +645,18 @@ pub async fn spawn_local_git_terminal(
     }
 
     let (program, args) = if cfg!(target_os = "windows") {
-        ("powershell.exe", vec!["-NoLogo".to_string()])
+        ("powershell.exe".to_string(), vec!["-NoLogo".to_string()])
     } else {
-        ("sh", vec![])
+        // Intentar detectar la shell del usuario (zsh, bash, etc)
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+        (shell, vec![])
     };
 
     crate::ec2::spawn_pty_process(
         app,
         state,
         service_id.clone(),
-        program.to_string(),
+        program,
         args,
         Some(project_path), // Directorio inicial
         Some(HashMap::new()),
@@ -755,7 +757,9 @@ pub async fn execute_service_script(
     }
 
     #[cfg(not(target_os = "windows"))]
-    let mut cmd = silent_async_command("sh");
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = silent_async_command(&shell);
     #[cfg(not(target_os = "windows"))]
     {
         cmd.args(["-c", &script_to_run]);

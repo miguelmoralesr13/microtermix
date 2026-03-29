@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { X, RefreshCw, Archive, FileCode, Search, Maximize2, Minimize2, Loader2, ChevronRight, FilePlus, FileMinus, FileX, FileText, AlertCircle } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from './ui/dialog';
+import { X, RefreshCw, Archive, FileCode, Search, Maximize2, Minimize2, Loader2, ChevronRight, FilePlus, FileX, FileText, AlertCircle } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
@@ -60,7 +60,7 @@ export const StashDiffModal: React.FC<StashDiffModalProps> = ({ isOpen, onClose,
             // Git unified diff separa archivos con "diff --git"
             const fileDiffs = fullDiff.split(/^diff --git/m).filter(Boolean);
             
-            const parsedFiles: StashFile[] = await Promise.all(fileDiffs.map(async (diffSegment) => {
+            const parsedFiles: StashFile[] = await Promise.all(fileDiffs.map(async (diffSegment: string) => {
                 const lines = diffSegment.split('\n');
                 let path = '';
                 // Intentar capturar el path de b/ (modificado) que suele ser el más fiable

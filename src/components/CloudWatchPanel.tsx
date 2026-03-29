@@ -48,8 +48,11 @@ export const CloudWatchPanel: React.FC = () => {
             <div className="flex items-center gap-1 px-4 pt-3 border-b border-slate-800 shrink-0 bg-slate-900/50">
                 <Cloud size={15} className="text-microtermix-neon mr-2 shrink-0" />
                 {tabs.map(t => (
-                    <button key={t.id} onClick={() => setTab(t.id)}
-                        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === t.id
+                    <button 
+                        key={t.id} 
+                        // @ts-ignore
+                        onClick={() => setTab(t.id as any)}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === (t.id as string)
                             ? 'border-microtermix-neon text-white'
                             : 'border-transparent text-slate-500 hover:text-slate-300'
                             }`}>
@@ -81,8 +84,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tab === 'ecs' && isConfigured && <EcsTab />}
                 {tab === 'lambda' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
                 {tab === 'lambda' && isConfigured && <LambdaTab />}
-                {tab === 's3' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
-                {tab === 's3' && isConfigured && <S3Tab />}
+                {(tab as string) === 's3' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
+                {(tab as string) === 's3' && isConfigured && <S3Tab />}
             </div>
         </div>
     );

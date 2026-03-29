@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
     Monitor, RefreshCw, Play, Square, RotateCcw,

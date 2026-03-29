@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Database, Folder, File, ChevronRight, 
     RefreshCw, Search, ArrowLeft, Download,
-    Calendar, HardDrive, Loader2
+    Calendar, Loader2
 } from 'lucide-react';
 import { s3ListBuckets, s3ListObjects, s3DownloadObject, S3Bucket, S3Object } from '../../services/cloudwatchApi';
 import { useAwsStore } from '../../stores/awsStore';

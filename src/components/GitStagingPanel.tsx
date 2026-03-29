@@ -1,14 +1,14 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
-import { useGitStore, GitStatusEntry } from '../stores/gitStore';
+import { GitStatusEntry } from '../stores/gitStore';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
-import { useGitStatus, gitKeys, useGitTimeline } from '../hooks/queries/useGitQueries';
+import { useGitStatus, gitKeys } from '../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface ArrayTreeNode {

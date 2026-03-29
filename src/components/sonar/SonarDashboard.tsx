@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { 
     LayoutDashboard, CheckCircle2, XCircle, AlertCircle, 
     ChevronRight, Activity, ShieldCheck, Bug, ShieldAlert, FileSearch, RefreshCw
@@ -78,25 +78,6 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
 };
 
 export const SonarDashboard: React.FC<SonarDashboardProps> = ({ projects, onSelectProject }) => {
-    const { metricsCache, projectLinks } = useSonarStore();
-
-    // Use total from cache/queries
-    const stats = useMemo(() => {
-        let ok = 0;
-        let error = 0;
-        let bugs = 0;
-        let vuln = 0;
-        let smells = 0;
-        
-        // This is a bit tricky with React Query since we don't have all data here.
-        // We'll rely on what's currently in the store if it was still there, 
-        // but we removed metricsCache from store.
-        // For the total dashboard, we might want a hook that fetches ALL project metrics.
-        // For now, we'll show a "live" feel where cards load independently.
-        
-        return { ok, error, bugs, vuln, smells };
-    }, []);
-
     return (
         <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar bg-slate-950/20">
             {/* Hero Header */}

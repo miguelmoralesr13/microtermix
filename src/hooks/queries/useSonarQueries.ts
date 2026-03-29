@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { useSonarStore } from '../../stores/sonarStore';
 import { fetchProjectMetrics, getSonarAuthHeader, normalizeSonarUrl } from '../../utils/sonarUtils';
-import { SonarMetrics } from '../../stores/sonarStore';
 
 export const sonarKeys = {
     all: ['sonar'] as const,

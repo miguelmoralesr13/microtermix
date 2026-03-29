@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
-import type { ZeplinState, ZeplinAccount, ZeplinLog } from '../types/zeplin';
+import type { ZeplinAccount, ZeplinLog } from '../types/zeplin';
 
 interface ZeplinStoreState {
     accounts: ZeplinAccount[];

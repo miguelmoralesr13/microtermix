@@ -12,7 +12,6 @@ import {
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useProcessStore } from '../stores/processStore';
 import { TerminalView } from './TerminalView';
-import { useGitStore } from '../stores/gitStore';
 import { Badge } from './ui/badge';
 import { useSonarStore } from '../stores/sonarStore';
 import { SonarIssueRemediator } from './SonarIssueRemediator';
@@ -71,14 +70,6 @@ function extractReportUrl(logs: string[]): string | null {
 }
 
 // ─── Small components ─────────────────────────────────────────────────────────
-
-const QGBadge: React.FC<{ status?: 'OK' | 'ERROR' | 'NONE' }> = ({ status }) => {
-    if (!status || status === 'NONE')
-        return <span className="text-[9px] px-1 py-0.5 rounded bg-slate-800 text-slate-600 font-bold">—</span>;
-    return status === 'OK'
-        ? <span className="text-[9px] px-1 py-0.5 rounded bg-microtermix-success/20 text-microtermix-success font-bold">OK</span>
-        : <span className="text-[9px] px-1 py-0.5 rounded bg-microtermix-danger/20 text-microtermix-danger font-bold">ERR</span>;
-};
 
 const MetricCard: React.FC<{
     label: string; value: string | number; rating?: string;
@@ -148,6 +139,13 @@ export const SonarPanel: React.FC = () => {
 
     const [remediatingIssue, setRemediatingIssue] = useState<SonarIssue | null>(null);
     const [configModalOpen, setConfigModalOpen] = useState(false);
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+    const handleSearchQuery = () => {
+        // setSearchQuery is already handled by the input onChange
+        // This is just to trigger the query if needed, but useSonarProjectSearch
+        // already uses searchQuery as a dependency.
+    };
 
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath('dashboard');
@@ -577,7 +575,7 @@ export const SonarPanel: React.FC = () => {
                     <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
                         <div className="flex justify-between items-center"><h3 className="text-sm font-bold text-slate-200">Vincular con Sonar</h3><button onClick={() => setSearchingFor(null)}><X size={15} /></button></div>
                         <div className="flex gap-2"><input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearchQuery()} className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200" placeholder="Nombre en Sonar..." /><button onClick={handleSearchQuery} className="px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg">Buscar</button></div>
-                        {searchResults && <div className="space-y-1.5">{searchResults.map(r => <button key={r.key} onClick={() => handleLinkProject(searchingFor, r)} className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-blue-600/20 border border-slate-700 rounded-lg"><p className="text-xs font-bold text-slate-200">{r.name}</p><p className="text-[10px] font-mono text-slate-500">{r.key}</p></button>)}</div>}
+                        {searchResults && <div className="space-y-1.5">{searchResults.map((r: any) => <button key={r.key} onClick={() => handleLinkProject(searchingFor, r)} className="w-full text-left px-3 py-2 bg-slate-800 hover:bg-blue-600/20 border border-slate-700 rounded-lg"><p className="text-xs font-bold text-slate-200">{r.name}</p><p className="text-[10px] font-mono text-slate-500">{r.key}</p></button>)}</div>}
                         <div className="pt-2 border-t border-slate-800/60"><p className="text-[10px] font-bold text-slate-500 mb-2">Project Key directo:</p><DirectKeyForm onLink={key => handleLinkProject(searchingFor, { key, name: key })} /></div>
                     </div>
                 </div>

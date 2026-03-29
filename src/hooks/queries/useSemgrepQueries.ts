@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { SemgrepFinding, useSemgrepStore } from '../../stores/semgrepStore';
 import { toast } from 'sonner';

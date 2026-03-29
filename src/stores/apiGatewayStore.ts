@@ -93,6 +93,7 @@ export interface FrontendInvokeRequest {
 interface ApiGatewayState {
     selectedApi: SelectedApi;
     favoriteApis: string[];
+    httpApis: HttpApiInfo[];
     selectedStage: Record<string, string>;
     jsonPresets: Record<string, string>;
     testerOpen: boolean;
@@ -105,6 +106,7 @@ interface ApiGatewayState {
 interface ApiGatewayActions {
     selectApi: (api: SelectedApi) => void;
     toggleFavorite: (id: string) => void;
+    setHttpApis: (apis: HttpApiInfo[]) => void;
     setSelectedStage: (apiId: string, stage: string) => void;
     openTester: (endpoint: TesterEndpoint) => void;
     closeTester: () => void;
@@ -130,6 +132,7 @@ export const useApiGatewayStore = create<ApiGatewayState & ApiGatewayActions>()(
             (set, get) => ({
                 selectedApi: null,
                 favoriteApis: [],
+                httpApis: [],
                 selectedStage: {},
                 jsonPresets: {},
                 testerOpen: false,
@@ -147,6 +150,8 @@ export const useApiGatewayStore = create<ApiGatewayState & ApiGatewayActions>()(
                     const updated = current.includes(id) ? current.filter(f => f !== id) : [...current, id];
                     set({ favoriteApis: updated });
                 },
+
+                setHttpApis: (httpApis) => set({ httpApis }),
 
                 setSelectedStage: (apiId, stage) => {
                     set(s => ({ selectedStage: { ...s.selectedStage, [apiId]: stage } }));

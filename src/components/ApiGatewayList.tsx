@@ -10,11 +10,18 @@ interface ApiGatewayListProps {
 }
 
 export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm }) => {
-    const { selectedApi, selectApi, favoriteApis, toggleFavorite } = useApiGatewayStore();
+    const { selectedApi, selectApi, favoriteApis, toggleFavorite, setHttpApis } = useApiGatewayStore();
     const { data, isLoading } = useApiGatewayList();
     
     const restApis = data?.rest_apis || [];
     const httpApis = data?.http_apis || [];
+
+    // Sync httpApis to store for other components (like ApiTreeItem)
+    React.useEffect(() => {
+        if (data?.http_apis) {
+            setHttpApis(data.http_apis);
+        }
+    }, [data?.http_apis, setHttpApis]);
 
     const term = searchTerm.toLowerCase().trim();
 

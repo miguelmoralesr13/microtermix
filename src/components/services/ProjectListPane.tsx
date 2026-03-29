@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ProjectRow } from '../ProjectRow';
 import { Project } from '../../context/WorkspaceContext';
 import { Button } from '@/components/ui/button';
+import { useProcessStore } from '../../stores/processStore';
 
 interface ProjectListPaneProps {
     projects: Project[];
@@ -10,6 +11,10 @@ interface ProjectListPaneProps {
     onDeselectAll: () => void;
     onToggleSelect: (path: string) => void;
     onPlayScript: (path: string, script: string) => void;
+    onOpenLogs: (path: string) => void;
+    onOpenEnvs: (path: string) => void;
+    onOpenScripts: (path: string) => void;
+    onQuickAction: (path: string, action: 'start' | 'stop') => void;
 }
 
 export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
@@ -19,6 +24,10 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
     onDeselectAll,
     onToggleSelect,
     onPlayScript,
+    onOpenLogs,
+    onOpenEnvs,
+    onOpenScripts,
+    onQuickAction
 }) => {
     const [width, setWidth] = useState(() => {
         const saved = localStorage.getItem('microtermix-project-pane-width');
@@ -27,6 +36,7 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
 
     const isDragging = useRef(false);
     const widthRef = useRef(width);
+    const activeProcesses = useProcessStore(s => s.activeProcesses);
 
     useEffect(() => {
         widthRef.current = width;
@@ -53,6 +63,14 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
             document.removeEventListener('mouseup', handleMouseUp);
         };
     }, []);
+
+    const getProjectStatus = (path: string) => {
+        // Logic to determine project status from activeProcesses
+        const running = Object.entries(activeProcesses).some(([id, proc]) => 
+            id.startsWith(path + '::') && proc.status === 'running'
+        );
+        return running ? 'running' : 'idle';
+    };
 
     return (
         <div
@@ -83,9 +101,14 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
                         <ProjectRow
                             key={project.path as string}
                             project={project}
+                            status={getProjectStatus(project.path as string)}
                             isSelected={selectedProjects.includes(project.path as string)}
                             onToggleSelect={() => onToggleSelect(project.path as string)}
-                            onPlayScript={(script) => onPlayScript(project.path as string, script)}
+                            onOpenLogs={() => onOpenLogs(project.path as string)}
+                            onOpenEnvs={() => onOpenEnvs(project.path as string)}
+                            onOpenScripts={() => onOpenScripts(project.path as string)}
+                            onPlayScript={(script: string) => onPlayScript(project.path as string, script)}
+                            onQuickAction={(action) => onQuickAction(project.path as string, action)}
                         />
                     ))
                 )}

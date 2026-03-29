@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen, Eye } from 'lucide-react';
 import { GitlabBranchViewerModal } from './gitlab/GitlabBranchViewerModal';
@@ -14,7 +14,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { cn } from '../lib/utils';
-import { useGitBranches, useGitAheadBehind, useGitStatus, gitKeys } from '../hooks/queries/useGitQueries';
+import { useGitBranches, useGitAheadBehind, gitKeys } from '../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import {
     DndContext,
@@ -192,7 +192,6 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     // Queries
     const { data: branchesData, isLoading: loadingBranches } = useGitBranches(projectPath);
     const { data: aheadBehind } = useGitAheadBehind(projectPath);
-    const { data: statusData } = useGitStatus(projectPath);
 
     // Zustand
     const branchFilter = useGitStore(s => s.ui.branchFilter);

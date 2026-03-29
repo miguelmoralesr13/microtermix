@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { useAwsStore } from '../../stores/awsStore';
 import { Ec2Instance } from '../../components/cloudwatch/ec2Types';
-import { CwLogGroup, cwGetLogGroups } from '../../services/cloudwatchApi';
+import { cwGetLogGroups } from '../../services/cloudwatchApi';
 import { toast } from 'sonner';
 
 const getRustCreds = () => {
@@ -37,7 +37,6 @@ export function useEc2Instances() {
 
 export function useEc2Actions() {
     const queryClient = useQueryClient();
-    const credentials = useAwsStore(s => s.credentials);
 
     const startMutation = useMutation({
         mutationFn: (instanceId: string) => invoke('ec2_start_instance', { credentials: getRustCreds(), instanceId }),

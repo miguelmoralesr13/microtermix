@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { RefreshCw, Search, X, GitMerge, GitBranch, Tag, Archive, User, Pencil, Trash2, Check, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, X, GitBranch, Tag, Archive, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { useGitStore, RawCommit } from '../stores/gitStore';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Badge } from './ui/badge';
-import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { cn } from '../lib/utils';
 import { useGitTimeline, gitKeys } from '../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
@@ -150,10 +149,6 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     const [filter, setFilter] = useState<Filter>('all');
     const [timelineView, setTimelineView] = useState<'local' | 'all'>('all');
     const [currentUser, setCurrentUser] = useState('');
-    const [editingHash, setEditingHash] = useState<string | null>(null);
-    const [editValue, setEditValue] = useState('');
-    const [editSaving, setEditSaving] = useState(false);
-    const [deletingHash, setDeletingHash] = useState<string | null>(null);
     const [deleteWorking, setDeleteWorking] = useState(false);
     const [commitStatuses, setCommitStatuses] = useState<Record<string, 'pending' | 'success' | 'failure' | 'error' | null>>({});
 
@@ -194,17 +189,16 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         queryClient.invalidateQueries({ queryKey: gitKeys.repo(projectPath) });
     }, [projectPath, queryClient]);
 
-    const handleEditSave = useCallback(async (n: GraphNode) => {
-        if (!editValue.trim() || editValue === n.message) { setEditingHash(null); return; }
-        setEditSaving(true);
+    const handleEditSave = useCallback(async (n: GraphNode, newMessage: string) => {
+        if (!newMessage.trim() || newMessage === n.message) return;
         try {
-            const res: any = await invoke('git_reword_commit', { projectPath, commitHash: n.hash, newMessage: editValue.trim() });
+            const res: any = await invoke('git_reword_commit', { projectPath, commitHash: n.hash, newMessage: newMessage.trim() });
             if (!res?.success) setAlertState({ isOpen: true, title: 'Error al editar', message: res?.stderr ?? 'Unknown error' });
-            else { setEditingHash(null); handleRefresh(); }
+            else handleRefresh();
         } catch (e: any) { 
             setAlertState({ isOpen: true, title: 'Error', message: e?.toString() || 'Connection error' });
-        } finally { setEditSaving(false); }
-    }, [editValue, projectPath, handleRefresh]);
+        }
+    }, [projectPath, handleRefresh]);
 
     const handleDelete = useCallback(async (n: GraphNode) => {
         setConfirmState({
@@ -222,11 +216,15 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                         const parent = n.parents[0];
                         if (!parent) { 
                             setAlertState({ isOpen: true, title: 'Error', message: 'No se puede determinar el padre del commit.' });
+                            setDeleteWorking(false);
+                            setConfirmState(s => ({ ...s, isOpen: false }));
                             return; 
                         }
                         const res: any = await invoke('git_execute', { projectPath, args: ['rebase', '--onto', parent, n.shortHash] });
                         if (!res?.success) {
                             setAlertState({ isOpen: true, title: 'Error al eliminar', message: res?.stderr ?? 'Unknown error' });
+                            setDeleteWorking(false);
+                            setConfirmState(s => ({ ...s, isOpen: false }));
                             return;
                         }
                     }
@@ -303,8 +301,25 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                 <span className="text-[10px] text-slate-600 shrink-0 whitespace-nowrap hidden xl:block">{n.date}</span>
                                 {isLocal && (
                                     <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={e => { e.stopPropagation(); setEditingHash(n.hash); setEditValue(n.message); }} className="p-1 text-slate-500 hover:text-microtermix-neon"><Pencil size={11} /></button>
-                                        <button onClick={e => { e.stopPropagation(); setDeletingHash(n.hash); }} className="p-1 text-slate-500 hover:text-microtermix-danger"><Trash2 size={11} /></button>
+                                        <button 
+                                            onClick={e => { 
+                                                e.stopPropagation(); 
+                                                const msg = prompt('Nuevo mensaje de commit:', n.message);
+                                                if (msg) handleEditSave(n, msg);
+                                            }} 
+                                            className="p-1 text-slate-500 hover:text-microtermix-neon"
+                                        >
+                                            <Pencil size={11} />
+                                        </button>
+                                        <button 
+                                            onClick={e => { 
+                                                e.stopPropagation(); 
+                                                handleDelete(n);
+                                            }} 
+                                            className="p-1 text-slate-500 hover:text-microtermix-danger"
+                                        >
+                                            <Trash2 size={11} />
+                                        </button>
                                     </div>
                                 )}
                             </div>

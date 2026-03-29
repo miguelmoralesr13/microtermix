@@ -36,7 +36,7 @@ export const SettingsModal: React.FC<{ trigger?: React.ReactNode }> = ({ trigger
 
     return (
         <Dialog>
-            <DialogTrigger render={trigger || (
+            <DialogTrigger render={(trigger as React.ReactElement) || (
                 <Button variant="ghost" size="icon" title="Configuraciones Generales" className="cursor-pointer">
                     <Settings className="w-4 h-4" />
                 </Button>

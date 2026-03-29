@@ -5,8 +5,7 @@ import { SettingsModal } from '../SettingsModal';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
     Network, Package, Ghost,  Cloud, Regex,
-    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette,
-    Settings
+    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 

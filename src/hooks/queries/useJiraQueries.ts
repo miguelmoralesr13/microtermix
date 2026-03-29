@@ -71,7 +71,7 @@ export function useJiraTransitionMutation() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: ({ key, transitionId, fields }: { key: string, transitionId: string, fields?: any }) => 
-            api.doTransition(key, transitionId, fields),
+            api.transitionIssue(key, transitionId, undefined, fields),
         onSuccess: (_, variables) => {
             toast.success(`Issue ${variables.key} actualizado`);
             queryClient.invalidateQueries({ queryKey: jiraKeys.issue(variables.key) });

@@ -214,6 +214,32 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 onDeselectAll={() => setSelectedProjects([])}
                 onToggleSelect={toggleProjectSelect}
                 onPlayScript={handlePlayScript}
+                onOpenLogs={(path) => {
+                    // Find a running process for this project to show logs
+                    const serviceId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::'));
+                    if (serviceId) setActiveTerminalTab(serviceId);
+                }}
+                onOpenEnvs={(_path) => {
+                    // Logic to open env manager for this project
+                    // This might need a local state in ServicesView or a workspace action
+                }}
+                onOpenScripts={(_path) => {
+                    // Logic to open script builder for this project
+                }}
+                onQuickAction={async (path, action) => {
+                    const p = state.projects.find(proj => proj.path === path);
+                    if (!p || !p.scripts || p.scripts.length === 0) return;
+                    
+                    if (action === 'start') {
+                        await handlePlayScript(path, p.scripts[0]);
+                    } else {
+                        const serviceId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::'));
+                        if (serviceId) {
+                            await invoke('kill_service', { serviceId });
+                            updateProcessStatus(serviceId, 'stopped');
+                        }
+                    }
+                }}
             />
 
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

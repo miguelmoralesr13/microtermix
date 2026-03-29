@@ -7,8 +7,7 @@ import { useToolStore } from '../stores/toolStore';
 import { JdkManagerModal } from './JdkManagerModal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { parseInlineEnvsFromScripts } from '../utils/parseInlineEnvs';
-import { useJdks, toolKeys } from '../hooks/queries/useToolQueries';
-import { useQueryClient } from '@tanstack/react-query';
+import { useJdks } from '../hooks/queries/useToolQueries';
 
 /** Parsea contenido tipo .env (KEY=value, líneas vacías y # se ignoran). */
 function parseEnvFileContent(text: string): Record<string, string> {
@@ -35,7 +34,6 @@ interface EnvManagerProps {
 
 export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) => {
     const { state } = useWorkspace();
-    const queryClient = useQueryClient();
     const project = state.projects.find(p => (p.path as string) === projectPath);
     const isJava = project?.project_type === 'java';
 

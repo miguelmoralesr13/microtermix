@@ -10,10 +10,11 @@ import {
     fetchGitlabMRCommits, fetchGitlabMRChanges,
     type GitlabMRCommit, type GitlabMRChange,
 } from '../services/gitlabApi';
-import { useGitStore } from '../stores/gitStore';
 import type { GitAccount } from '../stores/gitStore';
 import type { NormalizedPR } from './PRSection';
 import { invoke } from '@tauri-apps/api/core';
+import { useQueryClient } from '@tanstack/react-query';
+import { gitKeys } from '../hooks/queries/useGitQueries';
 
 interface MergePRModalProps {
     pr: NormalizedPR;
@@ -78,8 +79,7 @@ export const MergePRModal: React.FC<MergePRModalProps> = ({ pr, projectPath, acc
     const [actionError, setActionError] = useState<string | null>(null);
     const [result, setResult] = useState<'merged' | 'closed' | 'resolving' | null>(null);
 
-    const invalidate = useGitStore(s => s.invalidate);
-    const fetchAll = useGitStore(s => s.fetchAll);
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         (async () => {
@@ -175,8 +175,7 @@ export const MergePRModal: React.FC<MergePRModalProps> = ({ pr, projectPath, acc
             }
 
             // Force refresh so GitPanel detects MERGE_HEAD
-            invalidate(projectPath, 'status');
-            fetchAll(projectPath, true);
+            queryClient.invalidateQueries({ queryKey: gitKeys.repo(projectPath) });
 
             setResult('resolving');
             onClose(); // Just close to reveal the UI below

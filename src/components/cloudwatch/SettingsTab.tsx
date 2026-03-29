@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
     Settings, RefreshCw, CheckCircle, AlertCircle, 
     ClipboardPaste, ShieldCheck, HardDrive, Globe, 
-    ExternalLink, Download, Info, Edit2, Lock, Eye, EyeOff,
+    ExternalLink, Info, Edit2, Lock, Eye, EyeOff,
     Copy, Terminal as TerminalIcon, Cpu, Apple
 } from 'lucide-react';
 import {
@@ -37,7 +37,6 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
     const [errMsg, setErrMsg] = useState('');
     const [showPaste, setShowPaste] = useState(false);
     const [pasteText, setPasteText] = useState('');
-    const [pasteApplied, setPasteApplied] = useState(false);
     const [osTab, setOsTab] = useState<OsTab>(detectOs);
     const [showSecret, setShowSecret] = useState(false);
     const [isAutoProcessing, setIsAutoProcessing] = useState(false);
@@ -250,7 +249,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
                                     </div>
 
                                     <div className="flex items-center gap-3 pt-4 border-t border-white/5">
-                                        <Button onClick={handleSave} className="bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold px-8">
+                                        <Button onClick={() => handleSave()} className="bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold px-8">
                                             Guardar Configuración
                                         </Button>
                                         {isConfigured && (
@@ -282,7 +281,7 @@ export function SettingsTab({ onSaved }: SettingsTabProps) {
                                             </div>
                                         </div>
                                         <Button 
-                                            onClick={handleTest} 
+                                            onClick={() => handleTest()} 
                                             disabled={testing}
                                             variant="outline" 
                                             size="sm"
