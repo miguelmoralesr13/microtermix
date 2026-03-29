@@ -5,12 +5,10 @@ import {
     AlertCircle, Database, Settings,
     Plus, Trash2
 } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { invoke } from '@tauri-apps/api/core';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEcsStore, ResourcePrefixes } from '../../stores/ecsStore';
-import { useAwsStore } from '../../stores/awsStore';
 import { useCwStore } from '../../stores/cwStore';
-import { EcsCluster, EcsService, EcsTask, EcsTaskDefinition, EcsContainerDefinition } from './ecsTypes';
+import { EcsContainerDefinition } from './ecsTypes';
 import { 
     Popover, 
     PopoverContent, 
@@ -19,13 +17,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-const toEcsRust = (cfg: any) => ({
-    access_key_id: cfg.accessKeyId,
-    secret_access_key: cfg.secretAccessKey,
-    region: cfg.region,
-    session_token: cfg.sessionToken || null,
-});
+import { 
+    useEcsClusters, useEcsServices, useEcsTasks, 
+    useEcsTaskDefinition, useEcsSecret, ecsKeys 
+} from '../../hooks/queries/useEcsQueries';
 
 function getResourceTheme(name: string, prefixes: ResourcePrefixes) {
     const isMs = prefixes.ms.some(p => name.toLowerCase().includes(p.toLowerCase()));
@@ -125,20 +120,7 @@ function SectionTitle({ title, count }: { title: string, count: number }) {
 
 function ConfigRow({ k, v, isSecret = false }: { k: string, v: string, isSecret?: boolean }) {
     const [show, setShow] = useState(true); // REVEAL by default per user request
-    const [resolvedValue, setResolvedValue] = useState<string | null>(null);
-    const [resolving, setResolving] = useState(false);
-    const { resolveSecret } = useEcsStore();
-
-    useEffect(() => {
-        if (isSecret && !resolvedValue) {
-            (async () => {
-                setResolving(true);
-                const val = await resolveSecret(v);
-                if (val) setResolvedValue(val);
-                setResolving(false);
-            })();
-        }
-    }, [isSecret, v, resolveSecret, resolvedValue]);
+    const { data: resolvedValue, isLoading: resolving } = useEcsSecret(isSecret ? v : undefined);
 
     const handleToggle = () => setShow(!show);
 
@@ -172,43 +154,28 @@ function ConfigRow({ k, v, isSecret = false }: { k: string, v: string, isSecret?
 }
 
 export function EcsTab() {
-    const cfg = useAwsStore(s => s.credentials);
     const queryClient = useQueryClient();
-    
     const { 
         selectedClusterArn, selectedServiceArn, resourcePrefixes,
-        setSelectedClusterArn, setSelectedServiceArn, fetchTaskDefinition
+        setSelectedClusterArn, setSelectedServiceArn
     } = useEcsStore();
     
     const { goToLogs } = useCwStore();
     const [search, setSearch] = useState('');
     const [detailTab, setDetailTab] = useState<'tasks' | 'config'>('tasks');
-    const [taskDef, setTaskDef] = useState<EcsTaskDefinition | null>(null);
-    const [loadingTd, setLoadingTd] = useState(false);
 
     // -- Queries --
     const {
         data: clusters = [],
         isLoading: loadingClusters,
         error: clusterError
-    } = useQuery({
-        queryKey: ['ecs-clusters', cfg?.accessKeyId, cfg?.region],
-        queryFn: () => invoke<EcsCluster[]>('ecs_list_clusters', { credentials: toEcsRust(cfg) }),
-        staleTime: 5 * 60 * 1000,
-        refetchInterval: 60_000,
-        enabled: !!cfg?.accessKeyId && !!cfg?.region,
-    });
+    } = useEcsClusters();
 
     const {
         data: services = [],
         isLoading: loadingServices,
         error: serviceError
-    } = useQuery({
-        queryKey: ['ecs-services', selectedClusterArn, cfg?.accessKeyId],
-        queryFn: () => invoke<EcsService[]>('ecs_list_services', { credentials: toEcsRust(cfg), clusterArn: selectedClusterArn }),
-        staleTime: 5 * 60 * 1000,
-        enabled: !!selectedClusterArn && !!cfg?.accessKeyId,
-    });
+    } = useEcsServices(selectedClusterArn);
 
     const selectedService = useMemo(() => 
         services.find(s => s.service_arn === selectedServiceArn),
@@ -219,58 +186,38 @@ export function EcsTab() {
         data: tasks = [],
         isLoading: loadingTasks,
         error: taskError
-    } = useQuery({
-        queryKey: ['ecs-tasks', selectedClusterArn, selectedService?.service_name, cfg?.accessKeyId],
-        queryFn: () => invoke<EcsTask[]>('ecs_list_tasks', { 
-            credentials: toEcsRust(cfg), 
-            clusterArn: selectedClusterArn, 
-            serviceName: selectedService?.service_name 
-        }),
-        staleTime: 2 * 60 * 1000,
-        refetchInterval: 30_000,
-        enabled: !!selectedClusterArn && !!selectedService?.service_name && !!cfg?.accessKeyId,
-    });
+    } = useEcsTasks(selectedClusterArn, selectedService?.service_name);
+
+    const {
+        data: taskDef,
+        isLoading: loadingTd
+    } = useEcsTaskDefinition(detailTab === 'config' ? selectedService?.task_definition_arn : undefined);
 
     const combinedError = clusterError || serviceError || taskError;
 
     useEffect(() => {
         setDetailTab('tasks');
-        setTaskDef(null);
     }, [selectedServiceArn]);
 
     const handleRefreshAll = () => {
-        queryClient.invalidateQueries({ queryKey: ['ecs-clusters'] });
-        queryClient.invalidateQueries({ queryKey: ['ecs-services'] });
-        queryClient.invalidateQueries({ queryKey: ['ecs-tasks'] });
+        queryClient.invalidateQueries({ queryKey: ecsKeys.all });
     };
 
     const handleRefreshTasks = () => {
-        queryClient.invalidateQueries({ queryKey: ['ecs-tasks'] });
-    };
-
-    const handleFetchTaskDef = async () => {
-        if (!selectedService || taskDef) return;
-        setLoadingTd(true);
-        const res = await fetchTaskDefinition(selectedService.task_definition_arn);
-        setTaskDef(res);
-        setLoadingTd(false);
+        queryClient.invalidateQueries({ queryKey: ecsKeys.tasks(selectedClusterArn, selectedService?.service_name) });
     };
 
     const handleGoToLogs = async () => {
         if (!selectedService) return;
         
-        // Try to get log group from task definition
-        const td = await fetchTaskDefinition(selectedService.task_definition_arn);
-        if (td && td.container_definitions?.length > 0) {
-            const logGroup = td.container_definitions[0].log_group;
+        if (taskDef && taskDef.container_definitions?.length > 0) {
+            const logGroup = taskDef.container_definitions[0].log_group;
             if (logGroup) {
                 goToLogs(logGroup);
                 return;
             }
         }
 
-        // Fallback heuristic if task definition fetch fails or has no logs configured
-        // The user specifically mentioned the pattern without /aws/ prefix
         const cleanName = selectedService.service_name.replace(/^srv-/, '');
         goToLogs(`/ecs/${cleanName}`);
     };
@@ -480,7 +427,6 @@ export function EcsTab() {
                                             <button 
                                                 onClick={() => {
                                                     setDetailTab('config');
-                                                    handleFetchTaskDef();
                                                 }}
                                                 className={cn(
                                                     "px-4 py-2 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-colors",
