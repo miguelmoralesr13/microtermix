@@ -3,13 +3,15 @@ import { Plus, RefreshCw, AlertCircle, Search, Terminal, CheckCircle2, XCircle, 
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTempoStore, formatDuration } from '../../stores/tempoStore';
-import { deleteWorklog, resolveMyAccountId, tempoApiLog, type TempoApiLogEntry } from '../../services/tempoApi';
+import { resolveMyAccountId, tempoApiLog, type TempoApiLogEntry } from '../../services/tempoApi';
 import type { TempoWorklog } from '../../services/tempoApi';
 import type { JiraConfig } from '../jiraApi';
 import { PeriodSelector } from './PeriodSelector';
 import { WorklogList } from './WorklogList';
 import { CalendarView } from './CalendarView';
 import { LogTimeModal } from './LogTimeModal';
+import { useTempoWorklogs, useTempoIssueWorklogs, useTempoDeleteWorklog, tempoKeys } from '../../hooks/queries/useTempoQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface TempoTabProps {
   config: JiraConfig;
@@ -172,28 +174,35 @@ const TempoConsole: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
 export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccountId }) => {
   const {
-    worklogs, issueWorklogs, period, loading, loadingIssue, error,
-    setPeriod, fetchWorklogs, fetchIssueWorklogs, removeWorklog, upsertWorklog,
+    period, setPeriod
   } = useTempoStore();
+
+  const queryClient = useQueryClient();
+  const [resolvedAccountId, setResolvedAccountId] = useState<string | null>(propAccountId || null);
+
+  const { 
+    data: worklogs = [], 
+    isLoading: loading, 
+    error: worklogsError 
+  } = useTempoWorklogs(config, resolvedAccountId);
+
+  const [activeIssueId, setActiveIssueId] = useState<number | null>(null);
+  const {
+    data: issueWorklogs = [],
+    isLoading: loadingIssue
+  } = useTempoIssueWorklogs(config, activeIssueId, resolvedAccountId);
+
+  const deleteMutation = useTempoDeleteWorklog(config.tempoToken);
 
   const [subTab, setSubTab] = useState<SubTab>('my-worklogs');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingWorklog, setEditingWorklog] = useState<TempoWorklog | undefined>();
   const [defaultIssueKey, setDefaultIssueKey] = useState('');
   const [issueSearchInput, setIssueSearchInput] = useState('');
-  const [activeIssueId, setActiveIssueId] = useState<number | null>(null);
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [resolvedAccountId, setResolvedAccountId] = useState<string | null>(propAccountId || null);
 
   const token = config.tempoToken;
   const hasToken = !!token;
-
-  // Auto-open console when a new log entry arrives and console is closed
-  useEffect(() => {
-    const handler = () => { /* just subscribe — user opens manually */ };
-    tempoApiLog.on(handler);
-    return () => tempoApiLog.off(handler);
-  }, []);
 
   // Resolve accountId on mount if not provided
   useEffect(() => {
@@ -204,15 +213,8 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
     });
   }, [propAccountId, config.baseUrl, config.email, config.apiToken]);
 
-  // Fetch worklogs when period, account, or resolved id changes
-  useEffect(() => {
-    if (!hasToken || !resolvedAccountId) return;
-    fetchWorklogs(token, resolvedAccountId, config.baseUrl, config.email, config.apiToken);
-  }, [period, resolvedAccountId, token]);
-
   const handleRefresh = () => {
-    if (!hasToken || !resolvedAccountId) return;
-    fetchWorklogs(token, resolvedAccountId, config.baseUrl, config.email, config.apiToken);
+    queryClient.invalidateQueries({ queryKey: tempoKeys.all });
   };
 
   const handleEdit = (worklog: TempoWorklog) => {
@@ -229,13 +231,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
 
   const handleDelete = async (tempoWorklogId: number) => {
     if (!confirm('¿Eliminar este worklog?')) return;
-    try {
-      await deleteWorklog(token, tempoWorklogId);
-      removeWorklog(tempoWorklogId);
-      toast.success('Worklog eliminado');
-    } catch (e: any) {
-      toast.error('Error al eliminar', { description: e.message });
-    }
+    deleteMutation.mutate(tempoWorklogId);
   };
 
   const handleIssueSearch = () => {
@@ -249,7 +245,6 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
         const id = parseInt(data.id, 10);
         if (!isNaN(id)) {
           setActiveIssueId(id);
-          fetchIssueWorklogs(token, id, config.baseUrl, config.email, config.apiToken, resolvedAccountId ?? undefined);
         } else {
           toast.error('Issue no encontrado');
         }
@@ -334,10 +329,10 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
                 <AlertCircle size={13} /> Resolviendo tu Account ID de Jira…
               </div>
             )}
-            {error && (
+            {worklogsError && (
               <div className="flex items-center gap-2 text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2 mb-3">
                 <AlertCircle size={13} />
-                <span className="flex-1">{error}</span>
+                <span className="flex-1">{String(worklogsError)}</span>
                 <button onClick={() => setConsoleOpen(true)} className="underline text-red-300 hover:text-white shrink-0">
                   ver log
                 </button>
@@ -432,7 +427,7 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
         authorAccountId={resolvedAccountId ?? ''}
         defaultIssueKey={defaultIssueKey}
         editingWorklog={editingWorklog}
-        onSuccess={upsertWorklog}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: tempoKeys.all })}
       />
     </div>
   );
