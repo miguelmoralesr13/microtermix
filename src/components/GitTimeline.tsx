@@ -9,6 +9,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip';
 import { cn } from '../lib/utils';
 import { useGitTimeline, gitKeys } from '../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
+import { ConfirmationDialog, ConfirmType } from './ui/ConfirmationDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 
 // ── Constants ──
 const ROW_H = 34;
@@ -17,6 +19,23 @@ const MAX_COLS = 4;
 const NODE_R = 5;
 const LANE_COLORS = ['#4ade80', '#60a5fa', '#f472b6', '#facc15'];
 const laneColor = (col: number) => LANE_COLORS[Math.min(col, LANE_COLORS.length - 1)];
+
+const AlertModal: React.FC<{ isOpen: boolean; title: string; message: string; onClose: () => void }> = ({ isOpen, title, message, onClose }) => (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-800 shadow-2xl">
+            <DialogHeader>
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-lg bg-red-500 bg-opacity-10">
+                        <AlertTriangle className="text-red-500" size={20} />
+                    </div>
+                    <DialogTitle className="text-slate-100 text-base font-bold uppercase tracking-tight">{title}</DialogTitle>
+                </div>
+                <div className="text-slate-400 text-sm font-mono bg-black/20 p-3 rounded border border-slate-800 whitespace-pre-wrap break-all mt-2">{message}</div>
+            </DialogHeader>
+            <DialogFooter className="mt-4"><Button onClick={onClose} className="bg-slate-800 text-white hover:bg-slate-700">Cerrar</Button></DialogFooter>
+        </DialogContent>
+    </Dialog>
+);
 
 // ── Types ──
 interface GraphNode extends RawCommit {
@@ -138,6 +157,9 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     const [deleteWorking, setDeleteWorking] = useState(false);
     const [commitStatuses, setCommitStatuses] = useState<Record<string, 'pending' | 'success' | 'failure' | 'error' | null>>({});
 
+    const [alertState, setAlertState] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
+    const [confirmState, setConfirmState] = useState<{ isOpen: boolean; title: string; description: string; confirmLabel?: string; type?: ConfirmType; onConfirm: () => void }>({ isOpen: false, title: '', description: '', onConfirm: () => { } });
+
     useEffect(() => {
         if (!projectPath) return;
         invoke<any>('git_execute', { projectPath, args: ['config', 'user.name'] }).then(r => setCurrentUser(r?.stdout?.trim() ?? '')).catch(() => { });
@@ -177,26 +199,47 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         setEditSaving(true);
         try {
             const res: any = await invoke('git_reword_commit', { projectPath, commitHash: n.hash, newMessage: editValue.trim() });
-            if (!res?.success) alert('Error al editar: ' + (res?.stderr ?? ''));
+            if (!res?.success) setAlertState({ isOpen: true, title: 'Error al editar', message: res?.stderr ?? 'Unknown error' });
             else { setEditingHash(null); handleRefresh(); }
-        } catch (e: any) { alert('Error: ' + e?.toString()); }
-        finally { setEditSaving(false); }
+        } catch (e: any) { 
+            setAlertState({ isOpen: true, title: 'Error', message: e?.toString() || 'Connection error' });
+        } finally { setEditSaving(false); }
     }, [editValue, projectPath, handleRefresh]);
 
     const handleDelete = useCallback(async (n: GraphNode) => {
-        setDeleteWorking(true);
-        try {
-            const isHead = nodes[0]?.hash === n.hash;
-            if (isHead) await invoke('git_execute', { projectPath, args: ['reset', '--soft', 'HEAD~1'] });
-            else {
-                const parent = n.parents[0];
-                if (!parent) { alert('No se puede determinar el padre.'); setDeleteWorking(false); return; }
-                const res: any = await invoke('git_execute', { projectPath, args: ['rebase', '--onto', parent, n.shortHash] });
-                if (!res?.success) { alert('Error: ' + (res?.stderr ?? '')); setDeleteWorking(false); return; }
+        setConfirmState({
+            isOpen: true,
+            title: 'Eliminar Commit',
+            description: `¿Estás seguro de que quieres eliminar el commit "${n.shortHash}"? Esto reescribirá la historia del repositorio.`,
+            confirmLabel: 'Eliminar',
+            type: 'danger',
+            onConfirm: async () => {
+                setDeleteWorking(true);
+                try {
+                    const isHead = nodes[0]?.hash === n.hash;
+                    if (isHead) await invoke('git_execute', { projectPath, args: ['reset', '--soft', 'HEAD~1'] });
+                    else {
+                        const parent = n.parents[0];
+                        if (!parent) { 
+                            setAlertState({ isOpen: true, title: 'Error', message: 'No se puede determinar el padre del commit.' });
+                            return; 
+                        }
+                        const res: any = await invoke('git_execute', { projectPath, args: ['rebase', '--onto', parent, n.shortHash] });
+                        if (!res?.success) {
+                            setAlertState({ isOpen: true, title: 'Error al eliminar', message: res?.stderr ?? 'Unknown error' });
+                            return;
+                        }
+                    }
+                    setSelectedHash(null);
+                    handleRefresh();
+                } catch (e: any) { 
+                    setAlertState({ isOpen: true, title: 'Error', message: e?.toString() || 'Connection error' });
+                } finally { 
+                    setDeleteWorking(false); 
+                    setConfirmState(s => ({ ...s, isOpen: false }));
+                }
             }
-            setDeletingHash(null); setSelectedHash(null); handleRefresh();
-        } catch (e: any) { alert('Error: ' + e?.toString()); }
-        finally { setDeleteWorking(false); }
+        });
     }, [nodes, projectPath, handleRefresh]);
 
     const isMatch = useCallback((n: GraphNode): boolean => {
@@ -268,8 +311,27 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                         );
                     })}
                 </div>
-                {nodes.length === 0 && <div className="text-center text-slate-600 py-12 text-sm">No hay commits en este repositorio.</div>}
+                {nodes.length === 0 && (
+                    <div className="text-center text-slate-600 py-12 text-sm">No hay commits en este repositorio.</div>
+                )}
             </div>
+
+            <AlertModal 
+                isOpen={alertState.isOpen} 
+                title={alertState.title} 
+                message={alertState.message} 
+                onClose={() => setAlertState(s => ({ ...s, isOpen: false }))} 
+            />
+            <ConfirmationDialog
+                isOpen={confirmState.isOpen}
+                title={confirmState.title}
+                description={confirmState.description}
+                confirmLabel={confirmState.confirmLabel}
+                type={confirmState.type}
+                onConfirm={confirmState.onConfirm}
+                onCancel={() => setConfirmState(s => ({ ...s, isOpen: false }))}
+                isLoading={deleteWorking}
+            />
         </div>
     );
 };

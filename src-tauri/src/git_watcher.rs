@@ -95,9 +95,10 @@ pub fn start_watching_repo(
     });
 
     let root_path = Path::new(&project_path);
-    if !root_path.exists() {
-        app_logs::log_error("Git Watcher", &format!("Path does not exist: {}", project_path));
-        return Err("Project path does not exist".to_string());
+    let git_path = root_path.join(".git");
+    if !git_path.exists() {
+        app_logs::log_error("Git Watcher", &format!(".git directory does not exist in: {}", project_path));
+        return Err("Project is not a git repository or .git is missing".to_string());
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::channel(10);
@@ -107,13 +108,11 @@ pub fn start_watching_repo(
             if let Ok(event) = res {
                 let should_notify = event.paths.iter().any(|p| {
                     let s = p.to_string_lossy();
-                    if s.contains(".git/HEAD") || s.contains(".git/index") || s.contains(".git/refs") {
+                    // Solo nos interesan cambios en archivos clave de Git
+                    if s.contains("HEAD") || s.contains("index") || s.contains("refs/") || s.contains("FETCH_HEAD") {
                         return !s.ends_with(".lock");
                     }
-                    if s.contains("node_modules") || s.contains("target") || s.contains(".next") || s.contains(".dist") || s.contains(".git") {
-                        return false;
-                    }
-                    !s.ends_with(".lock") && !s.ends_with("~")
+                    false
                 });
                 if should_notify {
                     let _ = tx.blocking_send(());
@@ -123,7 +122,7 @@ pub fn start_watching_repo(
         Config::default(),
     ).map_err(|e| e.to_string())?;
 
-    watcher.watch(root_path, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+    watcher.watch(&git_path, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
 
     let project_path_for_store = project_path.clone();
     let watchers_for_store = git_watchers.clone();

@@ -31,6 +31,7 @@ function AppContent() {
   const { state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, addProjectsFromPaths, openFolderInThisWindow, openFolderInNewWindow } = useWorkspace();
   const configLoadedForPathRef = React.useRef<string | null>(null);
   const initAppLogListener = useAppLogStore(s => s.initListener);
+  const gitActiveTab = useGitStore(s => s.ui.activeTab);
 
   // Global App Log Listener (Background)
   React.useEffect(() => {
@@ -44,9 +45,13 @@ function AppContent() {
   const isStandalone = params.get('standalone') === 'true';
   const standaloneUtility = params.get('utility') as AppView | null;
 
-  // Iniciar watchers globales para Git (React Query)
-  const projectPaths = React.useMemo(() => state.projects.map(p => p.path as string), [state.projects]);
-  useGitWatcher(projectPaths);
+  // Iniciar watchers para Git (React Query) - Solo el proyecto activo si estamos en la vista de Git
+  const pathsToWatch = React.useMemo(() => {
+    if (state.activeView === 'git' && gitActiveTab) return [gitActiveTab];
+    return [];
+  }, [state.activeView, gitActiveTab]);
+  
+  useGitWatcher(pathsToWatch);
 
   React.useEffect(() => {
     const initWorkspace = async () => {

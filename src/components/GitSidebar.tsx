@@ -7,6 +7,8 @@ import { PushPreviewModal } from './PushPreviewModal';
 import { useGitStore } from '../stores/gitStore';
 import { MergeConfirmModal } from './MergeConfirmModal';
 import { PRSection } from './PRSection';
+import { StashDiffModal } from './StashDiffModal';
+import { ConfirmationDialog, ConfirmType } from './ui/ConfirmationDialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -212,6 +214,21 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const [isResolvingPull, setIsResolvingPull] = useState(false);
     const [isPulling, setIsPulling] = useState(false);
     const [viewCodeBranch, setViewCodeBranch] = useState<string | null>(null);
+    const [viewStash, setViewStash] = useState<string | null>(null);
+
+    const [confirmState, setConfirmState] = useState<{
+        isOpen: boolean;
+        title: string;
+        description: string;
+        confirmLabel?: string;
+        type?: ConfirmType;
+        onConfirm: () => void;
+    }>({
+        isOpen: false,
+        title: '',
+        description: '',
+        onConfirm: () => { },
+    });
 
     const searchLower = branchSearch.trim().toLowerCase();
     const filteredLocal = useMemo(() =>
@@ -236,17 +253,22 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
     const handleCheckout = async (branch: string, isRemote: boolean) => {
         try {
-            let checkoutBranch = branch;
-            if (isRemote) {
-                const parts = branch.split('/');
-                if (parts.length > 1) checkoutBranch = parts.slice(1).join('/');
+            // Extraemos el nombre limpio de la rama (ej: de 'origin/main' sacamos 'main')
+            // Git se encargará de crearla y rastrearla si no existe localmente.
+            const parts = branch.split('/');
+            const branchName = isRemote ? parts.slice(1).join('/') : branch;
+
+            const res: any = await invoke('git_execute', { 
+                projectPath, 
+                args: ['checkout', branchName] 
+            });
+            
+            if (!res.success) {
+                alert(res.stderr || 'Error al ejecutar checkout');
+                return;
             }
-            const res: any = await invoke('git_execute', { projectPath, args: ['checkout', checkoutBranch] });
-            if (res && res.success === false) {
-                alert(res.stderr || res.stdout || 'Error al cambiar de rama');
-            } else {
-                handleRefresh();
-            }
+            
+            handleRefresh();
         } catch (e: any) {
             alert(e?.toString() || 'Error al ejecutar checkout');
         }
@@ -276,31 +298,60 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     };
 
     const handleStashDrop = async (stashId: string) => {
-        if (!confirm(`Delete stash? "${stashId.split(': ').slice(1).join(': ')}"`)) return;
-        try {
-            const idMatch = stashId.match(/stash@\{\d+\}/);
-            if (idMatch) {
-                await invoke('git_execute', { projectPath, args: ['stash', 'drop', idMatch[0]] });
-                handleRefresh();
+        setConfirmState({
+            isOpen: true,
+            title: 'Eliminar Stash',
+            description: `¿Estás seguro de que quieres eliminar este stash? "${stashId.split(': ').slice(1).join(': ')}"`,
+            confirmLabel: 'Eliminar',
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    const idMatch = stashId.match(/stash@\{\d+\}/);
+                    if (idMatch) {
+                        await invoke('git_execute', { projectPath, args: ['stash', 'drop', idMatch[0]] });
+                        handleRefresh();
+                    }
+                } catch { /* no-op */ }
+                setConfirmState(s => ({ ...s, isOpen: false }));
             }
-        } catch { /* no-op */ }
+        });
     };
 
     const handleDeleteLocalBranch = async (branchName: string) => {
         if (!branchName || localBranches.some(b => b.name === branchName && b.active)) return;
-        if (!confirm(`Delete local branch "${branchName}"?`)) return;
-        try {
-            const result: any = await invoke('git_execute', { projectPath, args: ['branch', '-d', branchName] });
-            if (result?.success !== false) {
-                handleRefresh();
-            } else {
-                const msg = result?.stderr || 'Could not delete branch. Not fully merged? Try force delete.';
-                if (confirm(`${msg}\n\nForce delete anyway?`)) {
-                    await invoke('git_execute', { projectPath, args: ['branch', '-D', branchName] });
-                    handleRefresh();
+
+        setConfirmState({
+            isOpen: true,
+            title: 'Eliminar Rama Local',
+            description: `¿Estás seguro de que quieres eliminar la rama "${branchName}"?`,
+            confirmLabel: 'Eliminar',
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    const result: any = await invoke('git_execute', { projectPath, args: ['branch', '-d', branchName] });
+                    if (result?.success !== false) {
+                        handleRefresh();
+                        setConfirmState(s => ({ ...s, isOpen: false }));
+                    } else {
+                        const msg = result?.stderr || 'Could not delete branch. Not fully merged?';
+                        setConfirmState({
+                            isOpen: true,
+                            title: 'Forzar Eliminación',
+                            description: `${msg}\n\n¿Quieres forzar la eliminación de todas formas?`,
+                            confirmLabel: 'Forzar Eliminación',
+                            type: 'danger',
+                            onConfirm: async () => {
+                                await invoke('git_execute', { projectPath, args: ['branch', '-D', branchName] });
+                                handleRefresh();
+                                setConfirmState(s => ({ ...s, isOpen: false }));
+                            }
+                        });
+                    }
+                } catch { 
+                    setConfirmState(s => ({ ...s, isOpen: false }));
                 }
             }
-        } catch { /* no-op */ }
+        });
     };
 
     const handlePull = async () => {
@@ -460,6 +511,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                                     <Archive size={12} className="mr-2 text-slate-500 shrink-0" />
                                     <span className="truncate flex-1">{stash.split(': ').slice(1).join(': ') || stash}</span>
                                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); setViewStash(stash); }} className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-neon rounded"><Eye size={12} /></Button>} /><TooltipContent>Ver cambios</TooltipContent></Tooltip>
                                         <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); handleStashPop(stash); }} className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-accent rounded"><PackageOpen size={12} /></Button>} /><TooltipContent>Stash Pop</TooltipContent></Tooltip>
                                         <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={(e) => { e.stopPropagation(); handleStashDrop(stash); }} className="h-6 w-6 p-0 hover:bg-slate-700/50 text-microtermix-danger rounded"><Trash2 size={12} /></Button>} /><TooltipContent>Stash Drop</TooltipContent></Tooltip>
                                     </div>
@@ -477,6 +529,17 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             {showPushModal && <PushPreviewModal projectPath={projectPath} onClose={() => setShowPushModal(false)} onRefreshRequest={handleRefresh} />}
             {showMergeModal && <MergeConfirmModal projectPath={projectPath} sourceBranch={showMergeModal} currentBranch={activeBranch?.name || ''} onClose={() => setShowMergeModal(null)} onMergeComplete={handleRefresh} />}
             {viewCodeBranch && activeAccount && <GitlabBranchViewerModal isOpen={!!viewCodeBranch} onClose={() => setViewCodeBranch(null)} projectPath={projectPath} token={activeAccount.token} branch={viewCodeBranch} apiUrl={activeAccount.url} />}
+            {viewStash && <StashDiffModal isOpen={!!viewStash} onClose={() => setViewStash(null)} projectPath={projectPath} stashRef={viewStash.split(':')[0]} />}
+
+            <ConfirmationDialog
+                isOpen={confirmState.isOpen}
+                title={confirmState.title}
+                description={confirmState.description}
+                confirmLabel={confirmState.confirmLabel}
+                type={confirmState.type}
+                onConfirm={confirmState.onConfirm}
+                onCancel={() => setConfirmState(s => ({ ...s, isOpen: false }))}
+            />
 
             <Dialog open={!!pullError} onOpenChange={(open) => !open && setPullError(null)}>
                 <DialogContent>

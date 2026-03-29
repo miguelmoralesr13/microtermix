@@ -1007,6 +1007,52 @@ pub fn git_config_get_impl(
 }
 
 
+pub fn git_get_stash_diff_native(project_path: String, index: usize) -> Result<crate::git_diff::GitResult, String> {
+    let repo = Repository::open(&project_path).map_err(|e| e.to_string())?;
+    
+    // El commit del stash es stash@{index}. Generalmente tiene al menos 2 padres:
+    // P1: El commit base (HEAD en el momento del stash)
+    // P2: Los cambios del índice (staged)
+    // P3: (Opcional) Archivos untracked si se usó -u
+    
+    let stash_ref = format!("stash@{{{}}}", index);
+    let stash_commit_obj = repo.revparse_single(&stash_ref).map_err(|e| format!("revparse {}: {}", stash_ref, e))?;
+    let stash_commit = stash_commit_obj.as_commit().ok_or("Object is not a commit")?;
+    
+    let parent_commit = stash_commit.parent(0).map_err(|e| format!("parent: {}", e))?;
+    
+    let old_tree = parent_commit.tree().map_err(|e| format!("old tree: {}", e))?;
+    let new_tree = stash_commit.tree().map_err(|e| format!("new tree: {}", e))?;
+    
+    let mut opts = git2::DiffOptions::new();
+    let diff = repo.diff_tree_to_tree(Some(&old_tree), Some(&new_tree), Some(&mut opts))
+        .map_err(|e| format!("diff: {}", e))?;
+    
+    let mut diff_str = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        let origin = line.origin();
+        match origin {
+            '+' | '-' | ' ' => diff_str.push(origin),
+            _ => {}
+        }
+        if let Ok(s) = std::str::from_utf8(line.content()) {
+            diff_str.push_str(s);
+        }
+        true
+    }).map_err(|e| format!("print diff: {}", e))?;
+
+    Ok(crate::git_diff::GitResult {
+        stdout: diff_str,
+        stderr: String::new(),
+        success: true,
+    })
+}
+
+#[tauri::command]
+pub async fn git_get_stash_diff(project_path: String, index: usize) -> Result<crate::git_diff::GitResult, String> {
+    git_get_stash_diff_native(project_path, index)
+}
+
 // ── Internal helpers (git2) ───────────────────────────────────────────────────
 
 fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {

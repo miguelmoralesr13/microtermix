@@ -35,6 +35,7 @@ use tauri::{AppHandle, Manager};
 // Re-export tipos de diff/git para usarlos en comandos Tauri.
 pub use crate::git_diff::{DiffHunksResult, GitResult, HunkInfo};
 pub use crate::s3::{s3_list_buckets, s3_list_objects, s3_download_object};
+pub use crate::git_native::git_get_stash_diff;
 pub use crate::state::AppState;
 pub use crate::projects::{
     get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects,
@@ -371,6 +372,7 @@ pub fn run() {
             git_get_status,
             git_apply_patch,
             git_reword_commit,
+            git_get_stash_diff,
             git_is_repo_native,
             git_branches_native,
             git_status_native,

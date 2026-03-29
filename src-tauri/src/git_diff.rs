@@ -182,7 +182,7 @@ async fn git_cli_fallback(
     
     // Safety check: ensure migrated commands don't reach CLI fallback
     match command {
-        "show" | "checkout" | "config" => {
+        "show" | "config" => {
              return Err(format!("Command 'git {}' is now handled natively and should not reach CLI fallback. Check router logic.", command));
         },
         "restore" if !args.contains(&"--staged".to_string()) => {
@@ -417,16 +417,26 @@ pub async fn git_execute_impl(
 
         // ── Fallback for everything else (reset, stash, rebase, merge…) ──
         _ => git_cli_fallback(&app_handle, &project_path, &args).await,
-    }?;
+    };
 
-    // Emit to the git-log panel regardless of path
-    let _ = tauri::Emitter::emit(&app_handle, "git-log", GitLogPayload {
-        project_path: project_path.clone(),
-        command: command_str,
-        stdout: result.stdout.clone(),
-        stderr: result.stderr.clone(),
-    });
+    // Emit to the git-log panel regardless of success/path
+    let payload = match result {
+        Ok(ref res) => GitLogPayload {
+            project_path: project_path.clone(),
+            command: command_str,
+            stdout: res.stdout.clone(),
+            stderr: res.stderr.clone(),
+        },
+        Err(ref err) => GitLogPayload {
+            project_path: project_path.clone(),
+            command: command_str,
+            stdout: String::new(),
+            stderr: err.clone(),
+        },
+    };
+    let _ = tauri::Emitter::emit(&app_handle, "git-log", payload);
 
+    let result = result?;
     Ok(result)
 }
 
