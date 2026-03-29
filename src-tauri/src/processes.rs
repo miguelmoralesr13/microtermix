@@ -764,10 +764,14 @@ pub async fn execute_service_script(
     }
 
     cmd.current_dir(&project_path)
-        .envs(envs)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
+
+    // Inyectar variables de entorno una a una para asegurar prioridad y no perder el resto (como PATH)
+    for (k, v) in envs {
+        cmd.env(k, v);
+    }
 
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
 
