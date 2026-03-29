@@ -3,13 +3,18 @@ import { useApiGatewayStore, SelectedApi } from '../stores/apiGatewayStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Server, Zap, Star } from 'lucide-react';
+import { useApiGatewayList } from '../hooks/queries/useApiGatewayQueries';
 
 interface ApiGatewayListProps {
     searchTerm: string;
 }
 
 export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm }) => {
-    const { restApis, httpApis, selectedApi, selectApi, favoriteApis, toggleFavorite } = useApiGatewayStore();
+    const { selectedApi, selectApi, favoriteApis, toggleFavorite } = useApiGatewayStore();
+    const { data, isLoading } = useApiGatewayList();
+    
+    const restApis = data?.rest_apis || [];
+    const httpApis = data?.http_apis || [];
 
     const term = searchTerm.toLowerCase().trim();
 
@@ -46,17 +51,19 @@ export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm }) =>
                 <div className="px-4 pt-3 pb-2 border-b border-slate-800 shrink-0">
                     <TabsList className="w-full bg-slate-950/50 border border-slate-800 h-9 p-1">
                         <TabsTrigger value="rest" className="flex-1 text-xs data-[state=active]:bg-slate-800">
-                            v1 (REST) <Badge variant="secondary" className="ml-2 bg-slate-800 text-slate-400 font-normal px-1.5 py-0 h-4">{filteredRest.length}</Badge>
+                            v1 (REST) <Badge variant="secondary" className="ml-2 bg-slate-800 text-slate-400 font-normal px-1.5 py-0 h-4">{isLoading ? '...' : filteredRest.length}</Badge>
                         </TabsTrigger>
                         <TabsTrigger value="http" className="flex-1 text-xs data-[state=active]:bg-slate-800">
-                            v2 (HTTP/WS) <Badge variant="secondary" className="ml-2 bg-slate-800 text-slate-400 font-normal px-1.5 py-0 h-4">{filteredHttp.length}</Badge>
+                            v2 (HTTP/WS) <Badge variant="secondary" className="ml-2 bg-slate-800 text-slate-400 font-normal px-1.5 py-0 h-4">{isLoading ? '...' : filteredHttp.length}</Badge>
                         </TabsTrigger>
                     </TabsList>
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
                     <TabsContent value="rest" className="m-0 h-full p-2 space-y-1 outline-none">
-                        {filteredRest.length === 0 ? (
+                        {isLoading ? (
+                            <div className="text-slate-500 text-sm text-center mt-10 animate-pulse">Loading APIs...</div>
+                        ) : filteredRest.length === 0 ? (
                             <div className="text-slate-500 text-sm text-center mt-10">No REST APIs found</div>
                         ) : (
                             filteredRest.map(api => {
@@ -98,7 +105,9 @@ export const ApiGatewayList: React.FC<ApiGatewayListProps> = ({ searchTerm }) =>
                     </TabsContent>
 
                     <TabsContent value="http" className="m-0 h-full p-2 space-y-1 outline-none">
-                        {filteredHttp.length === 0 ? (
+                        {isLoading ? (
+                            <div className="text-slate-500 text-sm text-center mt-10 animate-pulse">Loading APIs...</div>
+                        ) : filteredHttp.length === 0 ? (
                             <div className="text-slate-500 text-sm text-center mt-10">No HTTP/WebSocket APIs found</div>
                         ) : (
                             filteredHttp.map(api => {

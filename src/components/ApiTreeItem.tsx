@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, Play, ExternalLink, FileCode2, X } from 'lucide-react';
 import { useCwStore } from '../stores/cwStore';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { useMethodDetails } from '../hooks/queries/useApiGatewayQueries';
 
 interface ApiTreeNode {
     segment: string;
@@ -58,9 +59,16 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
     const [templatesModal, setTemplatesModal] = useState<Record<string, string> | null>(null);
 
-    const { selectedApi, fetchMethodDetails, methodDetails, loadingMethodDetails, openTester, httpApis } = useApiGatewayStore();
+    const { selectedApi, openTester, httpApis } = useApiGatewayStore();
     const { goToLogs } = useCwStore();
     const { setActiveView } = useWorkspace();
+
+    const { data: details, isLoading } = useMethodDetails(
+        selectedApi?.id || '', 
+        node.resourceId || '', 
+        selectedMethod || '', 
+        selectedApi?.type === 'rest'
+    );
 
     const childNodes = Object.values(node.children).sort((a, b) => {
         const aIsParam = a.segment.startsWith('{');
@@ -77,9 +85,6 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
             return;
         }
         setSelectedMethod(method);
-        if (selectedApi && node.resourceId) {
-            fetchMethodDetails(selectedApi.id, node.resourceId, method, selectedApi.type === 'rest');
-        }
     };
 
     const extractLambdaName = (uri: string) => {
@@ -93,14 +98,16 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
         setActiveView('cloudwatch');
     };
 
-    const handleTest = (details?: RestMethodDetails | HttpRouteIntegrationDetails) => {
+    const handleTest = (testDetails?: RestMethodDetails | HttpRouteIntegrationDetails) => {
         if (!selectedApi || !selectedMethod) return;
 
         let authType: string | null = null;
         let baseUrl = "";
 
+        const currentDetails = testDetails || details;
+
         if (selectedApi.type === 'rest') {
-            authType = details ? (details as RestMethodDetails).authorization_type : null;
+            authType = currentDetails ? (currentDetails as RestMethodDetails).authorization_type : null;
             baseUrl = `https://${selectedApi.id}.execute-api.AWS_REGION.amazonaws.com/STAGE`;
         } else {
             const apiInfo = httpApis.find(a => a.api_id === selectedApi.id);
@@ -120,10 +127,6 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
 
     const renderDetailsPanel = () => {
         if (!selectedMethod || !selectedApi || !node.resourceId) return null;
-
-        const cacheKey = `${selectedApi.id}|${node.resourceId}|${selectedMethod}`;
-        const isLoading = loadingMethodDetails[cacheKey];
-        const details = methodDetails[cacheKey];
 
         if (isLoading) {
             return (
@@ -265,7 +268,7 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
                                 className="flex items-center gap-1 text-microtermix-neon hover:underline text-[9px] font-bold uppercase tracking-tighter"
                             >
                                 <ExternalLink size={10} /> Ver Logs Lambda
-                            </button>
+                              </button>
                         )}
                     </div>
 

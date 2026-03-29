@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { useApiGatewayStore } from '../stores/apiGatewayStore';
+import React, { useState } from 'react';
 import { ApiGatewayList } from './ApiGatewayList';
 import { ApiGatewayDetails } from './ApiGatewayDetails';
 import { RefreshCw, Network, Search, Layout } from 'lucide-react';
@@ -7,24 +6,21 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useAwsStore } from '../stores/awsStore';
 import { ApiGatewayTester } from './ApiGatewayTester';
+import { useApiGatewayList, apigwKeys } from '../hooks/queries/useApiGatewayQueries';
+import { useQueryClient } from '@tanstack/react-query';
 
 export const ApiGatewayPanel: React.FC = () => {
-    const { fetchApis, loadingApis, error } = useApiGatewayStore();
     const credentials = useAwsStore(s => s.credentials);
     const isConfigured = !!credentials?.accessKeyId;
+    const { isLoading, error } = useApiGatewayList();
+    const queryClient = useQueryClient();
 
     const [searchTerm, setSearchTerm] = useState('');
     const [inputValue, setInputValue] = useState('');
 
-    useEffect(() => {
-        if (isConfigured) {
-            fetchApis();
-        }
-    }, [isConfigured, fetchApis]);
-
     const handleRefresh = () => {
         if (isConfigured) {
-            fetchApis();
+            queryClient.invalidateQueries({ queryKey: apigwKeys.lists() });
         }
     };
 
@@ -41,10 +37,10 @@ export const ApiGatewayPanel: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         onClick={handleRefresh}
-                        disabled={loadingApis}
+                        disabled={isLoading}
                         className="text-slate-400 hover:text-white"
                     >
-                        <RefreshCw size={16} className={`mr-2 ${loadingApis ? 'animate-spin' : ''}`} />
+                        <RefreshCw size={16} className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Refresh
                     </Button>
                 </div>
@@ -80,7 +76,7 @@ export const ApiGatewayPanel: React.FC = () => {
                 {/* Error Banner */}
                 {error && (
                     <div className="absolute inset-x-0 top-0 z-10 bg-red-900/90 text-red-100 text-xs px-4 py-2 text-center shadow-md font-mono">
-                        {error}
+                        {String(error)}
                     </div>
                 )}
 
