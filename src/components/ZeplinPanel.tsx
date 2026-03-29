@@ -5,15 +5,14 @@ import {
     Maximize2, ChevronLeft, ChevronRight, Folder, Eye, Layers, Terminal, Trash2, Copy as CopyIcon, ChevronDown
 } from 'lucide-react';
 import { 
-    fetchZeplinProjects, fetchZeplinProjectDetails, fetchZeplinScreens, 
-    fetchZeplinFlows, fetchZeplinFlowDetails, fetchZeplinScreenDetails, 
-    fetchZeplinSections, verifyZeplinToken 
+    verifyZeplinToken 
 } from '../services/zeplinApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useEscape } from '../hooks/useEscape';
 import { cn } from '@/lib/utils';
+import { useZeplinProjects, useZeplinProjectData, useZeplinScreenDetails, useZeplinFlowDetails } from '../hooks/queries/useZeplinQueries';
 
 type Tab = 'screens' | 'flows' | 'settings';
 
@@ -21,64 +20,19 @@ export const ZeplinPanel: React.FC = () => {
     const [tab, setTab] = useState<Tab>('flows');
     const [showLogs, setShowLogs] = useState(false);
     const { 
-        projects, currentProject, selectedScreenId, selectedFlowId, isLoading,
-        setLoading, setProjects, setCurrentProject, setScreens, setFlows, setSections,
-        setSelectedScreenId, setSelectedFlowId, getActiveAccount
+        currentProjectId, selectedScreenId, selectedFlowId,
+        setCurrentProjectId, setSelectedScreenId, setSelectedFlowId
     } = useZeplinStore();
 
-    const activeAccount = getActiveAccount();
+    const { data: projects = [], isLoading: loadingProjects } = useZeplinProjects();
+    const { screens, flows, sections, isLoading: loadingData } = useZeplinProjectData(currentProjectId || undefined);
 
-    useEffect(() => {
-        if (activeAccount && projects.length === 0) loadProjects();
-    }, [activeAccount]);
-
-    const loadProjects = async () => {
-        if (!activeAccount) return;
-        setLoading(true);
-        try {
-            const data = await fetchZeplinProjects(activeAccount.token);
-            setProjects(Array.isArray(data) ? data : []);
-        } catch (e: any) {
-            toast.error(`Error: ${e.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSelectProject = async (projectId: string) => {
-        const project = projects.find(p => p.id === projectId);
-        if (!project || !activeAccount) return;
-        setCurrentProject(project);
-        setSelectedScreenId(null);
-        setSelectedFlowId(null);
-        setLoading(true);
-        try {
-            const isStyleguide = project.type === 'styleguide';
-            const [screens, flows, sections, projectDetails] = await Promise.all([
-                fetchZeplinScreens(activeAccount.token, project.id),
-                fetchZeplinFlows(activeAccount.token, project.id),
-                fetchZeplinSections(activeAccount.token, project.id, isStyleguide),
-                fetchZeplinProjectDetails(activeAccount.token, project.id)
-            ]);
-            setScreens(screens);
-            setFlows(flows);
-            const allSections = [...(sections || [])];
-            const detailSections = projectDetails?.sections || projectDetails?.screen_sections || [];
-            if (Array.isArray(detailSections)) {
-                detailSections.forEach((s: any) => {
-                    if (!allSections.some(as => as.id === s.id)) allSections.push(s);
-                });
-            }
-            setSections(allSections);
-        } catch (e) {
-            toast.error("Error al sincronizar datos");
-        } finally {
-            setLoading(false);
-        }
-    };
+    const currentProject = projects.find(p => p.id === currentProjectId);
 
     if (selectedScreenId) return <ZeplinCanvas />;
     if (selectedFlowId) return <ZeplinFlowDiagram />;
+
+    const isLoading = loadingProjects || loadingData;
 
     return (
         <div className="flex-1 flex flex-col h-full w-full min-h-0 bg-slate-950 text-slate-200 font-sans font-medium">
@@ -99,7 +53,11 @@ export const ZeplinPanel: React.FC = () => {
                 <div className="ml-auto flex items-center gap-4 pb-2">
                     {isLoading && <Loader2 size={14} className="animate-spin text-microtermix-neon" />}
                     {projects.length > 0 && (
-                        <select value={currentProject?.id || ''} onChange={(e) => handleSelectProject(e.target.value)}
+                        <select value={currentProjectId || ''} onChange={(e) => {
+                            setCurrentProjectId(e.target.value);
+                            setSelectedScreenId(null);
+                            setSelectedFlowId(null);
+                        }}
                             className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-[11px] font-bold text-slate-300 focus:outline-none focus:border-microtermix-neon transition-colors">
                             <option value="" disabled>Seleccionar Proyecto</option>
                             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -115,8 +73,8 @@ export const ZeplinPanel: React.FC = () => {
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
                 <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide">
                     {tab === 'settings' && <div className="p-6"><ZeplinSettings /></div>}
-                    {tab === 'screens' && <div className="p-6 h-full"><ZeplinScreensView /></div>}
-                    {tab === 'flows' && <ZeplinFlowsView />}
+                    {tab === 'screens' && <div className="p-6 h-full"><ZeplinScreensView screens={screens} /></div>}
+                    {tab === 'flows' && <ZeplinFlowsView screens={screens} flows={flows} sections={sections} />}
                 </div>
                 {showLogs && <div className="h-64 border-t border-slate-900 shrink-0 bg-slate-950 flex flex-col shadow-2xl"><ZeplinLogsView /></div>}
             </div>
@@ -124,8 +82,7 @@ export const ZeplinPanel: React.FC = () => {
     );
 };
 
-const useOrganizedItems = () => {
-    const { screens, sections, flows } = useZeplinStore();
+const useOrganizedItems = (screens: any[], sections: any[], flows: any[]) => {
     return useMemo(() => {
         const boards: any[] = [];
         const orphanSections: any[] = [];
@@ -157,8 +114,8 @@ const useOrganizedItems = () => {
     }, [screens, sections, flows]);
 };
 
-const ZeplinFlowsView: React.FC = () => {
-    const { boards, orphanSections } = useOrganizedItems();
+const ZeplinFlowsView: React.FC<{ screens: any[], flows: any[], sections: any[] }> = ({ screens, flows, sections }) => {
+    const { boards, orphanSections } = useOrganizedItems(screens, sections, flows);
     const { setSelectedFlowId, setSelectedScreenId } = useZeplinStore();
 
     if (boards.length === 0 && orphanSections.length === 0) {
@@ -227,10 +184,20 @@ const ZeplinFlowsView: React.FC = () => {
 };
 
 const ZeplinFlowDiagram: React.FC = () => {
-    const { currentProject, selectedFlowId, setSelectedFlowId, setSelectedScreenId, screens, getActiveAccount } = useZeplinStore();
-    const [flowData, setFlowData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const { currentProjectId, selectedFlowId, setSelectedFlowId, setSelectedScreenId } = useZeplinStore();
+    const { screens } = useZeplinProjectData(currentProjectId || undefined);
+    const { data: remoteFlowData, isLoading: loading } = useZeplinFlowDetails(currentProjectId || undefined, selectedFlowId);
     
+    const flowData = useMemo(() => {
+        if (selectedFlowId?.startsWith('section-')) {
+            const sectionId = selectedFlowId.replace('section-', '');
+            const sectionScreens = screens.filter(s => (s.section_id || (s as any).section?.id || (s as any).latest_version?.section?.id || 'root') === sectionId);
+            const nodes = sectionScreens.map((s, i) => ({ id: `node-${s.id}`, screen_id: s.id, width: 375, position: { x: (i % 4) * 500, y: Math.floor(i / 4) * 850 } }));
+            return { name: "Mapa Dinámico", nodes, connectors: [] };
+        }
+        return remoteFlowData;
+    }, [selectedFlowId, remoteFlowData, screens]);
+
     const panRef = useRef({ x: 100, y: 100 });
     const [zoom, setZoom] = useState(0.4);
     const isDraggingRef = useRef(false);
@@ -252,26 +219,6 @@ const ZeplinFlowDiagram: React.FC = () => {
             gridRef.current.style.backgroundSize = `${40 * z}px ${40 * z}px`;
         }
     }, [zoom]);
-
-    useEffect(() => {
-        const load = async () => {
-            const acc = getActiveAccount();
-            if (!acc || !currentProject || !selectedFlowId) return;
-            setLoading(true);
-            try {
-                if (selectedFlowId.startsWith('section-')) {
-                    const sectionId = selectedFlowId.replace('section-', '');
-                    const sectionScreens = screens.filter(s => (s.section_id || (s as any).section?.id || (s as any).latest_version?.section?.id || 'root') === sectionId);
-                    const nodes = sectionScreens.map((s, i) => ({ id: `node-${s.id}`, screen_id: s.id, width: 375, position: { x: (i % 4) * 500, y: Math.floor(i / 4) * 850 } }));
-                    setFlowData({ name: "Mapa Dinámico", nodes, connectors: [] });
-                } else {
-                    const data = await fetchZeplinFlowDetails(acc.token, currentProject.id, selectedFlowId);
-                    setFlowData(data);
-                }
-            } catch (e) { toast.error("Error"); } finally { setLoading(false); }
-        };
-        load();
-    }, [selectedFlowId]);
 
     useEffect(() => { if (!loading && flowData) updateDOM(); }, [loading, flowData, updateDOM]);
 
@@ -361,8 +308,8 @@ const ZeplinFlowDiagram: React.FC = () => {
     );
 };
 
-const ZeplinScreensView: React.FC = () => {
-    const { screens, setSelectedScreenId } = useZeplinStore();
+const ZeplinScreensView: React.FC<{ screens: any[] }> = ({ screens }) => {
+    const { setSelectedScreenId } = useZeplinStore();
     return (
         <div className="h-full overflow-y-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-10 pb-32 scrollbar-hide">
             {screens.map(s => (
@@ -378,16 +325,18 @@ const ZeplinScreensView: React.FC = () => {
 };
 
 const ZeplinCanvas: React.FC = () => {
-    const { screens, selectedScreenId, setSelectedScreenId, currentProject, getActiveAccount } = useZeplinStore();
+    const { currentProjectId, selectedScreenId, setSelectedScreenId } = useZeplinStore();
+    const { screens } = useZeplinProjectData(currentProjectId || undefined);
+    const { data: screenDetails, isLoading: loading } = useZeplinScreenDetails(currentProjectId || undefined, selectedScreenId);
+    
     const [zoom, setZoom] = useState(1);
-    const [screenDetails, setScreenDetails] = useState<any>(null);
-    const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
     const currentIndex = screens.findIndex(s => s.id === selectedScreenId);
     const screen = screens[currentIndex];
+
     useEffect(() => { if (imgRef.current && containerRef.current) { const sX = (containerRef.current.clientWidth - 100) / imgRef.current.naturalWidth; const sY = (containerRef.current.clientHeight - 100) / imgRef.current.naturalHeight; setZoom(Math.min(sX, sY, 1)); } }, [screenDetails]);
-    useEffect(() => { const load = async () => { const acc = getActiveAccount(); if (!acc || !currentProject || !selectedScreenId) return; setLoading(true); try { const data = await fetchZeplinScreenDetails(acc.token, currentProject.id, selectedScreenId); setScreenDetails(data); } catch (e) { console.error(e); } finally { setLoading(false); } }; load(); }, [selectedScreenId]);
+    
     useEscape(() => setSelectedScreenId(null));
     const handleWheel = (e: React.WheelEvent) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(z => Math.max(0.05, Math.min(5, z + (e.deltaY > 0 ? -0.1 : 0.1)))); } };
     if (!screen) return null;
