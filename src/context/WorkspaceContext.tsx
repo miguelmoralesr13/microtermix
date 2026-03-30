@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import type { MicrotermixConfig, PipelineConfig, PipelineStepConfig } from '../types/workspaceConfig';
 import { applyWorkspaceConfigToStorage, resolveIdentifierToPath, buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
+import { ScriptProcessorFactory, finalizeBuiltScript } from '../utils/scriptProcessorFactory';
 import { getViteWrapperConfig } from '../components/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
 import { useJiraStore } from '../stores/jiraStore';
@@ -17,6 +18,7 @@ import { useProcessStore, batchedAppendLogs } from '../stores/processStore';
 import { useToolStore } from '../stores/toolStore';
 import { useUIStore } from '../stores/uiStore';
 import { useAwsStore } from '../stores/awsStore';
+import { useJenkinsStore } from '../stores/jenkinsStore';
 
 export interface Project {
     name: String;
@@ -87,6 +89,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const gitStore = useGitStore();
     const jiraStore = useJiraStore();
     const sonarStore = useSonarStore();
+    const jenkinsStore = useJenkinsStore();
     const processStoreTerminalTab = useProcessStore(s => s.activeTerminalTab);
 
     // Initial Path Recovery from Backend (Tauri)
@@ -218,6 +221,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         processStoreTerminalTab,
         gitStore.accounts, gitStore.repoAccounts,
         jiraStore.accounts, jiraStore.activeAccountId,
+        jenkinsStore.accounts, jenkinsStore.activeAccountId,
         sonarStore.config
     ]);
 
@@ -276,6 +280,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
         if (config.visibleUtilities) {
             uiStore.setVisibleUtilities(config.visibleUtilities);
+        }
+
+        if (config.jenkinsAccounts) {
+            useJenkinsStore.getState().hydrate(config.jenkinsAccounts, config.jenkinsActiveAccountId || null);
         }
     }, [uiStore]);
 
@@ -482,45 +490,30 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
         // Find the project to know its type
         const project = state.projects.find(p => p.path === projectPath);
-        const isNodeLike = project?.project_type === 'node' || project?.project_type === 'bun';
-        const isJava = project?.project_type === 'java';
-        const isPython = project?.project_type === 'python';
 
-        // Preparar strings de reemplazo según lenguaje
-        const envString = Object.entries(configuredEnv).map(([k, v]) => `${k}=${v}`).join(' ');
-        const javaPropertyString = Object.entries(configuredEnv).map(([k, v]) => `-D${k}=${v}`).join(' ');
+        // Preparar strings de reemplazo según lenguaje (Limpiando comentarios y escapando valores)
+        const sanitizeEnvValue = (val: string) => {
+            // Quitar comentarios de shell al final de la línea
+            const cleanVal = val.split('#')[0].trim();
+            // Envolver en comillas simples para el shell, escapando comillas simples internas si existen
+            return `'${cleanVal.replace(/'/g, "'\\''")}'`;
+        };
 
-        let builtScript = actualScript;
+        const validEnvEntries = Object.entries(configuredEnv)
+            .filter(([k]) => k.trim() && !k.includes('#'));
 
-        if (isNodeLike) {
-            // Para Node, preferimos cross-env si no está presente
-            if (builtScript.includes('{{ENVS}}') && !builtScript.includes('cross-env')) {
-                builtScript = builtScript.replace(/\{\{ENVS\}\}/g, 'npx cross-env {{ENVS}}');
-            }
-            builtScript = envString
-                ? builtScript.replace(/\{\{ENVS\}\}/g, envString).trim()
-                : builtScript.replace(/npx\s+cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '').replace(/\{\{ENVS\}\}\s*/g, '').trim();
-        } else if (isJava) {
-            // Para Java (Maven/Gradle), intentamos inyectar -D properties de forma inteligente
-            if (builtScript.includes('{{ENVS}}')) {
-                const firstWord = builtScript.trim().split(' ')[0];
-                if (['mvn', 'gradle', './gradlew', 'gradlew.bat'].includes(firstWord)) {
-                    // Insertar justo después del comando base: "mvn -Dport=3000 clean install"
-                    builtScript = builtScript.replace(firstWord, `${firstWord} ${javaPropertyString}`);
-                    builtScript = builtScript.replace(/\{\{ENVS\}\}\s*/g, '');
-                } else {
-                    builtScript = builtScript.replace(/\{\{ENVS\}\}/g, javaPropertyString);
-                }
-            }
-        } else if (isPython) {
-            // Para Python/Unix, inyección simple KEY=VAL cmd
-            builtScript = builtScript.replace(/\{\{ENVS\}\}/g, envString).trim();
-        } else {
-            // Genérico: eliminar marcadores (el backend inyectará las variables vía OS env vars)
-            builtScript = builtScript.replace(/npx\s+cross-env\s+\{\{ENVS\}\}\s*/g, '')
-                .replace(/cross-env\s+\{\{ENVS\}\}\s*/g, '')
-                .replace(/\{\{ENVS\}\}\s*/g, '').trim();
-        }
+        const envString = validEnvEntries
+            .map(([k, v]) => `${k}=${sanitizeEnvValue(v)}`)
+            .join(' ');
+
+        const javaPropertyString = validEnvEntries
+            .map(([k, v]) => `-D${k}=${sanitizeEnvValue(v)}`)
+            .join(' ');
+
+        // Construcción del script utilizando el patrón Factory/Strategy
+        const processor = ScriptProcessorFactory.getProcessor(project?.project_type?.toLowerCase());
+        let builtScript = processor.process(actualScript, envString, javaPropertyString);
+        builtScript = finalizeBuiltScript(builtScript);
 
         const { command: scriptToRun, env: inlineEnvs } = parseInlineEnvs(builtScript);
         const baseScript = scriptToRun || builtScript;

@@ -16,12 +16,27 @@ const defaultStore = (): ProjectEnvStore => ({
     envs: { dev: {} },
 });
 
+/** Elimina claves inválidas: vacías, que empiecen con # o que contengan # */
+function sanitizeEnvVars(vars: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(vars)) {
+        const key = k.trim();
+        if (key && !key.includes('#')) {
+            out[key] = v;
+        }
+    }
+    return out;
+}
+
 function loadStore(projectPath: string): ProjectEnvStore {
     try {
         const raw = localStorage.getItem(storageKey(projectPath));
         if (!raw) return defaultStore();
         const parsed = JSON.parse(raw) as ProjectEnvStore;
-        // Ensure activeEnv env exists
+        // Limpiar claves con # que puedan haber quedado de versiones anteriores
+        for (const envName of Object.keys(parsed.envs)) {
+            parsed.envs[envName] = sanitizeEnvVars(parsed.envs[envName]);
+        }
         if (!parsed.envs[parsed.activeEnv]) parsed.activeEnv = Object.keys(parsed.envs)[0] ?? 'dev';
         return parsed;
     } catch {
@@ -42,37 +57,6 @@ export function useProjectEnvs(projectPath: string) {
     useEffect(() => {
         saveStore(projectPath, store);
     }, [projectPath, store]);
-
-    // Always read .env files on mount and merge with persisted values.
-    // File values fill NEW keys; persisted (manually-edited) values take priority for existing keys.
-    useEffect(() => {
-        invoke<Record<string, Record<string, string>>>('read_project_envs', { projectPath })
-            .then(fileEnvs => {
-                setStore(prev => {
-                    const merged: Record<string, Record<string, string>> = {};
-
-                    // Start with file envs as base
-                    for (const [envName, fileVars] of Object.entries(fileEnvs)) {
-                        const persistedVars = prev.envs[envName] ?? {};
-                        // Persisted values win over file values for the same key
-                        merged[envName] = { ...fileVars, ...persistedVars };
-                    }
-
-                    // Keep any envs the user created manually that aren't in files
-                    for (const [envName, vars] of Object.entries(prev.envs)) {
-                        if (!merged[envName]) merged[envName] = vars;
-                    }
-
-                    if (!merged.dev) merged.dev = prev.envs.dev ?? {};
-
-                    const activeEnv = Object.keys(merged).includes(prev.activeEnv)
-                        ? prev.activeEnv : (Object.keys(merged)[0] ?? 'dev');
-
-                    return { activeEnv, envs: merged };
-                });
-            })
-            .catch(() => { }); // Fail silently — project may not have .env files
-    }, [projectPath]);
 
     const setActiveEnv = useCallback((name: string) => {
         setStore(prev => ({ ...prev, activeEnv: name }));

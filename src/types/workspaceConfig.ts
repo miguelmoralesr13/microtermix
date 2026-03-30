@@ -7,6 +7,8 @@ import type { SonarConfig } from '../stores/sonarStore';
 import { useSonarStore } from '../stores/sonarStore';
 import type { SsmTunnel } from '../stores/awsStore';
 import { useAwsStore } from '../stores/awsStore';
+import type { JenkinsConfig } from '../services/jenkinsApi';
+import { useJenkinsStore } from '../stores/jenkinsStore';
 
 export interface PipelineStepConfig {
     /** folderName::script (the space at end is handled by execution logic) */
@@ -52,6 +54,8 @@ export interface MicrotermixConfig {
     // Nuevos campos:
     jiraAccounts?: JiraAccount[];
     jiraActiveAccountId?: string | null;
+    jenkinsAccounts?: JenkinsConfig[];
+    jenkinsActiveAccountId?: string | null;
     sonarConfig?: SonarConfig;
     ssmTunnels?: SsmTunnel[];
     visibleUtilities?: Record<string, boolean>;
@@ -251,6 +255,8 @@ export function buildWorkspaceConfigFromCurrentState(
         projectViteWrapper: Object.keys(projectViteWrapper).length ? projectViteWrapper : undefined,
         jiraAccounts: useJiraStore.getState().accounts,
         jiraActiveAccountId: useJiraStore.getState().activeAccountId,
+        jenkinsAccounts: useJenkinsStore.getState().accounts,
+        jenkinsActiveAccountId: useJenkinsStore.getState().activeAccountId,
         sonarConfig: useSonarStore.getState().config,
         ssmTunnels: useAwsStore.getState().ssm.tunnels,
         visibleUtilities: Object.keys(visibleUtilities).length ? visibleUtilities : undefined,

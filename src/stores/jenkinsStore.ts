@@ -14,6 +14,7 @@ export interface JenkinsStore {
   setActiveAccount: (id: string) => void;
   toggleFavorite: (fav: JenkinsFavorite) => void;
   updateFavoriteStatus: (url: string, status: Partial<JenkinsFavorite>) => void;
+  hydrate: (accounts: JenkinsConfig[], activeAccountId: string | null) => void;
 }
 
 // Helpers for the initial migration from the old legacy storage (pre-zustand)
@@ -95,6 +96,13 @@ export const useJenkinsStore = create<JenkinsStore>()(
             [key]: { ...state.favorites[key], ...status }
           }
         };
+      }),
+
+      hydrate: (accounts: JenkinsConfig[], activeAccountId: string | null) => set({
+        accounts,
+        activeAccountId: activeAccountId && accounts.some((a: JenkinsConfig) => a.id === activeAccountId)
+          ? activeAccountId
+          : (accounts.length > 0 ? accounts[0].id || null : null)
       }),
     }),
     {

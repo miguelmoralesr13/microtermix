@@ -30,9 +30,10 @@ interface EnvManagerProps {
     projectPath: string;
     scripts?: string[];
     onClose: () => void;
+    embedded?: boolean;
 }
 
-export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) => {
+export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose, embedded = false }) => {
     const { state } = useWorkspace();
     const project = state.projects.find(p => (p.path as string) === projectPath);
     const isJava = project?.project_type === 'java';
@@ -158,16 +159,8 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
     };
     const envColor = (name: string) => ENV_COLORS[name] ?? '#94a3b8';
 
-    return (
-        <>
-            <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-                onClick={onClose}
-            >
-                <div
-                    className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl"
-                    onClick={e => e.stopPropagation()}
-                >
+    const innerContent = (
+        <div className={embedded ? "h-full flex flex-col" : "bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl"} onClick={embedded ? undefined : e => e.stopPropagation()}>
                     {/* Header */}
                     <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800 shrink-0">
                         <div className="flex-1 min-w-0">
@@ -191,9 +184,11 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
                         >
                             <RefreshCw size={14} className={reloading ? 'animate-spin' : ''} />
                         </button>
-                        <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded transition-colors">
-                            <X size={16} />
-                        </button>
+                        {!embedded && (
+                            <button onClick={onClose} className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded transition-colors">
+                                <X size={16} />
+                            </button>
+                        )}
                     </div>
 
                     {/* Row 1 — Env Tabs (scrollable, tabs only) */}
@@ -432,8 +427,18 @@ export const EnvManager: React.FC<EnvManagerProps> = ({ projectPath, onClose }) 
                         </button>
                     </div>
                 </div>
-            </div>
+    );
 
+    return (
+        <>
+            {embedded ? innerContent : (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                    onClick={onClose}
+                >
+                    {innerContent}
+                </div>
+            )}
             <JdkManagerModal
                 open={jdkModalOpen}
                 onOpenChange={setJdkModalOpen}

@@ -1,11 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useProcessStore } from '../../stores/processStore';
 import { ProjectListPane } from './ProjectListPane';
 import { MultiExecutionBar } from './MultiExecutionBar';
 import { ServiceTerminals } from './ServiceTerminals';
 import { ViteWrapperModal, type ProxyCandidateItem } from '../ViteWrapperModal';
+import { ProjectSettingsModal } from './ProjectSettingsModal';
 import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 
 interface ServicesViewProps {
     selectedProjects: string[];
@@ -40,6 +42,8 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     // ─── Local UI State ──────────────────────────────────────────────────
     const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
     const [viteWrapperCandidates, setViteWrapperCandidates] = useState<ProxyCandidateItem[]>([]);
+    const [settingsProject, setSettingsProject] = useState<string | null>(null);
+    const [settingsTab, setSettingsTab] = useState<string>('envs');
 
     const JAVA_PRESETS = useMemo(() => [
         { name: 'Mvn: Clean & Install', cmd: 'mvn clean install -DskipTests' },
@@ -50,88 +54,11 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         { name: 'Gradle: BootRun', cmd: './gradlew bootRun' },
         { name: 'Gradle: Clean', cmd: './gradlew clean' },
         { name: 'Jar: Run (target)', cmd: 'java -jar target/*.jar' },
-        { name: 'Jar: Run (build/libs)', cmd: 'java -jar build/libs/*.jar' },
         { name: 'Java: Compile & Run', cmd: 'javac Main.java && java Main' },
     ], []);
 
-    // ─── Derived State / Memos ───────────────────────────────────────────
-    const selectedProjectTypes = useMemo(() => {
-        const types = new Set<string>();
-        selectedProjects.forEach(path => {
-            const p = state.projects.find(proj => proj.path === path);
-            if (p?.project_type) types.add(String(p.project_type));
-        });
-        return Array.from(types);
-    }, [selectedProjects, state.projects]);
-
-    const activeSelectionType = selectedProjectTypes.length > 0 ? selectedProjectTypes[0] : null;
-
-    const allScripts = useMemo(() => {
-        const scripts = new Set<string>();
-
-        // Add Java presets if we are working with Java
-        if (activeSelectionType === 'java') {
-            JAVA_PRESETS.forEach(p => scripts.add(p.cmd));
-        }
-
-        state.projects.forEach(p => {
-            // If we have an active type, only collect scripts from projects of that type
-            if (activeSelectionType && String(p.project_type) !== activeSelectionType) return;
-
-            if (p.scripts) p.scripts.forEach(s => scripts.add(s));
-        });
-        return Array.from(scripts);
-    }, [state.projects, activeSelectionType, JAVA_PRESETS]);
-
-    const allEnvs = useMemo(() => {
-        const envs = new Set<string>();
-        state.projects.forEach(p => {
-            try {
-                const rawStore = localStorage.getItem(`microtermix-envs-${(p.path as string).replace(/[/\\:]/g, '_')}`);
-                if (rawStore) {
-                    const parsed = JSON.parse(rawStore);
-                    if (parsed.envs) {
-                        Object.keys(parsed.envs).forEach(e => envs.add(e));
-                    }
-                }
-            } catch (err) { }
-        });
-        const arr = Array.from(envs);
-        const list = arr.length > 0 ? arr : ['dev'];
-        if (!list.includes('none')) list.unshift('none');
-        return list;
-    }, [state.projects]);
-
-    const processIds = useMemo(() => Object.keys(activeProcesses), [activeProcesses]);
-
     // ─── Handlers ────────────────────────────────────────────────────────
-    const toggleProjectSelect = (path: string) => {
-        const project = state.projects.find(p => p.path === path);
-        if (!project) return;
-
-        let next: string[];
-        if (selectedProjects.includes(path)) {
-            next = selectedProjects.filter(p => p !== path);
-        } else {
-            // Smart Filter: If we have an active type, only allow same type
-            if (activeSelectionType && String(project.project_type) !== activeSelectionType) {
-                return;
-            }
-            next = [...selectedProjects, path];
-        }
-        setSelectedProjects(next);
-    };
-
-    const handleSelectAll = () => {
-        // If there's an active type, select all of that type. Otherwise select all.
-        if (activeSelectionType) {
-            setSelectedProjects(state.projects.filter(p => String(p.project_type) === activeSelectionType).map(p => p.path as string));
-        } else {
-            setSelectedProjects(state.projects.map(p => p.path as string));
-        }
-    };
-
-    const handlePlayScript = async (projectPath: string, script: string) => {
+    const handlePlayScript = useCallback(async (projectPath: string, script: string) => {
         if (!script) return;
         const compositeServiceId = `${projectPath}::${script} `;
         const existing = activeProcesses[compositeServiceId];
@@ -140,122 +67,126 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         await executeProjectScript(projectPath, script, {
             globalEnvName
         });
-    };
+    }, [activeProcesses, executeProjectScript, globalEnvName]);
 
-    const handleBatchPlay = async () => {
-        if (selectedProjects.length === 0 || !multiScript) return;
-        for (const projectPath of selectedProjects) {
-            await handlePlayScript(projectPath, multiScript);
-            await new Promise(r => setTimeout(r, 150));
+    const handleQuickAction = useCallback(async (path: string, action: 'start' | 'stop' | 'logs' | 'restart') => {
+        const project = state.projects.find(p => p.path === path);
+        if (!project) return;
+
+        // Determinar el script principal
+        let mainScript = project.scripts?.[0] || '';
+        if (project.project_type === 'java') {
+            const isGradle = project.build_system === 'gradle';
+            mainScript = isGradle ? './gradlew bootRun' : 'mvn spring-boot:run';
         }
-    };
 
-    const handleBatchStop = async () => {
-        if (selectedProjects.length === 0 || !multiScript) return;
-        for (const projectPath of selectedProjects) {
-            const compositeServiceId = `${projectPath}::${multiScript} `;
-            await invoke('kill_service', { serviceId: compositeServiceId });
-            updateProcessStatus(compositeServiceId, 'stopped');
-            await new Promise(r => setTimeout(r, 50));
+        if (action === 'start') {
+            if (!mainScript) return toast.error("No se encontró un script principal");
+            await handlePlayScript(path, mainScript);
+        } else if (action === 'stop') {
+            const serviceIds = Object.keys(activeProcesses).filter(id => id.startsWith(path + '::'));
+            for (const id of serviceIds) {
+                await invoke('kill_service', { serviceId: id });
+                updateProcessStatus(id, 'stopped');
+            }
+        } else if (action === 'restart') {
+            const runningId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::') && activeProcesses[id].status === 'running');
+            const scriptToRestart = runningId ? activeProcesses[runningId].script : mainScript;
+            
+            if (runningId) {
+                await invoke('kill_service', { serviceId: runningId });
+                updateProcessStatus(runningId, 'stopped');
+                await new Promise(r => setTimeout(r, 500));
+            }
+            if (scriptToRestart) await handlePlayScript(path, scriptToRestart as string);
+        } else if (action === 'logs') {
+            const serviceId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::'));
+            if (serviceId) setActiveTerminalTab(serviceId);
+            else toast.info("No hay procesos activos");
         }
-    };
+    }, [state.projects, activeProcesses, handlePlayScript, updateProcessStatus, setActiveTerminalTab]);
 
-    const handleBatchRestart = async () => {
-        if (selectedProjects.length === 0 || !multiScript) return;
-        const projectsToRestart = [...selectedProjects];
-        const scriptToRestart = multiScript;
+    const projectWithPresets = useMemo(() => {
+        if (!settingsProject) return null;
+        const p = state.projects.find(proj => proj.path === settingsProject);
+        if (!p) return null;
 
-        await handleBatchStop();
-        await new Promise(r => setTimeout(r, 700));
-
-        for (const projectPath of projectsToRestart) {
-            await executeProjectScript(projectPath, scriptToRestart, {
-                globalEnvName
+        const scripts = [...(p.scripts || [])];
+        if (p.project_type === 'java') {
+            JAVA_PRESETS.forEach(preset => {
+                if (!scripts.includes(preset.cmd)) scripts.push(preset.cmd);
             });
-            await new Promise(r => setTimeout(r, 200));
         }
-    };
-
-    const handleTabRestart = async (e: React.MouseEvent, serviceId: string) => {
-        e.preventDefault(); e.stopPropagation();
-        const pState = activeProcesses[serviceId];
-        if (!pState?.script) return;
-        const projectPath = serviceId.split('::')[0];
-
-        await invoke('kill_service', { serviceId });
-        updateProcessStatus(serviceId, 'stopped');
-        await new Promise(r => setTimeout(r, 700));
-        await executeProjectScript(projectPath, pState.script as string, {
-            globalEnvName,
-            incrementRestart: true
-        });
-    };
-
-    const handleOpenViteWrapper = async () => {
-        try {
-            const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
-            setViteWrapperCandidates(list.map((p: ProxyCandidateItem) => ({
-                project_path: p.project_path,
-                display_name: p.display_name
-            })));
-            setViteWrapperModalOpen(true);
-        } catch (_) {
-            setViteWrapperCandidates([]);
-            setViteWrapperModalOpen(true);
-        }
-    };
+        return { ...p, scripts };
+    }, [settingsProject, state.projects, JAVA_PRESETS]);
 
     return (
         <div className="flex-1 w-full h-full flex overflow-hidden">
             <ProjectListPane
                 projects={state.projects}
                 selectedProjects={selectedProjects}
-                onSelectAll={handleSelectAll}
+                onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path as string))}
                 onDeselectAll={() => setSelectedProjects([])}
-                onToggleSelect={toggleProjectSelect}
+                onToggleSelect={(path) => {
+                    if (selectedProjects.includes(path)) setSelectedProjects(selectedProjects.filter(p => p !== path));
+                    else setSelectedProjects([...selectedProjects, path]);
+                }}
                 onPlayScript={handlePlayScript}
-                onOpenLogs={(path) => {
-                    // Find a running process for this project to show logs
-                    const serviceId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::'));
-                    if (serviceId) setActiveTerminalTab(serviceId);
-                }}
-                onOpenEnvs={(_path) => {
-                    // Logic to open env manager for this project
-                    // This might need a local state in ServicesView or a workspace action
-                }}
-                onOpenScripts={(_path) => {
-                    // Logic to open script builder for this project
-                }}
-                onQuickAction={async (path, action) => {
-                    const p = state.projects.find(proj => proj.path === path);
-                    if (!p || !p.scripts || p.scripts.length === 0) return;
-                    
-                    if (action === 'start') {
-                        await handlePlayScript(path, p.scripts[0]);
-                    } else {
-                        const serviceId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::'));
-                        if (serviceId) {
-                            await invoke('kill_service', { serviceId });
-                            updateProcessStatus(serviceId, 'stopped');
-                        }
-                    }
-                }}
+                onOpenSettings={(path, tab) => { setSettingsProject(path); setSettingsTab(tab ?? 'envs'); }}
+                onQuickAction={handleQuickAction}
             />
 
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <MultiExecutionBar
-                    allScripts={allScripts}
+                    allScripts={useMemo(() => Array.from(new Set([...state.projects.flatMap(p => p.scripts || []), ...JAVA_PRESETS.map(pr => pr.cmd)])), [state.projects, JAVA_PRESETS])}
                     multiScript={multiScript}
                     onScriptChange={setMultiScript}
-                    allEnvs={allEnvs}
+                    allEnvs={useMemo(() => {
+                        const envs = new Set<string>(['none', 'dev']);
+                        state.projects.forEach(p => {
+                            try {
+                                const raw = localStorage.getItem(`microtermix-envs-${(p.path as string).replace(/[/\\:]/g, '_')}`);
+                                if (raw) {
+                                    const parsed = JSON.parse(raw);
+                                    Object.keys(parsed.envs || {}).forEach(e => envs.add(e));
+                                }
+                            } catch {}
+                        });
+                        return Array.from(envs);
+                    }, [state.projects])}
                     globalEnvName={globalEnvName}
                     onEnvChange={setGlobalEnvName}
-                    onPlay={handleBatchPlay}
-                    onStop={handleBatchStop}
-                    onRestart={handleBatchRestart}
-                    onOpenViteWrapper={handleOpenViteWrapper}
+                    onPlay={async () => {
+                        for (const p of selectedProjects) {
+                            if (multiScript) {
+                                await handlePlayScript(p, multiScript);
+                            } else {
+                                await handleQuickAction(p, 'start');
+                            }
+                            await new Promise(r => setTimeout(r, 100));
+                        }
+                    }}
+                    onStop={async () => {
+                        for (const p of selectedProjects) await handleQuickAction(p, 'stop');
+                    }}
+                    onRestart={async () => {
+                        for (const p of selectedProjects) await handleQuickAction(p, 'restart');
+                    }}
+                    onOpenViteWrapper={async () => {
+                        const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
+                        setViteWrapperCandidates(list);
+                        setViteWrapperModalOpen(true);
+                    }}
                     selectedCount={selectedProjects.length}
-                    activeSelectionType={activeSelectionType}
+                    activeSelectionType={null}
+                />
+
+                <ProjectSettingsModal
+                    project={projectWithPresets}
+                    open={!!settingsProject}
+                    defaultTab={settingsTab}
+                    onOpenChange={(open) => !open && setSettingsProject(null)}
+                    onPlayScript={(s) => handlePlayScript(settingsProject!, s)}
                 />
 
                 <ViteWrapperModal
@@ -266,35 +197,22 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 />
 
                 <ServiceTerminals
-                    processIds={processIds}
+                    processIds={useMemo(() => Object.keys(activeProcesses), [activeProcesses])}
                     activeProcesses={activeProcesses}
                     activeTerminalTab={activeTerminalTab}
                     vitePreviewOpen={vitePreviewOpen}
                     onVitePreviewToggle={setVitePreviewOpen}
                     onTabSelect={setActiveTerminalTab}
-                    onTabStop={async (e, serviceId) => {
-                        e.preventDefault(); e.stopPropagation();
-                        await invoke('kill_service', { serviceId });
-                        updateProcessStatus(serviceId, 'stopped');
+                    onTabStop={async (e, id) => { e.preventDefault(); await invoke('kill_service', { serviceId: id }); updateProcessStatus(id, 'stopped'); }}
+                    onTabRestart={async (e, id) => {
+                        e.preventDefault();
+                        const p = activeProcesses[id];
+                        await invoke('kill_service', { serviceId: id });
+                        updateProcessStatus(id, 'stopped');
+                        await new Promise(r => setTimeout(r, 500));
+                        if (p.script) await handlePlayScript(id.split('::')[0], p.script as string);
                     }}
-                    onTabRestart={handleTabRestart}
-                    onTabClose={async (e, serviceId) => {
-                        e.preventDefault(); e.stopPropagation();
-                        
-                        // 1. Detener el proceso
-                        try {
-                            await invoke('kill_service', { serviceId });
-                        } catch (_) {}
-                        
-                        // 2. Si es la activa, seleccionar otra antes de borrar
-                        if (activeTerminalTab === serviceId) {
-                            const remaining = Object.keys(activeProcesses).filter(id => id !== serviceId);
-                            setActiveTerminalTab(remaining.length > 0 ? remaining[0] : null);
-                        }
-                        
-                        // 3. Eliminar del store (quitar pestaña)
-                        removeProcess(serviceId);
-                    }}
+                    onTabClose={(e, id) => { e.preventDefault(); removeProcess(id); }}
                 />
             </div>
         </div>
