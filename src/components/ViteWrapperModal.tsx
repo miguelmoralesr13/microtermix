@@ -4,6 +4,9 @@ import { Plus, Trash2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { Label } from '@/components/ui/label';
 
 const VITE_WRAPPER_STORAGE_PREFIX = 'microtermix-vite-wrapper-';
 
@@ -180,7 +183,7 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                     ) : (
                         <>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Proyecto</label>
+                                <Label className="block text-xs text-slate-400 mb-1">Proyecto</Label>
                                 <Select value={selectedPath} onValueChange={(v) => v && handleProjectChange(v)}>
                                     <SelectTrigger className="w-full h-9 border-slate-600 bg-slate-800 text-slate-200 focus-visible:border-microtermix-neon">
                                         <SelectValue />
@@ -204,47 +207,37 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                             Este MFE: <span className="font-mono text-slate-200">{federationName}</span>
                                         </p>
                                     )}
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={enabled}
-                                            onChange={e => setEnabled(e.target.checked)}
-                                            className="accent-microtermix-neon"
-                                        />
-                                        <span className="text-sm text-slate-300">Usar Vite wrapper en las ejecuciones</span>
-                                    </label>
+                                    <Checkbox
+                                        checked={enabled}
+                                        onChange={e => setEnabled((e.target as HTMLInputElement).checked)}
+                                        label="Usar Vite wrapper en las ejecuciones"
+                                    />
 
                                     <div className="flex gap-3 flex-wrap">
                                         <div className="flex-1 min-w-[160px]">
-                                            <label className="block text-xs text-slate-400 mb-1">Base URL <span className="text-slate-500">(opcional)</span></label>
-                                            <input
-                                                type="text"
+                                            <Label className="block text-xs text-slate-400 mb-1">Base URL <span className="text-slate-500">(opcional)</span></Label>
+                                            <Input
                                                 value={base}
                                                 onChange={e => setBase(e.target.value)}
                                                 placeholder="/my-app/"
-                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none"
+                                                className="bg-slate-800 border-slate-600 font-mono text-xs h-8"
                                             />
                                         </div>
                                         <div className="flex-1 min-w-[160px]">
-                                            <label className="block text-xs text-slate-400 mb-1">Host <span className="text-slate-500">(server/preview)</span></label>
-                                            <input
-                                                type="text"
+                                            <Label className="block text-xs text-slate-400 mb-1">Host <span className="text-slate-500">(server/preview)</span></Label>
+                                            <Input
                                                 value={host}
                                                 onChange={e => setHost(e.target.value)}
                                                 placeholder="0.0.0.0"
-                                                className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none"
+                                                className="bg-slate-800 border-slate-600 font-mono text-xs h-8"
                                             />
                                         </div>
                                         <div className="flex items-end pb-0.5">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={sourcemap}
-                                                    onChange={e => setSourcemap(e.target.checked)}
-                                                    className="accent-microtermix-neon"
-                                                />
-                                                <span className="text-sm text-slate-300">sourcemap</span>
-                                            </label>
+                                            <Checkbox
+                                                checked={sourcemap}
+                                                onChange={e => setSourcemap((e.target as HTMLInputElement).checked)}
+                                                label="sourcemap"
+                                            />
                                         </div>
                                     </div>
 
@@ -255,22 +248,19 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                 const isEnabled = !disabledRemotes.has(r.name);
                                                 return (
                                                     <div key={r.name} className={`flex items-center gap-2 ${!isEnabled ? 'opacity-50' : ''}`}>
-                                                        <input
-                                                            type="checkbox"
+                                                        <Checkbox
                                                             checked={isEnabled}
                                                             onChange={() => toggleRemote(r.name)}
-                                                            className="accent-microtermix-neon shrink-0"
                                                             title={isEnabled ? 'Deshabilitar remote' : 'Habilitar remote'}
                                                         />
                                                         <span className="w-36 shrink-0 text-xs font-mono text-slate-400 truncate" title={r.name}>
                                                             {r.name}
                                                         </span>
-                                                        <input
-                                                            type="text"
+                                                        <Input
                                                             value={remotes[r.name] ?? r.default_url}
                                                             onChange={e => setRemoteUrl(r.name, e.target.value)}
                                                             disabled={!isEnabled}
-                                                            className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none disabled:cursor-not-allowed"
+                                                            className="flex-1 bg-slate-800 border-slate-600 font-mono text-xs h-8"
                                                             placeholder={r.default_url || 'http://localhost:PORT/.../remoteEntry.js'}
                                                         />
                                                         <button
@@ -290,22 +280,19 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                     const isEnabled = !disabledRemotes.has(name);
                                                     return (
                                                         <div key={name} className={`flex items-center gap-2 ${!isEnabled ? 'opacity-50' : ''}`}>
-                                                            <input
-                                                                type="checkbox"
+                                                            <Checkbox
                                                                 checked={isEnabled}
                                                                 onChange={() => toggleRemote(name)}
-                                                                className="accent-microtermix-neon shrink-0"
                                                                 title={isEnabled ? 'Deshabilitar remote' : 'Habilitar remote'}
                                                             />
                                                             <span className="w-36 shrink-0 text-xs font-mono text-slate-400 truncate" title={name}>
                                                                 {name}
                                                             </span>
-                                                            <input
-                                                                type="text"
+                                                            <Input
                                                                 value={url}
                                                                 onChange={e => setRemoteUrl(name, e.target.value)}
                                                                 disabled={!isEnabled}
-                                                                className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:border-microtermix-neon focus:outline-none disabled:cursor-not-allowed"
+                                                                className="flex-1 bg-slate-800 border-slate-600 font-mono text-xs h-8"
                                                                 placeholder="http://localhost:PORT/.../remoteEntry.js"
                                                             />
                                                             <button
@@ -321,19 +308,18 @@ export const ViteWrapperModal: React.FC<ViteWrapperModalProps> = ({
                                                 })}
                                         </div>
                                         <div className="mt-2 flex gap-2 flex-wrap items-center">
-                                            <input
-                                                type="text"
+                                            <Input
                                                 value={newRemoteName}
                                                 onChange={e => setNewRemoteName(e.target.value)}
                                                 placeholder="Nombre MFE"
-                                                className="w-36 bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:outline-none"
+                                                className="w-36 bg-slate-800 border-slate-600 font-mono text-xs h-8"
                                             />
-                                            <input
-                                                type="text"
+                                            <Input
                                                 value={newRemoteUrl}
                                                 onChange={e => setNewRemoteUrl(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && addManualRemote()}
                                                 placeholder="http://localhost:PORT/.../remoteEntry.js"
-                                                className="flex-1 min-w-[200px] bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-xs font-mono text-slate-200 focus:outline-none"
+                                                className="flex-1 min-w-[200px] bg-slate-800 border-slate-600 font-mono text-xs h-8"
                                             />
                                             <button
                                                 type="button"
