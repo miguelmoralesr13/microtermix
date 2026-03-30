@@ -65,3 +65,12 @@ pub fn fix_path_env() {
         }
     }
 }
+
+#[tauri::command]
+pub fn rust_copy_to_clipboard(text: String) -> Result<(), String> {
+    use arboard::Clipboard;
+    let mut clipboard = Clipboard::new().map_err(|e| format!("No se pudo inicializar el portapapeles: {e}"))?;
+    clipboard.set_text(text).map_err(|e| format!("No se pudo copiar al portapapeles: {e}"))?;
+    Ok(())
+}
+

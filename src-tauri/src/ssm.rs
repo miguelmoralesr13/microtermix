@@ -7,6 +7,7 @@
 ///   macOS   : /usr/local/sessionmanagerplugin/bin/session-manager-plugin
 ///
 /// Install from: https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+use serde::{Deserialize, Serialize};
 use crate::ec2::Ec2Credentials;
 
 
@@ -312,3 +313,61 @@ pub async fn ssm_start_port_forward(
 
     crate::ec2::spawn_pty_process(app, state, service_id, plugin_str, args, None, Some(envs)).await
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct SsmParameter {
+    pub name: String,
+    pub type_: String,
+    pub last_modified: Option<i64>,
+}
+
+#[tauri::command]
+pub async fn ssm_list_parameters(
+    credentials: Ec2Credentials,
+) -> Result<Vec<SsmParameter>, String> {
+    let ssm = ssm_client(&credentials).await;
+    let mut parameters = Vec::new();
+    let mut next_token = None;
+
+    loop {
+        let mut req = ssm.describe_parameters().max_results(50);
+        if let Some(token) = next_token {
+            req = req.set_next_token(Some(token));
+        }
+
+        let resp = req.send().await.map_err(|e| format!("DescribeParameters: {e}"))?;
+        
+        for p in resp.parameters() {
+            parameters.push(SsmParameter {
+                name: p.name().unwrap_or_default().to_string(),
+                type_: format!("{:?}", p.r#type().unwrap()),
+                last_modified: p.last_modified_date().map(|d| d.secs()),
+            });
+        }
+
+        next_token = resp.next_token().map(|t| t.to_string());
+        if next_token.is_none() {
+            break;
+        }
+    }
+
+    Ok(parameters)
+}
+
+#[tauri::command]
+pub async fn ssm_get_parameter_value(
+    credentials: Ec2Credentials,
+    name: String,
+) -> Result<String, String> {
+    let ssm = ssm_client(&credentials).await;
+    let resp = ssm
+        .get_parameter()
+        .name(name)
+        .with_decryption(true)
+        .send()
+        .await
+        .map_err(|e| format!("GetParameter: {e}"))?;
+
+    Ok(resp.parameter().and_then(|p| p.value()).unwrap_or_default().to_string())
+}
+

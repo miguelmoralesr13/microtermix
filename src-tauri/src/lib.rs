@@ -27,6 +27,7 @@ mod http_collections;
 mod ecs;
 mod lambda;
 mod s3;
+mod secrets;
 
 use std::fs;
 use std::path::Path;
@@ -66,7 +67,11 @@ pub use crate::ec2::{
     ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
     spawn_interactive, spawn_pty_process, spawn_pty_shell, resize_pty, write_stdin_line,
 };
-pub use crate::ssm::{ssm_start_session, ssm_start_port_forward, ssm_check_plugin};
+pub use crate::ssm::{
+    ssm_start_session, ssm_start_port_forward, ssm_check_plugin,
+    ssm_list_parameters, ssm_get_parameter_value
+};
+pub use crate::secrets::{secrets_list_secrets, secrets_get_secret_value};
 pub use crate::crypto::{
     crypto_generate_keys, crypto_encrypt, crypto_decrypt,
     crypto_encrypt_json_fields, crypto_decrypt_json_all,
@@ -419,6 +424,10 @@ pub fn run() {
             ssm_start_session,
             ssm_start_port_forward,
             ssm_check_plugin,
+            ssm_list_parameters,
+            ssm_get_parameter_value,
+            secrets_list_secrets,
+            secrets_get_secret_value,
             crypto_generate_keys,
             crypto_encrypt,
             crypto_decrypt,
@@ -469,6 +478,7 @@ pub fn run() {
             crate::processes::check_semgrep_installed,
             write_file,
             read_file,
+            os_utils::rust_copy_to_clipboard,
             diagnostics::get_microtermix_performance_data,
             list_http_collections,
             write_http_collection,

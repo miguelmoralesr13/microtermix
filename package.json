@@ -1,7 +1,7 @@
 {
   "name": "microtermix",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,8 @@
     "tauri:linux": "npm run build && tauri build --bundles deb,appimage",
     "tauri:deb": "npm run build && tauri build --bundles deb",
     "tauri:mac": "npm run build && tauri build --bundles dmg,app",
-    "tauri:windows": "npm run build && tauri build --target x86_64-pc-windows-msvc --runner cargo-xwin"
+    "tauri:windows": "npm run build && tauri build --target x86_64-pc-windows-msvc --runner cargo-xwin",
+    "tauri:linux-release": "rm -rf src-tauri/target/release/bundle/deb && npm version patch --no-git-tag-version && node scripts/sync-version.js && npm run tauri:deb"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
