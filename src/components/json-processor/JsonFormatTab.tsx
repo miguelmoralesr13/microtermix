@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components//ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components//ui/select';
 import { ArrowLeftRight, Copy, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';

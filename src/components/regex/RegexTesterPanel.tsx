@@ -11,9 +11,9 @@ import {
 } from 'lucide-react';
 import { useRegexTester } from './useRegexTester';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components//ui/button';
+import { Input } from '@/components//ui/input';
+import { Badge } from '@/components//ui/badge';
 import { toast } from 'sonner';
 
 const REGEX_LIBRARY = [

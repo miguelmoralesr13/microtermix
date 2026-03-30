@@ -10,7 +10,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components//ui/dialog"
 
 function computeProgress(stages: any[], runStatus: string): number {
     if (!stages.length) return 0;

@@ -25,8 +25,8 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components//ui/dialog';
+import { Label } from '@/components//ui/label';
 import {
     Download, Trash2, LayoutGrid, Type,  Diamond, Code, Users,
      StickyNote, PlayCircle, Settings2, HardDrive,

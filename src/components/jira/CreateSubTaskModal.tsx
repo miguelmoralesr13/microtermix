@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Plus, X, RefreshCw } from 'lucide-react';
-import { loadConfig, createSubTask, transitionIssue, assignIssue } from '../jiraApi';
+import { loadConfig, createSubTask, transitionIssue, assignIssue } from './jiraApi';
 import { useEscape } from '../../hooks/useEscape';
 
 export function CreateSubTaskModal({ parentKey, onCreated, onClose }: {

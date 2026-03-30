@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, RefreshCw, AlertCircle } from 'lucide-react';
-import { JiraIssue, loadConfig, JiraTransition } from '../jiraApi';
+import { JiraIssue, loadConfig, JiraTransition } from './jiraApi';
 import { useEscape } from '../../hooks/useEscape';
 
 export interface TransitionTarget {

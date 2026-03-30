@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { useTempoStore, formatDuration } from '../../stores/tempoStore';
 import { resolveMyAccountId, tempoApiLog, type TempoApiLogEntry } from '../../services/tempoApi';
 import type { TempoWorklog } from '../../services/tempoApi';
-import type { JiraConfig } from '../jiraApi';
+import type { JiraConfig } from './jiraApi';
 import { PeriodSelector } from './PeriodSelector';
 import { WorklogList } from './WorklogList';
 import { CalendarView } from './CalendarView';

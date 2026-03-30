@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import Editor from '@monaco-editor/react';
 import { ShieldCheck, AlertCircle, Copy, Key } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { toast } from 'sonner';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 

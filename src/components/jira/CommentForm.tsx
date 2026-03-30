@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Paperclip, X, RefreshCw, Send } from 'lucide-react';
-import { addComment, uploadAttachment } from '../jiraApi';
+import { addComment, uploadAttachment } from './jiraApi';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 

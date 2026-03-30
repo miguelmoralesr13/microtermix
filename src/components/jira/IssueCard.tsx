@@ -1,6 +1,6 @@
 
 import { ExternalLink } from 'lucide-react';
-import { JiraIssue, loadConfig } from '../jiraApi';
+import { JiraIssue, loadConfig } from './jiraApi';
 import { StatusBadge } from './StatusBadge';
 import { Badge } from '../ui/badge';
 import { Card } from '../ui/card';

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useJiraStore } from '../../stores/jiraStore';
 import { RefreshCw, Search, X, AlertCircle, FilterX, Loader2 } from 'lucide-react';
-import { JiraIssue, loadConfig } from '../jiraApi';
+import { JiraIssue, loadConfig } from './jiraApi';
 import { IssueCard } from './IssueCard';
 import { IssueDetailModal } from './IssueDetailModal';
 import { MultiSelect } from './MultiSelect';

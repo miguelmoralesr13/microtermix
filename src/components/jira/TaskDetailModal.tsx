@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, RefreshCw, UserCheck, ExternalLink } from 'lucide-react';
-import { JiraIssue, loadConfig, JiraTransition, getTransitions, statusColor } from '../jiraApi';
+import { JiraIssue, loadConfig, JiraTransition, getTransitions, statusColor } from './jiraApi';
 import { useEscape } from '../../hooks/useEscape';
 
 export function TaskDetailModal({ task, onClose, onTransition, onAssign }: {

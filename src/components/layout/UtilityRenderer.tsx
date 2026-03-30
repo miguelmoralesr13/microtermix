@@ -5,26 +5,26 @@ import { useServiceManagerState } from '../../hooks/useServiceManagerState';
 
 // Panels
 import { ServicesView } from '../services/ServicesView';
-import { GitPanel } from '../GitPanel';
-import { JiraPanel } from '../JiraPanel';
-import { ProcessesPanel } from '../ProcessesPanel';
-import { ProxyPanel } from '../ProxyPanel';
-import { FileServerPanel } from '../FileServerPanel';
-import { TestsPanel } from '../TestsPanel';
-import { SonarPanel } from '../SonarPanel';
-import { CloudWatchPanel } from '../CloudWatchPanel';
+import { GitPanel } from '../git/GitPanel';
+import { JiraPanel } from '../jira/JiraPanel';
+import { ProcessesPanel } from '../system/ProcessesPanel';
+import { ProxyPanel } from '../networking/ProxyPanel';
+import { TestsPanel } from '../tests/TestsPanel';
+import { SonarPanel } from '../sonar/SonarPanel';
+import { CloudWatchPanel } from '../aws/CloudWatchPanel';
 import { HttpPanel } from '../http/HttpPanel';
-import { JenkinsPanel } from '../JenkinsPanel';
-import { LibCipherPanel } from '../LibCipherPanel';
+import { JenkinsPanel } from '../jenkins/JenkinsPanel';
+import { LibCipherPanel } from '../lib-cipher/LibCipherPanel';
 import { MockPanel } from '../mocks/MockPanel';
 import { JsonProcessorPanel } from '../json-processor/JsonProcessorPanel';
 import { RegexTesterPanel } from '../regex/RegexTesterPanel';
 import { NotesPanel } from '../notes/NotesPanel';
 import { SwaggerPanel } from '../swagger/SwaggerPanel';
 import { VisualDesigner } from '../designer/VisualDesigner';
-import { SemgrepPanel } from '../SemgrepPanel';
-import { SystemMonitorPanel } from '../SystemMonitorPanel';
-import { ZeplinPanel } from '../ZeplinPanel';
+import { SemgrepPanel } from '../semgrep/SemgrepPanel';
+import { SystemMonitorPanel } from '../system/SystemMonitorPanel';
+import { ZeplinPanel } from '../zeplin/ZeplinPanel';
+import { FileServerPanel } from '../networking/FileServerPanel';
 
 interface UtilityRendererProps {
     view?: AppView;

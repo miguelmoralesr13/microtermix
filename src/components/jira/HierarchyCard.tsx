@@ -1,5 +1,5 @@
 import { ChevronRight, Star, UserCheck } from 'lucide-react';
-import { JiraIssue, isReleased, statusColor } from '../jiraApi';
+import { JiraIssue, isReleased, statusColor } from './jiraApi';
 
 export function HierarchyCard({
     issue, selected, pinned, onSelect, onPin, onDetail, onAssign, onLinkedIssues, showPin = true

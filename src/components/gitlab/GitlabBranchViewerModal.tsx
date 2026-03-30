@@ -3,7 +3,7 @@ import Editor from '@monaco-editor/react';
 import {
     Dialog,
     DialogContent,
-} from '@/components/ui/dialog';
+} from '@/components//ui/dialog';
 import {
     FileCode,
     RefreshCw,

@@ -5,7 +5,7 @@ import { Project } from '../../context/WorkspaceContext';
 import { pct, pctColor, loadConfig, parseCoverageXml } from '../../utils/testUtils';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, LayoutDashboard, PlayCircle, BarChart3, AlertCircle, FileCode2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { cn } from '@/lib/utils';
 
 interface TestsDashboardProps {

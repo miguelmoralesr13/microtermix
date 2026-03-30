@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { AlertCircle, CheckCircle, RefreshCw, Layers } from 'lucide-react';
-import { JiraIssue, loadConfig, JiraTransition, assignIssue, getTransitions, transitionIssue } from '../jiraApi';
+import { JiraIssue, loadConfig, JiraTransition, assignIssue, getTransitions, transitionIssue } from './jiraApi';
 
 export interface DiscardSubtasksTarget {
     story: JiraIssue;

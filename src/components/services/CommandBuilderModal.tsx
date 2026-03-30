@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { Plus, X, GripVertical, Check, TerminalSquare, FolderOpen } from 'lucide-react';
 import type { CommandStep } from '../../types/commands';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components//ui/dialog';
+import { Button } from '@/components//ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components//ui/select';
+import { Input } from '@/components//ui/input';
 
 interface CommandBuilderModalProps {
     open: boolean;

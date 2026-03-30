@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { useAwsStore } from '../../stores/awsStore';
-import { EcsCluster, EcsService, EcsTask, EcsTaskDefinition } from '../../components/cloudwatch/ecsTypes';
+import { EcsCluster, EcsService, EcsTask, EcsTaskDefinition } from '../../components//aws/ecsTypes';
 
 const toEcsRust = (cfg: any) => ({
     access_key_id: cfg.accessKeyId,

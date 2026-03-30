@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ProjectRow } from '../ProjectRow';
+import { ProjectRow } from '../project/ProjectRow';
 import { Project } from '../../context/WorkspaceContext';
 import { Button } from '../ui/button';
 import { useProcessStore } from '../../stores/processStore';

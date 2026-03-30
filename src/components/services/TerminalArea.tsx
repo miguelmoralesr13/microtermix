@@ -1,6 +1,6 @@
 import React from 'react';
-import { TerminalView } from '../TerminalView';
 import { ProcessState } from '../../stores/processStore';
+import { TerminalView } from './TerminalView';
 
 interface TerminalAreaProps {
     processIds: string[];

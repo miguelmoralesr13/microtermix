@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { Eye, EyeOff, Copy, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { marked } from 'marked';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useMockStore } from '../../stores/mockStore';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { FolderPlus, FilePlus, Folder, FileJson, ChevronDown, ChevronRight, Server } from 'lucide-react';
 
 const TreeNode: React.FC<{

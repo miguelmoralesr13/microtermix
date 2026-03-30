@@ -1,7 +1,7 @@
 import React from "react";
 import "./App.css";
 import { WorkspaceProvider, useWorkspace, AppView } from "./context/WorkspaceContext";
-import { ServiceManager } from "./components/ServiceManager";
+import { ServiceManager } from "./components/services/ServiceManager";
 import { UtilityRenderer } from "./components/layout/UtilityRenderer";
 import { useGitStore } from "./stores/gitStore";
 import { invoke } from "@tauri-apps/api/core";

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist, devtools } from 'zustand/middleware';
-import type { JiraConfig, JiraAccount } from '../components/jiraApi';
-import { emptyConfig } from '../components/jiraApi';
-import type { BoardFilter } from '../components/jiraApi';
+import type { JiraConfig, JiraAccount } from '../components//jira/jiraApi';
+import { emptyConfig } from '../components//jira/jiraApi';
+import type { BoardFilter } from '../components//jira/jiraApi';
 
 // ── Legacy key sync ────────────────────────────────────────────────────────────
 function syncLegacyKeys(accounts: JiraAccount[], activeAccountId: string | null) {

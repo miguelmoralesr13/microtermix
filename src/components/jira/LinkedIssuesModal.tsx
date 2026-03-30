@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { X, RefreshCw, AlertCircle } from 'lucide-react';
-import { JiraIssue, getLinkedDefects } from '../jiraApi';
+import { JiraIssue, getLinkedDefects } from './jiraApi';
 import { HierarchyCard } from './HierarchyCard';
 import { useEscape } from '../../hooks/useEscape';
 

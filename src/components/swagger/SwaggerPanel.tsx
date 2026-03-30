@@ -5,7 +5,7 @@ import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialo
 import SwaggerUI from 'swagger-ui-react';
 import 'swagger-ui-react/swagger-ui.css';
 import jsYaml from 'js-yaml';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { toast } from 'sonner';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';
 import { useSwaggerStore } from '@/stores/swaggerStore';

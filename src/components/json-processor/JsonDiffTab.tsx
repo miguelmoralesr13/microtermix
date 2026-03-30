@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { GitCompareArrows, ShieldCheck } from 'lucide-react';
 import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';

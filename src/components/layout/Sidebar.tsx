@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useUIStore } from '../../stores/uiStore';
-import { SettingsModal } from '../SettingsModal';
+import { SettingsModal } from '../project/SettingsModal';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
     Network, Package, Ghost,  Cloud, Regex,

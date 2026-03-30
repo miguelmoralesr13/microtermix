@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { HttpResponse } from './HttpClientState';
 import Editor from '@monaco-editor/react';
 import { Copy, FileText, List } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 
 interface ResponsePanelProps {
     response: HttpResponse | null;

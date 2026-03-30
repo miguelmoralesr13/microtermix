@@ -3,8 +3,8 @@ import { Search, Package, Download, ExternalLink, Loader2, CheckCircle2, Chevron
 import { marked } from 'marked';
 import { RegistryManager } from '@/services/registry/RegistryManager';
 import { PackageMetadata } from '@/services/registry/types';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components//ui/button';
+import { Input } from '@/components//ui/input';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 

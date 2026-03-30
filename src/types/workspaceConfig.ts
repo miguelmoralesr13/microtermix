@@ -1,7 +1,7 @@
 import type { CommandStep } from './commands';
 import type { GitAccount } from '../stores/gitStore';
 import { useGitStore } from '../stores/gitStore';
-import type { JiraAccount } from '../components/jiraApi';
+import type { JiraAccount } from '../components//jira/jiraApi';
 import { useJiraStore } from '../stores/jiraStore';
 import type { SonarConfig } from '../stores/sonarStore';
 import { useSonarStore } from '../stores/sonarStore';

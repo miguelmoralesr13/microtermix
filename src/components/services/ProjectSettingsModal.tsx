@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
-import { EnvManager } from '../EnvManager';
 import { PackageExplorer } from './PackageExplorer';
 import { Project } from '../../context/WorkspaceContext';
 import { Settings, Package, Zap, X, Layers } from 'lucide-react';
 import { Button } from '../ui/button';
 import { ViteWrapperTab } from './ViteWrapperTab';
+import { EnvManager } from '../project/EnvManager';
 
 interface ProjectSettingsModalProps {
     project: Project | null;

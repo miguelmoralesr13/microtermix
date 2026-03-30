@@ -10,7 +10,7 @@ import type { MicrotermixConfig, PipelineConfig, PipelineStepConfig } from '../t
 import { applyWorkspaceConfigToStorage, resolveIdentifierToPath, buildWorkspaceConfigFromCurrentState } from '../types/workspaceConfig';
 import { parseInlineEnvs } from '../utils/parseInlineEnvs';
 import { ScriptProcessorFactory, finalizeBuiltScript } from '../utils/scriptProcessorFactory';
-import { getViteWrapperConfig } from '../components/ViteWrapperModal';
+import { getViteWrapperConfig } from '../components/project/ViteWrapperModal';
 import { useGitStore } from '../stores/gitStore';
 import { useJiraStore } from '../stores/jiraStore';
 import { useSonarStore } from '../stores/sonarStore';
@@ -111,7 +111,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                                 setWorkspacePath(parsed.currentPath);
                                 await scanWorkspace(parsed.currentPath);
                             }
-                        } catch(e) {}
+                        } catch (e) { }
                     }
                 }
             } catch (e) {
@@ -186,7 +186,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     useEffect(() => {
         if (!state.currentPath || state.projects.length === 0) return;
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-        
+
         autoSaveTimerRef.current = setTimeout(async () => {
             try {
                 const config = buildWorkspaceConfigFromCurrentState(
@@ -203,7 +203,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                     state.pipelines,
                     uiStore.visibleUtilities,
                 );
-                
+
                 await invoke('write_workspace_config_in_folder', {
                     workspacePath: state.currentPath,
                     content: JSON.stringify(config, null, 2),
@@ -291,7 +291,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         try {
             // 1. Escanear la raíz (comportamiento original)
             const rootProjects: Project[] = await invoke('scan_projects', { rootPath: path });
-            
+
             let finalProjects = [...rootProjects];
 
             // 2. Identificar y actualizar proyectos externos
@@ -327,7 +327,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error('Failed to scan workspace', e);
             return [];
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const openFolderInThisWindow = useCallback(async () => {
@@ -375,14 +375,14 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             setState(prev => {
                 const existingPaths = new Set(prev.projects.map(p => p.path as string));
                 const newOnes = allFound.filter(p => !existingPaths.has(p.path as string));
-                
+
                 if (newOnes.length === 0) {
                     if (!silent && paths.length > 0) toast.info("Los proyectos soltados ya están en el workspace");
                     return prev;
                 }
 
                 const updated = [...prev.projects, ...newOnes];
-                
+
                 if (!silent) toast.success(`Añadidos ${newOnes.length} proyectos nuevos`);
                 return { ...prev, projects: updated };
             });
@@ -614,7 +614,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             addProjectsFromPaths,
             removeProjectsByPath,
             setActiveView, setTargetTerminalTab,
-            executeProjectScript, addSavedCommand, removeSavedCommand, 
+            executeProjectScript, addSavedCommand, removeSavedCommand,
             saveWorkspaceConfig,
             executePipeline
         }}>

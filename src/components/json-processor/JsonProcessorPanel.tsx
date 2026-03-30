@@ -3,10 +3,10 @@ import {
     Braces, AlignLeft, CheckCircle2, Code2, GitBranch,
     Search, ArrowLeftRight, GitCompareArrows, SquarePen, Table2, HelpCircle, FileCode,
 } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components//ui/tabs';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components//ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components//ui/popover';
+import { Button } from '@/components//ui/button';
 import { JsonPrettierTab } from './JsonPrettierTab';
 import { JsonValidatorTab } from './JsonValidatorTab';
 import { JsonTypeConverterTab } from './JsonTypeConverterTab';

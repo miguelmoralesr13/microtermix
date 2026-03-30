@@ -1,7 +1,7 @@
 import React from 'react';
 import { useMockStore, MockEndpoint } from '../../stores/mockStore';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components//ui/button';
+import { Input } from '@/components//ui/input';
 import { Play, Square, Settings2, Server } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 

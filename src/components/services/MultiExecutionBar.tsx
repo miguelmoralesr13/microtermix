@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Play, Square, RotateCcw, FileCode, Wand2, Coffee, Terminal } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Button } from '@/components//ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components//ui/select';
+import { Separator } from '@/components//ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components//ui/tooltip';
 import { CommandBuilderModal } from './CommandBuilderModal';
 import { useWorkspace } from '../../context/WorkspaceContext';
 

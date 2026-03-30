@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, RefreshCw, AlertCircle } from 'lucide-react';
-import { loadConfig, getProjects, getIssueTypes, getUsers, createIssue } from '../jiraApi';
+import { loadConfig, getProjects, getIssueTypes, getUsers, createIssue } from './jiraApi';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';

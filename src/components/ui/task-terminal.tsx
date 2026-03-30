@@ -3,7 +3,7 @@ import { Terminal, ITheme } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
 import { ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import 'xterm/css/xterm.css';
 
 interface TaskTerminalProps {

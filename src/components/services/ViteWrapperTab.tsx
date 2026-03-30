@@ -1,13 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Plus, Trash2 } from 'lucide-react';
-import {
-    ViteFederationInfo,
-    ViteRemoteEntry,
-    ViteWrapperConfig,
-    ProxyCandidateItem,
-} from '../ViteWrapperModal';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { ViteWrapperConfig, ViteFederationInfo, ViteRemoteEntry, ProxyCandidateItem } from '../project/ViteWrapperModal';
 
 const STORAGE_PREFIX = 'microtermix-vite-wrapper-';
 function storageKey(p: string) {

@@ -43,3 +43,17 @@ Microtermix is a desktop developer workspace manager built with **Tauri v2 + Rea
 - **Modals:** Use `@/components/ui/dialog` (Base UI based).
 - **Icons:** Use `lucide-react`.
 - **Styling:** Use Tailwind utility classes. The dark theme base is `#020617` (defined in `src/App.css`).
+
+## Directory Structure (src/components)
+To maintain a scalable and clean codebase, components are organized by functional domain:
+
+- **`git/`**: Git operations, panels, and staging workflows.
+- **`jira/`**: Jira API integration, boards, stories, and Tempo time-logging.
+- **`aws/`**: (Renamed from cloudwatch) CloudWatch, EC2, SSM, and ApiGateway.
+- **`project/`**: Core project management: `ProjectRow`, `EnvManager`, `SettingsModal`, `JdkManager`.
+- **`services/`**: Terminal views, service management, and process logging.
+- **`system/`**: OS-level monitoring: `ProcessesPanel` and `SystemMonitorPanel`.
+- **`networking/`**: `ProxyPanel` and `FileServerPanel`.
+- **`sonar/` & `semgrep/`**: Static analysis and security remediation.
+- **`ui/`**: Atomic shadcn/ui components (based on Base UI).
+- **`layout/`**: Structural elements: `Sidebar`, `UtilityRenderer`, `ResizableDivider`.

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { useAwsStore } from '../../stores/awsStore';
-import { Ec2Instance } from '../../components/cloudwatch/ec2Types';
+import { Ec2Instance } from '../../components//aws/ec2Types';
 import { cwGetLogGroups } from '../../services/cloudwatchApi';
 import { toast } from 'sonner';
 

@@ -1,5 +1,5 @@
 
-import { JiraIssue, statusColor } from '../jiraApi';
+import { JiraIssue, statusColor } from './jiraApi';
 
 export function StatusBadge({ status }: { status: JiraIssue['fields']['status'] }) {
     const color = statusColor(status.statusCategory.colorName);

@@ -3,7 +3,7 @@ import { TerminalTabsBar } from './TerminalTabsBar';
 import { TerminalArea } from './TerminalArea';
 import { VitePreview } from './VitePreview';
 import { EmptyTerminalState } from './EmptyTerminalState';
-import { getViteWrapperConfig } from '../ViteWrapperModal';
+import { getViteWrapperConfig } from '../project/ViteWrapperModal';
 
 interface ServiceTerminalsProps {
     processIds: string[];

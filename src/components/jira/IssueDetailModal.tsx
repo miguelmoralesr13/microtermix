@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, ExternalLink, X, Layers } from 'lucide-react';
-import { JiraIssue, loadConfig, JiraIssueDetail, getIssueDetail } from '../jiraApi';
+import { JiraIssue, loadConfig, JiraIssueDetail, getIssueDetail } from './jiraApi';
 import { StatusBadge } from './StatusBadge';
 import { AdfBody } from './AdfRenderer';
 import { AuthenticatedMedia, AttachmentViewer } from './AuthenticatedMedia';

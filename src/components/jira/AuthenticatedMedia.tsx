@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { loadConfig } from '../jiraApi';
+import { loadConfig } from './jiraApi';
 import { fetch } from '@tauri-apps/plugin-http';
 import { X, ChevronLeft, ChevronRight, Play, Download } from 'lucide-react';
 

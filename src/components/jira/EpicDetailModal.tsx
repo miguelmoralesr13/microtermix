@@ -1,5 +1,5 @@
 import { X, ExternalLink } from 'lucide-react';
-import { JiraIssue, loadConfig, statusColor } from '../jiraApi';
+import { JiraIssue, loadConfig, statusColor } from './jiraApi';
 import { useEscape } from '../../hooks/useEscape';
 
 export function EpicDetailModal({ epic, onClose }: { epic: JiraIssue; onClose: () => void }) {

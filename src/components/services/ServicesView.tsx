@@ -4,7 +4,7 @@ import { useProcessStore } from '../../stores/processStore';
 import { ProjectListPane } from './ProjectListPane';
 import { MultiExecutionBar } from './MultiExecutionBar';
 import { ServiceTerminals } from './ServiceTerminals';
-import { ViteWrapperModal, type ProxyCandidateItem } from '../ViteWrapperModal';
+import { ViteWrapperModal, type ProxyCandidateItem } from '../project/ViteWrapperModal';
 import { ProjectSettingsModal } from './ProjectSettingsModal';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';

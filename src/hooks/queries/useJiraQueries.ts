@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as api from '../../components/jiraApi';
+import * as api from '../../components//jira/jiraApi';
 import { useJiraStore } from '../../stores/jiraStore';
 import { toast } from 'sonner';
 import { useMemo } from 'react';

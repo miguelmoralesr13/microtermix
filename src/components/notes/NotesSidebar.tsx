@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { FilePlus, FolderPlus, RefreshCw, HelpCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components//ui/button';
+import { Input } from '@/components//ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components//ui/dialog';
 import { marked } from 'marked';
 import { NotesTreeNode, type NoteEntry } from './NotesTreeNode';
 

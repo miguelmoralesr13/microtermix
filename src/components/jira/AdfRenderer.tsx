@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { loadConfig, getJiraMediaUrl } from '../jiraApi';
+import { loadConfig, getJiraMediaUrl } from './jiraApi';
 
 export function AdfMediaFile({ id }: { id: string }) {
     const cfg = loadConfig();

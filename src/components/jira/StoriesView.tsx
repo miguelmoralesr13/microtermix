@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useJiraStore } from '../../stores/jiraStore';
 import { RefreshCw, Search, AlertCircle, Plus, ChevronRight, Timer } from 'lucide-react';
-import * as api from '../jiraApi';
+import * as api from './jiraApi';
 import {
     JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
     statusColor,
     isReleased,
-} from '../jiraApi';
-import { TempoLogModal } from '../TempoLogModal';
+} from './jiraApi';
+import { TempoLogModal } from './TempoLogModal';
 import { TransitionFieldsModal, TransitionTarget } from './TransitionFieldsModal';
 import { DiscardSubtasksModal, DiscardSubtasksTarget } from './DiscardSubtasksModal';
 import { HierarchyCard } from './HierarchyCard';

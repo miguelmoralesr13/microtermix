@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components//ui/button';
 import { GitBranch, ShieldCheck } from 'lucide-react';
 import { JsonTreeNode } from './JsonTreeNode';
 import { useMonacoTheme } from '@/hooks/useMonacoTheme';

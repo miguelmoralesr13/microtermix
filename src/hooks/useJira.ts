@@ -1,5 +1,5 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import * as jiraApi from '../components/jiraApi';
+import * as jiraApi from '../components//jira/jiraApi';
 
 // ── Keys ──────────────────────────────────────────────────────────────────────
 

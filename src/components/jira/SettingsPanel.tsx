@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
     JiraConfig, loadConfig, emptyConfig, testConnectionWith, getActivityOptions,
-} from '../jiraApi';
+} from './jiraApi';
 
 export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean) => void }) {
     // ── Account management via Zustand store ──────────────────────────────────

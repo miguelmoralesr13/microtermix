@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, Trash2, FilePlus, FolderPlus, Pencil } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/components//ui/button';
+import { Input } from '@/components//ui/input';
 import { cn } from '@/lib/utils';
 
 export interface NoteEntry {
