@@ -22,7 +22,12 @@ import { toast } from 'sonner';
 export function StoriesView() {
     const queryClient = useQueryClient();
     const cfg = api.loadConfig();
-    const project = cfg.storiesProject || cfg.defaultProject;
+    
+    // Main project fallback for each level
+    const p1 = cfg.level1Project || cfg.defaultProject;
+    const p2 = cfg.level2Project || cfg.defaultProject;
+    const p3 = cfg.level3Project || cfg.defaultProject;
+    const p4 = cfg.level4Project || cfg.defaultProject;
 
     const [myAccountId, setMyAccountId] = useState<string>(() => cfg.defaultAssigneeId ?? '');
 
@@ -43,9 +48,13 @@ export function StoriesView() {
     const storeSelection = useJiraStore(s => s.storiesSelection);
     const storeSetSelection = useJiraStore(s => s.setStoriesSelection);
     const storePinnedEpics = useJiraStore(s => s.pinnedEpics);
+    const storePinnedBusinessStories = useJiraStore(s => s.pinnedBusinessStories);
     const storePinnedStories = useJiraStore(s => s.pinnedStories);
+    const storePinnedTasks = useJiraStore(s => s.pinnedTasks);
     const storeSetPinnedEpics = useJiraStore(s => s.setPinnedEpics);
+    const storeSetPinnedBusinessStories = useJiraStore(s => s.setPinnedBusinessStories);
     const storeSetPinnedStories = useJiraStore(s => s.setPinnedStories);
+    const storeSetPinnedTasks = useJiraStore(s => s.setPinnedTasks);
 
     const [epicSearch, setEpicSearch] = useState('');
     const [epicSearchInput, setEpicSearchInput] = useState('');
@@ -56,36 +65,83 @@ export function StoriesView() {
 
     useEffect(() => { localStorage.setItem('jira_hide_released', String(hideReleased)); }, [hideReleased]);
 
-    const epicJql = useMemo(() => {
-        let jql = `project = "${project}" AND issuetype = "Epic"`;
-        if (epicSearch) jql += ` AND (summary ~ "${epicSearch}" OR key = "${epicSearch}")`;
+    // Level 1: Portfolio
+    const portfolioJql = useMemo(() => {
+        const base = `project = "${p1}" AND issuetype = "${cfg.level1Type || 'Epic'}"`;
+        let filtered = base;
+        if (epicSearch) filtered += ` AND (summary ~ "${epicSearch}" OR key = "${epicSearch}")`;
+        if (storePinnedEpics.length > 0) {
+            return `(${filtered}) OR key in (${storePinnedEpics.map(k => `"${k}"`).join(',')})`;
+        }
+        return filtered;
+    }, [p1, cfg.level1Type, epicSearch, storePinnedEpics]);
+
+    const { data: portfolios = [], isLoading: loadingPortfolios } = useJiraIssues(portfolioJql, !!p1);
+
+    const selectedPortfolioKey = storeSelection.portfolioKey;
+
+    // Level 2: Business
+    const bStoryJql = useMemo(() => {
+        const base = `project = "${p2}" AND issuetype = "${cfg.level2Type || 'Business Story'}"`;
+        const parentFilter = selectedPortfolioKey ? ` AND (parent = "${selectedPortfolioKey}" OR "Epic Link" = "${selectedPortfolioKey}" OR issue in linkedIssues("${selectedPortfolioKey}"))` : '';
+        
+        let jql = base + parentFilter;
+        if (storePinnedBusinessStories.length > 0) {
+            const pinnedClause = `key in (${storePinnedBusinessStories.map(k => `"${k}"`).join(',')})`;
+            jql = selectedPortfolioKey ? `(${jql}) OR ${pinnedClause}` : pinnedClause;
+        } else if (!selectedPortfolioKey) {
+            return '';
+        }
         return jql;
-    }, [project, epicSearch]);
-
-    const { data: epics = [], isLoading: loadingEpics } = useJiraIssues(epicJql, !!project);
-
-    const selectedEpicKey = storeSelection.epicKey;
-
-    const bStoryJql = useMemo(() => `project = "${project}" AND issuetype = "${cfg.businessStoryType || 'Business Story'}" AND (parent = "${selectedEpicKey}" OR "Epic Link" = "${selectedEpicKey}")`, [selectedEpicKey, project, cfg.businessStoryType]);
-    const { data: businessStories = [], isLoading: loadingBusinessStories } = useJiraIssues(bStoryJql, !!selectedEpicKey);
+    }, [selectedPortfolioKey, p2, cfg.level2Type, storePinnedBusinessStories]);
+    
+    const { data: businessStories = [], isLoading: loadingBusinessStories } = useJiraIssues(bStoryJql, !!selectedPortfolioKey || storePinnedBusinessStories.length > 0);
 
     const selectedBusinessStoryKey = storeSelection.businessStoryKey;
 
-    const techStoryJql = useMemo(() => `project = "${project}" AND issuetype = "${cfg.storyType || 'Story'}" AND issue in linkedIssues("${selectedBusinessStoryKey}")`, [selectedBusinessStoryKey, project, cfg.storyType]);
-    const { data: stories = [], isLoading: loadingTechStories } = useJiraIssues(techStoryJql, !!selectedBusinessStoryKey);
+    // Level 3: Technical
+    const techStoryJql = useMemo(() => {
+        const base = `project = "${p3}" AND issuetype = "${cfg.level3Type || 'Story'}"`;
+        const parentFilter = selectedBusinessStoryKey ? ` AND (parent = "${selectedBusinessStoryKey}" OR issue in linkedIssues("${selectedBusinessStoryKey}"))` : '';
+        
+        let jql = base + parentFilter;
+        if (storePinnedStories.length > 0) {
+            const pinnedClause = `key in (${storePinnedStories.map(k => `"${k}"`).join(',')})`;
+            jql = selectedBusinessStoryKey ? `(${jql}) OR ${pinnedClause}` : pinnedClause;
+        } else if (!selectedBusinessStoryKey) {
+            return '';
+        }
+        return jql;
+    }, [selectedBusinessStoryKey, p3, cfg.level3Type, storePinnedStories]);
+
+    const { data: stories = [], isLoading: loadingTechStories } = useJiraIssues(techStoryJql, !!selectedBusinessStoryKey || storePinnedStories.length > 0);
 
     const selectedStoryKey = storeSelection.storyKey;
 
-    const taskJql = useMemo(() => `parent = "${selectedStoryKey}"`, [selectedStoryKey]);
-    const { data: tasks = [], isLoading: loadingTasks } = useJiraIssues(taskJql, !!selectedStoryKey);
+    // Level 4: Tasks
+    const taskJql = useMemo(() => {
+        const base = `project = "${p4}" AND issuetype = "${cfg.level4Type || 'Task'}"`;
+        const parentFilter = selectedStoryKey ? ` AND parent = "${selectedStoryKey}"` : '';
+        
+        let jql = base + parentFilter;
+        if (storePinnedTasks.length > 0) {
+            const pinnedClause = `key in (${storePinnedTasks.map(k => `"${k}"`).join(',')})`;
+            jql = selectedStoryKey ? `(${jql}) OR ${pinnedClause}` : pinnedClause;
+        } else if (!selectedStoryKey) {
+            return '';
+        }
+        return jql;
+    }, [selectedStoryKey, p4, cfg.level4Type, storePinnedTasks]);
+
+    const { data: tasks = [], isLoading: loadingTasks } = useJiraIssues(taskJql, !!selectedStoryKey || storePinnedTasks.length > 0);
 
     const [selectedTaskKey, setSelectedTaskKey] = useState<string | null>(null);
     const { data: selectedTask } = useJiraIssue(selectedTaskKey);
     const { data: taskTransitions = [], isLoading: loadingTransitions } = useJiraTransitions(selectedTaskKey);
 
-    const handleSelectEpic = (v: JiraIssue | null) => {
-        if (v && selectedEpicKey === v.key) return;
-        storeSetSelection({ epicKey: v?.key ?? null, businessStoryKey: null, storyKey: null });
+    const handleSelectPortfolio = (v: JiraIssue | null) => {
+        if (v && selectedPortfolioKey === v.key) return;
+        storeSetSelection({ portfolioKey: v?.key ?? null, businessStoryKey: null, storyKey: null });
         setSelectedTaskKey(null);
     };
 
@@ -177,24 +233,37 @@ export function StoriesView() {
     const colHeaderCls = "shrink-0 px-3 py-2 border-b border-slate-800 bg-slate-900/70";
     const colBodyCls = "flex-1 overflow-y-auto scrollbar-hide p-2 space-y-1.5";
 
-    if (!project) {
+    if (!p1 && !p2) {
         return (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-slate-500 p-12">
                 <AlertCircle size={36} />
-                <p className="text-sm text-center">Configura un proyecto en <strong className="text-slate-300">Settings → Stories Project</strong> para usar esta vista.</p>
+                <p className="text-sm text-center">Configura tus proyectos en <strong className="text-slate-300">Settings → Stories View</strong> para comenzar.</p>
             </div>
         );
     }
 
-    const sortedEpics = sortWithPins(hideReleased ? epics.filter(e => !isReleased(e)) : epics, storePinnedEpics);
-    const sortedBusinessStories = hideReleased ? businessStories.filter(s => !isReleased(s)) : businessStories;
+    const sortedPortfolios = sortWithPins(portfolios.filter(e => {
+        if (storePinnedEpics.includes(e.key)) return true;
+        if (hideReleased && isReleased(e)) return false;
+        return true;
+    }), storePinnedEpics);
+    const sortedBusinessStories = sortWithPins(businessStories.filter(s => {
+        if (storePinnedBusinessStories.includes(s.key)) return true;
+        if (hideReleased && isReleased(s)) return false;
+        return true;
+    }), storePinnedBusinessStories);
     const sortedStories = sortWithPins(stories.filter(s => {
+        if (storePinnedStories.includes(s.key)) return true;
         if (hideReleased && isReleased(s)) return false;
         const matchText = !storySearch.trim() || (s.key.toLowerCase().includes(storySearch.toLowerCase()) || s.fields.summary.toLowerCase().includes(storySearch.toLowerCase()));
         const matchStatus = !storyFilterStatus || s.fields.status.name.toLowerCase() === storyFilterStatus.toLowerCase();
         return matchText && matchStatus;
     }), storePinnedStories);
-    const filteredTasks = hideReleased ? tasks.filter(t => !isReleased(t)) : tasks;
+    const sortedTasks = sortWithPins(tasks.filter(t => {
+        if (storePinnedTasks.includes(t.key)) return true;
+        if (hideReleased && isReleased(t)) return false;
+        return true;
+    }), storePinnedTasks);
 
     return (
         <div className="flex flex-col h-full min-h-0">
@@ -202,7 +271,7 @@ export function StoriesView() {
                 <div className={`${colCls} w-1/5`}>
                     <div className={colHeaderCls}>
                         <div className="flex items-center justify-between mb-1.5">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Business ({epics.length})</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{cfg.level1Label || 'Portfolio'} ({portfolios.length})</p>
                             <button onClick={() => setHideReleased(!hideReleased)} className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors ${hideReleased ? 'bg-microtermix-neon/10 border-microtermix-neon/30 text-microtermix-neon' : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'}`}>{hideReleased ? 'ACTIVOS' : 'TODO'}</button>
                         </div>
                         <div className="relative">
@@ -211,20 +280,20 @@ export function StoriesView() {
                         </div>
                     </div>
                     <div className={colBodyCls}>
-                        {loadingEpics ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedEpics.map(epic => (
-                            <HierarchyCard key={epic.id} issue={epic} selected={selectedEpicKey === epic.key} pinned={storePinnedEpics.includes(epic.key)} onSelect={() => handleSelectEpic(epic)} onPin={() => togglePin(epic.key, storePinnedEpics, storeSetPinnedEpics)} onDetail={() => setTaskDetailTarget(epic)} onLinkedIssues={() => setLinkedIssuesTarget(epic.key)} />
+                        {loadingPortfolios ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedPortfolios.map(p => (
+                            <HierarchyCard key={p.id} issue={p} selected={selectedPortfolioKey === p.key} pinned={storePinnedEpics.includes(p.key)} onSelect={() => handleSelectPortfolio(p)} onPin={() => togglePin(p.key, storePinnedEpics, storeSetPinnedEpics)} onDetail={() => setTaskDetailTarget(p)} onLinkedIssues={() => setLinkedIssuesTarget(p.key)} />
                         ))}
                     </div>
                 </div>
 
                 <div className={`${colCls} w-1/5`}>
                     <div className={colHeaderCls}>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Business {selectedEpicKey ? `(${businessStories.length})` : ''}</p>
-                        {selectedEpicKey && <p className="text-[10px] text-microtermix-neon/60 mt-0.5 truncate">{selectedEpicKey}</p>}
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{cfg.level2Label || 'Business'} {selectedPortfolioKey ? `(${businessStories.length})` : ''}</p>
+                        {selectedPortfolioKey && <p className="text-[10px] text-microtermix-neon/60 mt-0.5 truncate">{selectedPortfolioKey}</p>}
                     </div>
                     <div className={colBodyCls}>
-                        {!selectedEpicKey ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona un Epic</p> : loadingBusinessStories ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedBusinessStories.map(bStory => (
-                            <HierarchyCard key={bStory.id} issue={bStory} selected={selectedBusinessStoryKey === bStory.key} pinned={false} onPin={() => {}} onSelect={() => handleSelectBusinessStory(bStory)} onDetail={() => setTaskDetailTarget(bStory)} onLinkedIssues={() => setLinkedIssuesTarget(bStory.key)} />
+                        {!selectedPortfolioKey && sortedBusinessStories.length === 0 ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona un {cfg.level1Label || 'Portfolio'}</p> : loadingBusinessStories ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedBusinessStories.map(bStory => (
+                            <HierarchyCard key={bStory.id} issue={bStory} selected={selectedBusinessStoryKey === bStory.key} pinned={storePinnedBusinessStories.includes(bStory.key)} onPin={() => togglePin(bStory.key, storePinnedBusinessStories, storeSetPinnedBusinessStories)} onSelect={() => handleSelectBusinessStory(bStory)} onDetail={() => setTaskDetailTarget(bStory)} onLinkedIssues={() => setLinkedIssuesTarget(bStory.key)} />
                         ))}
                     </div>
                 </div>
@@ -232,7 +301,7 @@ export function StoriesView() {
                 <div className={`${colCls} w-1/5`}>
                     <div className={colHeaderCls}>
                         <div className="flex items-center gap-1 mb-1">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex-1">Technical {selectedBusinessStoryKey ? `(${stories.length})` : ''}</p>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex-1">{cfg.level3Label || 'Technical'} {selectedBusinessStoryKey ? `(${stories.length})` : ''}</p>
                             {selectedBusinessStoryKey && <button onClick={() => setShowStoryFilters(!showStoryFilters)} className={cn("p-0.5 rounded transition-colors", showStoryFilters ? 'text-microtermix-neon' : 'text-slate-500')}><Search size={12} /></button>}
                         </div>
                         {selectedBusinessStoryKey && showStoryFilters && (
@@ -242,7 +311,7 @@ export function StoriesView() {
                         )}
                     </div>
                     <div className={colBodyCls}>
-                        {!selectedBusinessStoryKey ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una Business Story</p> : loadingTechStories ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedStories.map(story => (
+                        {!selectedBusinessStoryKey && sortedStories.length === 0 ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una {cfg.level2Label || 'Business Story'}</p> : loadingTechStories ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedStories.map(story => (
                             <div key={story.id} className="relative group/story">
                                 <HierarchyCard issue={story} selected={selectedStoryKey === story.key} pinned={storePinnedStories.includes(story.key)} onSelect={() => handleSelectStory(story)} onPin={() => togglePin(story.key, storePinnedStories, storeSetPinnedStories)} onDetail={() => setTaskDetailTarget(story)} onLinkedIssues={() => setLinkedIssuesTarget(story.key)} />
                                 <button onClick={e => { e.stopPropagation(); setCreateForStory(story); }} className="absolute right-2 bottom-2 opacity-0 group-hover/story:opacity-100 transition-opacity bg-microtermix-neon text-microtermix-darker rounded-full w-5 h-5 flex items-center justify-center"><Plus size={10} /></button>
@@ -252,13 +321,14 @@ export function StoriesView() {
                 </div>
 
                 <div className={`${colCls} w-1/5`}>
-                    <div className={colHeaderCls}><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tasks {selectedStoryKey ? `(${tasks.length})` : ''}</p></div>
+                    <div className={colHeaderCls}><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{cfg.level4Label || 'Tasks'} {selectedStoryKey ? `(${tasks.length})` : ''}</p></div>
                     <div className={colBodyCls}>
-                        {!selectedStoryKey ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una Story</p> : loadingTasks ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : filteredTasks.map(task => (
-                            <HierarchyCard key={task.id} issue={task} selected={selectedTaskKey === task.key} pinned={false} onPin={() => {}} onSelect={() => setSelectedTaskKey(prev => prev === task.key ? null : task.key)} onDetail={() => { setSelectedTaskKey(task.key); setTaskDetailTarget(task); }} />
+                        {!selectedStoryKey && sortedTasks.length === 0 ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una {cfg.level3Label || 'Story'}</p> : loadingTasks ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedTasks.map(task => (
+                            <HierarchyCard key={task.id} issue={task} selected={selectedTaskKey === task.key} pinned={storePinnedTasks.includes(task.key)} onPin={() => togglePin(task.key, storePinnedTasks, storeSetPinnedTasks)} onSelect={() => setSelectedTaskKey(prev => prev === task.key ? null : task.key)} onDetail={() => { setSelectedTaskKey(task.key); setTaskDetailTarget(task); }} />
                         ))}
                     </div>
                 </div>
+...
 
                 <div className="flex flex-col w-1/5 h-full border-slate-800">
                     <div className={colHeaderCls}><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Detalle / Acción</p></div>

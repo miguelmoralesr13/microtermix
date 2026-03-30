@@ -21,6 +21,7 @@ function syncLegacyKeys(accounts: JiraAccount[], activeAccountId: string | null)
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface StoriesSelection {
+    portfolioKey: string | null;
     epicKey: string | null;
     businessStoryKey?: string | null;
     storyKey: string | null;
@@ -33,7 +34,9 @@ export interface JiraStoreState {
     boardProjectKey: string;
     storiesSelection: StoriesSelection;
     pinnedEpics: string[];
+    pinnedBusinessStories: string[];
     pinnedStories: string[];
+    pinnedTasks: string[];
 
     addAccount: (name: string, config?: Partial<JiraConfig>) => JiraAccount;
     updateAccount: (id: string, patch: Partial<Pick<JiraAccount, 'name' | 'config'>>) => void;
@@ -46,9 +49,11 @@ export interface JiraStoreState {
     setBoardFilter: (f: BoardFilter) => void;
     setBoardProjectKey: (key: string) => void;
     setStoriesSelection: (patch: Partial<StoriesSelection>) => void;
-    clearStoriesDownstream: (from: 'epic' | 'story') => void;
+    clearStoriesDownstream: (from: 'portfolio' | 'epic' | 'story') => void;
     setPinnedEpics: (keys: string[]) => void;
+    setPinnedBusinessStories: (keys: string[]) => void;
     setPinnedStories: (keys: string[]) => void;
+    setPinnedTasks: (keys: string[]) => void;
 }
 
 const DEFAULT_STATE = {
@@ -56,9 +61,11 @@ const DEFAULT_STATE = {
     activeAccountId: null as string | null,
     boardFilter: { assignees: ['me'] } as BoardFilter,
     boardProjectKey: '',
-    storiesSelection: { epicKey: null, businessStoryKey: null, storyKey: null },
+    storiesSelection: { portfolioKey: null, epicKey: null, businessStoryKey: null, storyKey: null },
     pinnedEpics: [] as string[],
+    pinnedBusinessStories: [] as string[],
     pinnedStories: [] as string[],
+    pinnedTasks: [] as string[],
 };
 
 export const useJiraStore = create<JiraStoreState>()(
@@ -151,7 +158,16 @@ export const useJiraStore = create<JiraStoreState>()(
                 },
 
                 clearStoriesDownstream: (from) => {
-                    if (from === 'epic') {
+                    if (from === 'portfolio') {
+                        set(_ => ({
+                            storiesSelection: {
+                                portfolioKey: null,
+                                epicKey: null,
+                                businessStoryKey: null,
+                                storyKey: null,
+                            },
+                        }));
+                    } else if (from === 'epic') {
                         set(s => ({
                             storiesSelection: {
                                 ...s.storiesSelection,
@@ -162,7 +178,9 @@ export const useJiraStore = create<JiraStoreState>()(
                 },
 
                 setPinnedEpics: (keys) => set({ pinnedEpics: keys }),
+                setPinnedBusinessStories: (keys) => set({ pinnedBusinessStories: keys }),
                 setPinnedStories: (keys) => set({ pinnedStories: keys }),
+                setPinnedTasks: (keys) => set({ pinnedTasks: keys }),
             }),
             {
                 name: 'microtermix-jira-store',
@@ -171,7 +189,9 @@ export const useJiraStore = create<JiraStoreState>()(
                     boardProjectKey: s.boardProjectKey,
                     storiesSelection: s.storiesSelection,
                     pinnedEpics: s.pinnedEpics,
+                    pinnedBusinessStories: s.pinnedBusinessStories,
                     pinnedStories: s.pinnedStories,
+                    pinnedTasks: s.pinnedTasks,
                 }),
             }
         ),

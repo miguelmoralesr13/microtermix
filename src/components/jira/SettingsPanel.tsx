@@ -349,18 +349,52 @@ export function SettingsPanel({ onSaved }: { onSaved: (accountsChanged?: boolean
                     {section === 'stories' && (
                         <>
                             <div>
-                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Stories View — Jerarquía</h3>
-                                <p className="text-xs text-slate-500">Configura los tipos de issues y el campo Activity para la vista de 3 columnas.</p>
+                                <h3 className="text-sm font-bold text-slate-200 mb-0.5">Stories View — Jerarquía Extensible</h3>
+                                <p className="text-xs text-slate-500">Configura cada nivel de la jerarquía de forma independiente.</p>
                             </div>
-                            {field('Proyecto para vista Stories (ej. MYPROJ)', 'storiesProject')}
-                            <div className="grid grid-cols-2 gap-3">
-                                {field('Tipo Epic', 'epicType')}
-                                {field('Tipo Business Story', 'businessStoryType')}
+
+                            <div className="space-y-6">
+                                {/* Level 1 */}
+                                <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-lg space-y-3">
+                                    <p className="text-[10px] font-bold text-microtermix-neon uppercase tracking-widest">Nivel 1 (Portfolio)</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {field('Etiqueta', 'level1Label')}
+                                        {field('Proyecto', 'level1Project')}
+                                        {field('Tipo Issue', 'level1Type')}
+                                    </div>
+                                </div>
+
+                                {/* Level 2 */}
+                                <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-lg space-y-3">
+                                    <p className="text-[10px] font-bold text-microtermix-accent uppercase tracking-widest">Nivel 2 (Business)</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {field('Etiqueta', 'level2Label')}
+                                        {field('Proyecto', 'level2Project')}
+                                        {field('Tipo Issue', 'level2Type')}
+                                    </div>
+                                </div>
+
+                                {/* Level 3 */}
+                                <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-lg space-y-3">
+                                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Nivel 3 (Technical)</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {field('Etiqueta', 'level3Label')}
+                                        {field('Proyecto', 'level3Project')}
+                                        {field('Tipo Issue', 'level3Type')}
+                                    </div>
+                                </div>
+
+                                {/* Level 4 */}
+                                <div className="p-3 bg-slate-900/50 border border-slate-800 rounded-lg space-y-3">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Nivel 4 (Tasks)</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {field('Etiqueta', 'level4Label')}
+                                        {field('Proyecto', 'level4Project')}
+                                        {field('Tipo Issue', 'level4Type')}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                {field('Tipo Story (Técnica)', 'storyType')}
-                                {field('Tipo Task', 'taskType')}
-                            </div>
+
                             {field('ID campo Activity (ej. customfield_10115)', 'activityFieldId')}
                             <div>
                                 <label className="block text-xs text-slate-400 mb-1">Valor de Activity</label>

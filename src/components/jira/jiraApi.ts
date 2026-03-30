@@ -35,27 +35,33 @@ export interface JiraConfig {
     baseUrl: string;         // https://company.atlassian.net
     email: string;
     apiToken: string;
-    defaultProject: string;  // project key, e.g. "NCPPPMC"
-    defaultIssueType: string; // "Story" | "Bug" | "Task"
-    defaultAssigneeId: string; // account id
-    defaultPriority: string;   // "Medium"
+    defaultProject: string;  // Default for creating issues
+    defaultIssueType: string;
+    defaultAssigneeId: string;
+    defaultPriority: string;
     defaultLabels: string[];
-    defaultSprint?: string;    // sprint id
-    // Arbitrary extra custom fields to always send: { customfield_XXXXX: value }
     customFields: Record<string, any>;
-    // Hierarchy config for the 3-column Stories view
-    storiesProject: string;      // project key to filter epics/stories/tasks
-    epicType: string;            // issue type name for Business Stories (default: "Epic")
-    storyType: string;           // issue type name for Technical Stories (default: "Story")
-    taskType: string;            // issue type name for Tasks (default: "Task")
-    businessStoryType?: string;  // issue type name for Business Stories between epics and technical stories (default: "Business Story")
-    defectType?: string;         // issue type name for Defects (default: "Defect")
-    defectProjects?: string[];   // Project keys to search for defects (e.g. ["NTCQA", "BUGS"]); empty = search all projects
-    activityFieldId: string;     // custom field ID for Type of Activity (e.g. "customfield_10115")
-    activityId: string;          // option ID of the activity value (e.g. "10301")
-    activityValue: string;       // label of the activity value (e.g. "Development")
-    releasedStatuses: string[];  // statuses that trigger special color (e.g. ["Released", "Discarded"])
+    
+    // Extensible Hierarchy Config
+    level1Project: string; level1Type: string; level1Label: string;
+    level2Project: string; level2Type: string; level2Label: string;
+    level3Project: string; level3Type: string; level3Label: string;
+    level4Project: string; level4Type: string; level4Label: string;
+
+    defectType?: string;
+    defectProjects?: string[];
+    activityFieldId: string;
+    activityId: string;
+    activityValue: string;
+    releasedStatuses: string[];
     tempoToken: string;
+
+    // Legacy/Fallback fields
+    taskType?: string;
+    epicType?: string;
+    storyType?: string;
+    businessStoryType?: string;
+    storiesProject?: string;
 }
 
 export interface JiraAccount {
@@ -65,25 +71,14 @@ export interface JiraAccount {
 }
 
 export const emptyConfig = (): JiraConfig => ({
-    baseUrl: '',
-    email: '',
-    apiToken: '',
-    defaultProject: '',
-    defaultIssueType: 'Story',
-    defaultAssigneeId: '',
-    defaultPriority: 'Medium',
-    defaultLabels: [],
+    baseUrl: '', email: '', apiToken: '',
+    defaultProject: '', defaultIssueType: 'Story', defaultAssigneeId: '', defaultPriority: 'Medium', defaultLabels: [],
     customFields: {},
-    storiesProject: '',
-    epicType: 'Epic',
-    storyType: 'Story',
-    taskType: 'Task',
-    businessStoryType: 'Business Story',
-    defectType: 'Defect',
-    defectProjects: [],
-    activityFieldId: '',
-    activityId: '',
-    activityValue: 'Development',
+    level1Project: '', level1Type: 'Epic', level1Label: 'Portfolio',
+    level2Project: '', level2Type: 'Business Story', level2Label: 'Business',
+    level3Project: '', level3Type: 'Story', level3Label: 'Technical',
+    level4Project: '', level4Type: 'Task', level4Label: 'Tasks',
+    activityFieldId: '', activityId: '', activityValue: 'Development',
     releasedStatuses: ['Released', 'Discarded'],
     tempoToken: '',
 });
@@ -347,24 +342,43 @@ export async function getProjects(): Promise<{ key: string; name: string; id: st
     return (data.values ?? []).map((p: any) => ({ key: p.key, name: p.name, id: p.id }));
 }
 
-export async function getIssueTypes(projectKey: string): Promise<{ id: string; name: string; iconUrl: string }[]> {
+export async function getIssueTypes(projectKey: string): Promise<{ id: string; name: string; iconUrl: string; subtask: boolean }[]> {
     const data = await jiraFetch(`/project/${projectKey}`);
-    return (data.issueTypes ?? []).map((t: any) => ({ id: t.id, name: t.name, iconUrl: t.iconUrl }));
+    return (data.issueTypes ?? []).map((t: any) => ({ id: t.id, name: t.name, iconUrl: t.iconUrl, subtask: !!t.subtask }));
 }
 
 export async function getActivityOptions(projectKey: string): Promise<{ id: string; value: string }[]> {
     const cfg = loadConfig();
     if (!cfg.activityFieldId) return [];
-    const taskType = encodeURIComponent(cfg.taskType || 'Task');
-    const data = await jiraFetch(
-        `/issue/createmeta?projectKeys=${projectKey}&issuetypeNames=${taskType}&expand=projects.issuetypes.fields`,
-    );
-    const fields = data?.projects?.[0]?.issuetypes?.[0]?.fields;
-    if (!fields) return [];
-    return (fields[cfg.activityFieldId]?.allowedValues ?? []).map((v: any) => ({
-        id: String(v.id),
-        value: String(v.value),
-    }));
+
+    try {
+        // First find the best issue type to use for createmeta
+        const types = await getIssueTypes(projectKey);
+        const targetType = cfg.level4Type || cfg.taskType || 'Task';
+        
+        // Find by exact name, or fallback to first sub-task if our target isn't found
+        let bestType = types.find(t => t.name.toLowerCase() === targetType.toLowerCase());
+        if (!bestType) bestType = types.find(t => t.subtask); // Try any sub-task type
+        if (!bestType) bestType = types[0]; // Desperation fallback
+
+        if (!bestType) return [];
+
+        const taskTypeName = encodeURIComponent(bestType.name);
+        const data = await jiraFetch(
+            `/issue/createmeta?projectKeys=${projectKey}&issuetypeNames=${taskTypeName}&expand=projects.issuetypes.fields`,
+        );
+        const fields = data?.projects?.[0]?.issuetypes?.[0]?.fields;
+        if (!fields) return [];
+
+        const val = fields[cfg.activityFieldId]?.allowedValues ?? [];
+        return val.map((v: any) => ({
+            id: String(v.id),
+            value: String(v.value),
+        }));
+    } catch (e) {
+        console.error('[getActivityOptions] Error:', e);
+        return [];
+    }
 }
 
 export async function getPriorities(): Promise<{ id: string; name: string; iconUrl: string }[]> {
@@ -551,9 +565,10 @@ export async function createSubTask(
     activity?: { id: string; value: string },
 ): Promise<{ id: string; key: string }> {
     const cfg = loadConfig();
+    const parentProj = parentKey.split('-')[0];
     const fields: Record<string, any> = {
-        project: { key: cfg.storiesProject || cfg.defaultProject },
-        issuetype: { name: cfg.taskType || 'Task' },
+        project: { key: parentProj },
+        issuetype: { name: cfg.level4Type || cfg.taskType || 'Task' },
         parent: { key: parentKey },
         summary,
     };

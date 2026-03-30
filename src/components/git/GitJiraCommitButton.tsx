@@ -206,16 +206,17 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
             .finally(() => setLoadingStories(false));
     }, [draft.epicKey]);
 
-    // Load activity options when draft.projectKey changes
+    // Load activity options based on the selected story's project
     useEffect(() => {
-        if (!draft.projectKey || !loadConfig().activityFieldId) { setActivityOpts([]); return; }
+        const proj = draft.storyKey?.includes('-') ? draft.storyKey.split('-')[0] : draft.projectKey;
+        if (!proj || !loadConfig().activityFieldId) { setActivityOpts([]); return; }
         setLoadingActivities(true);
         setActivityOpts([]);
-        getActivityOptions(draft.projectKey)
+        getActivityOptions(proj)
             .then((list: any[]) => setActivityOpts(list))
             .catch(() => setActivityOpts([]))
             .finally(() => setLoadingActivities(false));
-    }, [draft.projectKey]);
+    }, [draft.storyKey, draft.projectKey]);
 
     const isRunning = flowStep !== 'idle' && flowStep !== 'done' && flowStep !== 'error' && flowStep !== 'tempo';
     const jiraCfg = loadConfig();
@@ -268,6 +269,16 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                 throw new Error(commitResult.stderr || 'Git commit failed');
             }
 
+            setFlowStep('pushing');
+            const branch = currentBranch || 'main';
+            const pushResult: any = await invoke('git_execute', {
+                projectPath,
+                args: ['push', 'origin', branch],
+            });
+            if (!pushResult.success) {
+                throw new Error(pushResult.stderr || 'Git push failed');
+            }
+
             const fullIssue = await getIssue(taskKey);
             setCreatedTask(fullIssue);
             setFlowStep('tempo');
@@ -280,16 +291,6 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
     const handleTempoSuccess = async () => {
         if (!createdTask) return;
         try {
-            setFlowStep('pushing');
-            const branch = currentBranch || 'main';
-            const pushResult: any = await invoke('git_execute', {
-                projectPath,
-                args: ['push', 'origin', branch],
-            });
-            if (!pushResult.success) {
-                throw new Error(pushResult.stderr || 'Git push failed');
-            }
-
             setFlowStep('closing');
             try {
                 await transitionIssue(createdTask.key, 'Released');
@@ -301,7 +302,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
             setCreatedTask(null);
             onSuccess();
         } catch (e: any) {
-            setErrorMsg(e?.message ?? 'Error al hacer push');
+            setErrorMsg(e?.message ?? 'Error al cerrar tarea');
             setFlowStep('error');
         }
     };
