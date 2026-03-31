@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 export interface SonarMetrics {
     qualityGate: 'OK' | 'ERROR' | 'NONE';
@@ -15,17 +14,28 @@ export interface SonarMetrics {
 
 export interface SonarProjectLink {
     projectKey: string;
+    accountId?: string;
     token?: string;
+    customCommand?: string;
+    includeProjectKey?: boolean;
+    includeHostUrl?: boolean;
+    includeToken?: boolean;
+    includeOrganization?: boolean;
+    includeBranch?: boolean;
 }
 
-export interface SonarConfig {
+export interface SonarAccount {
+    id: string;
+    name: string;
     serverUrl: string;
     token: string;
     authType: 'basic' | 'bearer';
     organization?: string;
 }
 
-export const DEFAULT_SONAR_CONFIG: SonarConfig = {
+export const DEFAULT_SONAR_ACCOUNT: SonarAccount = {
+    id: 'default',
+    name: 'SonarQube Cloud',
     serverUrl: 'https://sonarcloud.io',
     token: '',
     authType: 'basic',
@@ -33,33 +43,70 @@ export const DEFAULT_SONAR_CONFIG: SonarConfig = {
 };
 
 interface SonarStore {
-    config: SonarConfig;
+    accounts: SonarAccount[];
+    activeAccountId: string | null;
     projectLinks: Record<string, SonarProjectLink>; // projectPath -> link
-    
-    setConfig: (patch: Partial<SonarConfig>) => void;
+
+    addAccount: (account: SonarAccount) => void;
+    updateAccount: (id: string, patch: Partial<SonarAccount>) => void;
+    removeAccount: (id: string) => void;
+    setActiveAccount: (id: string | null) => void;
     linkProject: (path: string, link: SonarProjectLink) => void;
-    hydrate: (config: Partial<SonarConfig>) => void;
+    hydrate: (accounts: SonarAccount[], activeId?: string | null, projectLinks?: Record<string, SonarProjectLink>) => void;
+    
+    // Helpers
+    getActiveAccount: () => SonarAccount | undefined;
+    getProjectAccount: (projectPath: string) => SonarAccount | undefined;
 }
 
-export const useSonarStore = create<SonarStore>()(
-    persist(
-        (set) => ({
-            config: { ...DEFAULT_SONAR_CONFIG },
-            projectLinks: {},
+export const useSonarStore = create<SonarStore>((set, get) => ({
+    accounts: [{ ...DEFAULT_SONAR_ACCOUNT }],
+    activeAccountId: 'default',
+    projectLinks: {},
 
-            setConfig: (patch) =>
-                set((state) => ({ config: { ...state.config, ...patch } })),
+    addAccount: (account) =>
+        set((state) => ({ accounts: [...state.accounts, account] })),
 
-            linkProject: (path, link) =>
-                set((state) => ({
-                    projectLinks: { ...state.projectLinks, [path]: link }
-                })),
+    updateAccount: (id, patch) =>
+        set((state) => ({
+            accounts: state.accounts.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+        })),
 
-            hydrate: (cfg) =>
-                set((state) => ({ config: { ...state.config, ...cfg } })),
+    removeAccount: (id) =>
+        set((state) => {
+            const newAccounts = state.accounts.filter((a) => a.id !== id);
+            return {
+                accounts: newAccounts,
+                activeAccountId: state.activeAccountId === id 
+                    ? (newAccounts[0]?.id || null) 
+                    : state.activeAccountId,
+            };
         }),
-        {
-            name: 'microtermix-sonar-storage',
-        }
-    )
-);
+
+    setActiveAccount: (id) =>
+        set({ activeAccountId: id }),
+
+    linkProject: (path, link) =>
+        set((state) => ({
+            projectLinks: { ...state.projectLinks, [path]: link }
+        })),
+
+    hydrate: (accounts, activeId, projectLinks) =>
+        set({ 
+            accounts, 
+            activeAccountId: activeId !== undefined ? activeId : (accounts[0]?.id || null),
+            ...(projectLinks && { projectLinks })
+        }),
+        
+    getActiveAccount: () => {
+        const { accounts, activeAccountId } = get();
+        return accounts.find(a => a.id === activeAccountId);
+    },
+
+    getProjectAccount: (projectPath) => {
+        const { accounts, activeAccountId, projectLinks } = get();
+        const link = projectLinks[projectPath];
+        const accountId = link?.accountId || activeAccountId;
+        return accounts.find(a => a.id === accountId);
+    }
+}));

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { 
     Search, RefreshCw, Eye, EyeOff, Copy, Check, Lock, Shield, Loader2
 } from 'lucide-react';
-import { useAwsEnvStore, SsmParameter, AwsSecret } from '../../stores/awsEnvStore';
+import { useAwsEnvStore } from '../../stores/awsEnvStore';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';

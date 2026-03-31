@@ -3,7 +3,7 @@ import type { GitAccount } from '../stores/gitStore';
 import { useGitStore } from '../stores/gitStore';
 import type { JiraAccount } from '../components//jira/jiraApi';
 import { useJiraStore } from '../stores/jiraStore';
-import type { SonarConfig } from '../stores/sonarStore';
+import type { SonarAccount, SonarProjectLink } from '../stores/sonarStore';
 import { useSonarStore } from '../stores/sonarStore';
 import type { SsmTunnel } from '../stores/awsStore';
 import { useAwsStore } from '../stores/awsStore';
@@ -56,7 +56,9 @@ export interface MicrotermixConfig {
     jiraActiveAccountId?: string | null;
     jenkinsAccounts?: JenkinsConfig[];
     jenkinsActiveAccountId?: string | null;
-    sonarConfig?: SonarConfig;
+    sonarActiveAccountId?: string | null;
+    sonarAccounts?: SonarAccount[];
+    sonarProjectLinks?: Record<string, SonarProjectLink>;
     ssmTunnels?: SsmTunnel[];
     visibleUtilities?: Record<string, boolean>;
 }
@@ -257,7 +259,9 @@ export function buildWorkspaceConfigFromCurrentState(
         jiraActiveAccountId: useJiraStore.getState().activeAccountId,
         jenkinsAccounts: useJenkinsStore.getState().accounts,
         jenkinsActiveAccountId: useJenkinsStore.getState().activeAccountId,
-        sonarConfig: useSonarStore.getState().config,
+        sonarAccounts: useSonarStore.getState().accounts,
+        sonarActiveAccountId: useSonarStore.getState().activeAccountId,
+        sonarProjectLinks: useSonarStore.getState().projectLinks,
         ssmTunnels: useAwsStore.getState().ssm.tunnels,
         visibleUtilities: Object.keys(visibleUtilities).length ? visibleUtilities : undefined,
     };

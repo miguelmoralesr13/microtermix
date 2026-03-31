@@ -223,7 +223,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         gitStore.accounts, gitStore.repoAccounts,
         jiraStore.accounts, jiraStore.activeAccountId,
         jenkinsStore.accounts, jenkinsStore.activeAccountId,
-        sonarStore.config
+        sonarStore.accounts, sonarStore.activeAccountId
     ]);
 
     const setWorkspacePath = (path: string) => {
@@ -270,8 +270,12 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
 
         // Hidratar config de Sonar de workspace JSON
-        if (config.sonarConfig != null) {
-            useSonarStore.getState().hydrate(config.sonarConfig);
+        if (config.sonarAccounts != null) {
+            useSonarStore.getState().hydrate(
+                config.sonarAccounts, 
+                config.sonarActiveAccountId,
+                config.sonarProjectLinks
+            );
         }
 
         // Hidratar túneles SSM del workspace JSON

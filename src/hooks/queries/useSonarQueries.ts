@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { invoke } from '@tauri-apps/api/core';
 import { useSonarStore } from '../../stores/sonarStore';
-import { fetchProjectMetrics, getSonarAuthHeader, normalizeSonarUrl } from '../../utils/sonarUtils';
+import { fetchProjectMetrics, fetchProjectIssues, fetchSonarRules, getSonarAuthHeader, normalizeSonarUrl } from '../../utils/sonarUtils';
 
 export const sonarKeys = {
     all: ['sonar'] as const,
-    metrics: (projectKey: string) => [...sonarKeys.all, 'metrics', projectKey] as const,
-    issues: (projectKey: string) => [...sonarKeys.all, 'issues', projectKey] as const,
-    search: (query: string) => [...sonarKeys.all, 'search', query] as const,
+    metrics: (accountId: string, projectKey: string) => [...sonarKeys.all, 'metrics', accountId, projectKey] as const,
+    issues: (accountId: string, projectKey: string) => [...sonarKeys.all, 'issues', accountId, projectKey] as const,
+    search: (accountId: string, query: string) => [...sonarKeys.all, 'search', accountId, query] as const,
+    rules: (accountId: string, projectKey: string, query: string) => [...sonarKeys.all, 'rules', accountId, projectKey, query] as const,
 };
 
 export interface SonarIssue {
@@ -20,29 +21,37 @@ export interface SonarIssue {
     line?: number;
 }
 
-export function useSonarMetrics(projectKey: string | undefined) {
-    const { config } = useSonarStore();
+export interface SonarRule {
+    key: string;
+    name: string;
+    severity: string;
+    type: string;
+    status: string;
+    langName?: string;
+    htmlDesc?: string;
+}
+
+export function useSonarMetrics(projectPath: string | undefined, projectKey: string | undefined) {
+    const { getProjectAccount } = useSonarStore();
+    const account = projectPath ? getProjectAccount(projectPath) : undefined;
 
     return useQuery({
-        queryKey: sonarKeys.metrics(projectKey || ''),
-        queryFn: () => fetchProjectMetrics(projectKey!, config, config.token),
-        enabled: !!projectKey && !!config.token && !!config.serverUrl,
+        queryKey: sonarKeys.metrics(account?.id || 'none', projectKey || ''),
+        queryFn: () => fetchProjectMetrics(projectKey!, account!, account!.token),
+        enabled: !!projectKey && !!account?.token && !!account?.serverUrl,
         staleTime: 5 * 60 * 1000,
     });
 }
 
-export function useSonarIssues(projectKey: string | undefined) {
-    const { config } = useSonarStore();
-    const baseUrl = normalizeSonarUrl(config.serverUrl);
+export function useSonarIssues(projectPath: string | undefined, projectKey: string | undefined) {
+    const { getProjectAccount } = useSonarStore();
+    const account = projectPath ? getProjectAccount(projectPath) : undefined;
 
     return useQuery({
-        queryKey: sonarKeys.issues(projectKey || ''),
+        queryKey: sonarKeys.issues(account?.id || 'none', projectKey || ''),
         queryFn: async () => {
-            const url = `${baseUrl}/api/issues/search?componentKeys=${encodeURIComponent(projectKey!)}&resolved=false&ps=100`;
-            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(config.authType, config.token) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
-            return (data.issues || []).map((i: any) => ({
+            const rawIssues = await fetchProjectIssues(projectKey!, account!, account!.token);
+            return rawIssues.map((i: any) => ({
                 key: i.key,
                 rule: i.rule,
                 severity: i.severity as SonarIssue['severity'],
@@ -52,24 +61,48 @@ export function useSonarIssues(projectKey: string | undefined) {
                 line: i.line,
             })) as SonarIssue[];
         },
-        enabled: !!projectKey && !!config.token && !!config.serverUrl,
+        enabled: !!projectKey && !!account?.token && !!account?.serverUrl && !!projectPath,
         staleTime: 5 * 60 * 1000,
     });
 }
 
 export function useSonarProjectSearch(query: string, enabled: boolean = false) {
-    const { config } = useSonarStore();
-    const baseUrl = normalizeSonarUrl(config.serverUrl);
+    const { getActiveAccount } = useSonarStore();
+    const account = getActiveAccount();
+    const baseUrl = normalizeSonarUrl(account?.serverUrl);
 
     return useQuery({
-        queryKey: sonarKeys.search(query),
+        queryKey: sonarKeys.search(account?.id || 'none', query),
         queryFn: async () => {
-            const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(query)}&ps=5`;
-            const resp = await tauriFetch(url, { headers: { Authorization: getSonarAuthHeader(config.authType, config.token) } });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const data = await resp.json() as any;
+            const url = `${baseUrl}/api/projects/search?q=${encodeURIComponent(query)}${account?.organization ? `&organization=${account.organization}` : ''}&ps=5`;
+            
+            const response = await invoke('execute_http_request', {
+                request: {
+                    url,
+                    method: 'GET',
+                    headers: { Authorization: getSonarAuthHeader(account!.authType, account!.token) },
+                    body: null
+                }
+            }) as any;
+
+            if (response.is_error) throw new Error(response.error_msg);
+            if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
+            
+            const data = JSON.parse(response.body);
             return (data.components || []).map((c: any) => ({ key: c.key, name: c.name }));
         },
-        enabled: enabled && !!query && !!config.token && !!config.serverUrl,
+        enabled: enabled && !!query && !!account?.token && !!account?.serverUrl,
+    });
+}
+
+export function useSonarRules(projectPath?: string, projectKey?: string, query: string = '') {
+    const { getProjectAccount, getActiveAccount } = useSonarStore();
+    const account = projectPath ? getProjectAccount(projectPath) : getActiveAccount();
+
+    return useQuery({
+        queryKey: sonarKeys.rules(account?.id || 'none', projectKey || 'global', query),
+        queryFn: () => fetchSonarRules(account!, account!.token, projectKey, query),
+        enabled: !!account?.token && !!account?.serverUrl,
+        staleTime: 15 * 60 * 1000,
     });
 }

@@ -50,7 +50,7 @@ const ProjectRow = React.memo(({
     const { projectLinks } = useSonarStore();
     const link = projectLinks[projectPath] || {};
     const sonarKey = (link.projectKey as string) || (project.name as string);
-    const { data: sonarMetrics } = useSonarMetrics(sonarKey);
+    const { data: sonarMetrics } = useSonarMetrics(projectPath, sonarKey);
     const qg = sonarMetrics?.qualityGate || 'NONE';
 
     // Badge de conteo de variables ENV

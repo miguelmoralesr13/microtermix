@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-    AlertTriangle, Lightbulb, Save, 
+import {
+    AlertTriangle, Lightbulb, Save,
     FileText, CheckCircle2,
     Maximize2, Minimize2, Shield, RefreshCw
 } from 'lucide-react';
-import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 import { normalizeSonarUrl } from '../../utils/sonarUtils';
 import { useSonarStore } from '../../stores/sonarStore';
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from '../ui/dialog';
+import { Card } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 
 interface SonarIssue {
     key: string;
@@ -32,17 +33,17 @@ interface SonarIssueRemediatorProps {
     onSaved?: () => void;
 }
 
-export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({ 
-    issue, projectPath, isOpen, onClose, onSaved 
+export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
+    issue, projectPath, isOpen, onClose, onSaved
 }) => {
-    const sonarConfig = useSonarStore(s => s.config);
+    const account = useSonarStore(s => s.getProjectAccount(projectPath));
     const [content, setContent] = useState<string>('');
     const [originalContent, setOriginalContent] = useState<string>('');
     const [ruleDesc, setRuleDesc] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [activePanel, setActiveTab] = useState<'both' | 'edit'>('both');
-    
+
     const filePath = `${projectPath}/${issue.component}`;
     const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -66,14 +67,14 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
     }, []);
 
     const authHeader = (token: string) =>
-        sonarConfig.authType === 'bearer'
+        account?.authType === 'bearer'
             ? `Bearer ${token}`
             : `Basic ${btoa(token + ':')}`;
 
     // Cargar archivo y descripción de regla
     useEffect(() => {
         if (!isOpen) return;
-        
+
         const loadData = async () => {
             setLoading(true);
             try {
@@ -81,16 +82,24 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                 setContent(fileData);
                 setOriginalContent(fileData);
 
-                if (issue.rule && sonarConfig.token) {
-                    const baseUrl = normalizeSonarUrl(sonarConfig.serverUrl);
-                    const url = `${baseUrl}/api/rules/show?key=${encodeURIComponent(issue.rule)}${sonarConfig.organization ? `&organization=${sonarConfig.organization}` : ''}`;
-                    
-                    const resp = await tauriFetch(url, { headers: { Authorization: authHeader(sonarConfig.token) } });
-                    if (resp.ok) {
-                        const data = await resp.json() as any;
+                if (issue.rule && account?.token) {
+                    const baseUrl = normalizeSonarUrl(account.serverUrl);
+                    const url = `${baseUrl}/api/rules/show?key=${encodeURIComponent(issue.rule)}${account.organization ? `&organization=${account.organization}` : ''}`;
+
+                    const response = await invoke('execute_http_request', {
+                        request: {
+                            url,
+                            method: 'GET',
+                            headers: { Authorization: authHeader(account.token) },
+                            body: null
+                        }
+                    }) as any;
+
+                    if (!response.is_error && response.status < 400) {
+                        const data = JSON.parse(response.body);
                         setRuleDesc(data.rule?.htmlDesc || data.rule?.mdDesc || 'No hay descripción técnica detallada.');
                     } else {
-                        setRuleDesc(`<div class="text-slate-500 italic py-4">No se pudo cargar la documentación desde Sonar (HTTP ${resp.status}).</div>`);
+                        setRuleDesc(`<div class="text-slate-500 italic py-4">No se pudo cargar la documentación desde Sonar (HTTP ${response.status || 'Error'}).</div>`);
                     }
                 }
             } catch (e) {
@@ -100,7 +109,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
             }
         };
         loadData();
-    }, [filePath, issue.rule, isOpen]);
+    }, [filePath, issue.rule, isOpen, account]);
 
     const handleSave = useCallback(async (newContent: string) => {
         if (newContent === originalContent && originalContent !== '') return;
@@ -166,18 +175,26 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                             {/* Detalles del Fallo */}
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Detalles del Fallo</p>
-                                <div className={cn(
-                                    "p-4 rounded-xl border flex gap-3",
-                                    issue.severity === 'BLOCKER' || issue.severity === 'CRITICAL' 
-                                        ? "bg-red-500/10 border-red-500/30 text-red-400" 
-                                        : "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+                                <Card className={cn(
+                                    "p-4 flex gap-3 border-none shadow-none",
+                                    issue.severity === 'BLOCKER' || issue.severity === 'CRITICAL'
+                                        ? "bg-red-500/10 text-red-400"
+                                        : "bg-yellow-500/10 text-yellow-400"
                                 )}>
                                     <AlertTriangle size={20} className="shrink-0" />
                                     <div>
-                                        <p className="text-[11px] font-black uppercase mb-1">{issue.severity} | {issue.type}</p>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Badge variant="outline" className={cn(
+                                                "text-[9px] uppercase font-black px-1.5 py-0",
+                                                issue.severity === 'BLOCKER' || issue.severity === 'CRITICAL' ? "border-red-500/50 text-red-400" : "border-yellow-500/50 text-yellow-400"
+                                            )}>
+                                                {issue.severity}
+                                            </Badge>
+                                            <span className="text-[10px] font-black uppercase opacity-60">{issue.type}</span>
+                                        </div>
                                         <p className="text-[11px] leading-relaxed font-medium">{issue.message}</p>
                                     </div>
-                                </div>
+                                </Card>
                             </div>
 
                             {/* Receta de Arreglo */}
@@ -201,7 +218,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                                             'Refresca el análisis de Sonar para validar el arreglo.'
                                         ].map((step, i) => (
                                             <div key={i} className="flex gap-3 text-[11px] text-slate-400 leading-snug">
-                                                <span className="text-blue-500 font-black">{i+1}.</span>
+                                                <span className="text-blue-500 font-black">{i + 1}.</span>
                                                 <p>{step}</p>
                                             </div>
                                         ))}
@@ -215,7 +232,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                                         <FileText size={14} /> Doc. de Sonar
                                     </p>
-                                    <div 
+                                    <div
                                         className="sonar-docs pb-6 opacity-80"
                                         dangerouslySetInnerHTML={{ __html: ruleDesc }}
                                     />

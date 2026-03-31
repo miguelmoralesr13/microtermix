@@ -13,10 +13,10 @@ import { EcsTab } from './EcsTab';
 import { LambdaTab } from './LambdaTab';
 import { S3Tab } from './S3Tab';
 import { EnvVarsTab } from './EnvVarsTab';
-import { useCwStore } from '../../stores/cwStore';
+import { useCwStore, CwTab } from '../../stores/cwStore';
 import { useAwsStore } from '../../stores/awsStore';
 
-type CwTab = 'settings' | 'logs' | 'metrics' | 'ec2' | 'api-gateway' | 'step-functions' | 'ecs' | 'lambda' | 's3' | 'env-vars';
+
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
@@ -52,9 +52,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tabs.map(t => (
                     <button 
                         key={t.id} 
-                        // @ts-ignore
-                        onClick={() => setTab(t.id as any)}
-                        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === (t.id as string)
+                        onClick={() => setTab(t.id)}
+                        className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-t-lg border-b-2 transition-colors ${tab === t.id
                             ? 'border-microtermix-neon text-white'
                             : 'border-transparent text-slate-500 hover:text-slate-300'
                             }`}>
@@ -88,8 +87,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tab === 'lambda' && isConfigured && <LambdaTab />}
                 {tab === 'env-vars' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
                 {tab === 'env-vars' && isConfigured && <EnvVarsTab />}
-                {(tab as string) === 's3' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
-                {(tab as string) === 's3' && isConfigured && <S3Tab />}
+                {tab === 's3' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
+                {tab === 's3' && isConfigured && <S3Tab />}
             </div>
         </div>
     );
