@@ -22,7 +22,7 @@ export interface SonarIssue {
 
 export function useSonarMetrics(projectKey: string | undefined) {
     const { config } = useSonarStore();
-    
+
     return useQuery({
         queryKey: sonarKeys.metrics(projectKey || ''),
         queryFn: () => fetchProjectMetrics(projectKey!, config, config.token),

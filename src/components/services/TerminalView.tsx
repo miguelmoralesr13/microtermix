@@ -154,22 +154,28 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
                 setSearchOpen(open => !open);
                 return false;
             }
+            if (e.ctrlKey && e.key === 'Tab') {
+                return false;
+            }
             return true;
         });
         xtermRef.current = term;
 
-        // Load initial logs from backend only if store is empty
-        if (logs.length === 0) {
+        // Solo pedimos el historial si el proceso NO está corriendo o si no hay logs en absoluto.
+        // Si el proceso está corriendo, confiamos en el stream de tiempo real para evitar duplicidad visual (CMD duplicado).
+        const procState = useProcessStore.getState().activeProcesses[serviceId];
+        const isRunning = procState?.status === 'running';
+
+        if (logs.length === 0 && !isRunning) {
             invoke<string[]>('get_service_logs', { serviceId, limit: 1000 })
                 .then(initialLogs => {
                     if (initialLogs && initialLogs.length > 0) {
-                        // Solo guardamos en el store; el useEffect de sincronización se encargará de escribir en xterm
                         useProcessStore.getState().setLogs(serviceId, initialLogs);
                     }
                 })
                 .catch(console.error);
-        } else {
-            // Si ya hay logs, los escribimos inicialmente
+        } else if (logs.length > 0) {
+            // Escribir logs existentes (que ya pueden incluir el CMD del stream)
             logs.forEach(line => term.writeln(line));
             lastWrittenLogCountRef.current = logs.length;
         }

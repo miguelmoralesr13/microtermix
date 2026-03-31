@@ -10,7 +10,7 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-} from "@/components//ui/dialog"
+} from "@/components/ui/dialog"
 
 function computeProgress(stages: any[], runStatus: string): number {
     if (!stages.length) return 0;
@@ -165,7 +165,7 @@ export function JenkinsPipelineStages({
                     </span>
                 </div>
 
-                <div className="flex items-center gap-0 overflow-x-auto pb-0.5 scrollbar-none">
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scroll-smooth">
                     {stages.map((stage: any, idx: number) => {
                         const color = STAGE_COLORS[stage.status as keyof typeof STAGE_COLORS] ?? '#475569';
                         const isLast = idx === stages.length - 1;

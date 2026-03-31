@@ -1,9 +1,8 @@
-import React from 'react';
 import { Square, RotateCcw, X } from 'lucide-react';
 import { ProcessState } from '../../stores/processStore';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components//ui/tooltip';
-import { Button } from '@/components//ui/button';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, ContextMenuSeparator } from '@/components/ui/context-menu';
 
 interface TerminalTabsBarProps {
     processIds: string[];
@@ -13,6 +12,8 @@ interface TerminalTabsBarProps {
     onTabStop: (e: React.MouseEvent, id: string) => void;
     onTabRestart: (e: React.MouseEvent, id: string) => void;
     onTabClose: (e: React.MouseEvent, id: string) => void;
+    onTabCloseAll: () => void;
+    onTabCloseFinished: () => void;
 }
 
 export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
@@ -23,6 +24,8 @@ export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
     onTabStop,
     onTabRestart,
     onTabClose,
+    onTabCloseAll,
+    onTabCloseFinished,
 }) => {
     if (processIds.length === 0) return null;
 
@@ -39,91 +42,118 @@ export const TerminalTabsBar: React.FC<TerminalTabsBarProps> = ({
                     const scriptLabel = serviceId.includes('::') ? serviceId.split('::')[1]?.trim() : '';
 
                     return (
-                        <TooltipProvider delay={400} key={serviceId}>
-                            <div
-                                onClick={() => onTabSelect(serviceId)}
-                                className={cn(
-                                    'group flex shrink-0 items-center gap-2 px-3 py-2 min-w-[110px] max-w-[200px]',
-                                    'cursor-pointer border-b-2 transition-all duration-150 select-none',
-                                    isActive
-                                        ? cn(
-                                            'border-microtermix-neon bg-slate-900',
-                                            isError && 'border-red-400',
-                                            isStopped && 'border-slate-600',
-                                        )
-                                        : 'border-transparent hover:bg-slate-800/60 hover:border-slate-600',
+                        <ContextMenu key={serviceId}>
+                            <ContextMenuTrigger>
+                                <TooltipProvider delay={400}>
+                                    <div
+                                        onClick={() => onTabSelect(serviceId)}
+                                        onDoubleClick={onTabCloseFinished}
+                                        onAuxClick={(e) => {
+                                            if (e.button === 1) { // Middle button
+                                                e.preventDefault();
+                                                onTabClose(e as any, serviceId);
+                                            }
+                                        }}
+                                        className={cn(
+                                            'group flex shrink-0 items-center gap-2 px-3 py-2 min-w-[110px] max-w-[220px]',
+                                            'cursor-pointer border-b-2 transition-all duration-150 select-none relative',
+                                            isActive
+                                                ? cn(
+                                                    'border-microtermix-neon bg-slate-900',
+                                                    isError && 'border-red-400',
+                                                    isStopped && 'border-slate-600',
+                                                )
+                                                : 'border-transparent hover:bg-slate-800/40 hover:border-slate-700',
+                                        )}
+                                        title="Doble clic para limpiar terminales terminadas"
+                                    >
+                                        {/* Status dot */}
+                                        <span className={cn(
+                                            'w-1.5 h-1.5 shrink-0 rounded-full',
+                                            isRunning && 'bg-emerald-400 animate-pulse',
+                                            isError && 'bg-red-400',
+                                            isStopped && 'bg-slate-500',
+                                            !isRunning && !isError && !isStopped && 'bg-slate-600',
+                                        )} />
+
+                                        {/* Label */}
+                                        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                                            <span className={cn(
+                                                'truncate text-[11px] font-bold tracking-tight',
+                                                isActive && !isError && !isStopped && 'text-slate-100',
+                                                isActive && isError && 'text-red-400',
+                                                isActive && isStopped && 'text-slate-400',
+                                                !isActive && 'text-slate-500 group-hover:text-slate-300',
+                                            )}>
+                                                {tabLabel}
+                                            </span>
+                                            {scriptLabel && (
+                                                <span className="truncate text-[9px] text-slate-600 group-hover:text-slate-500 leading-none mt-0.5">{scriptLabel}</span>
+                                            )}
+                                        </div>
+
+                                        {/* Botón de cierre rápido — siempre discreto pero disponible */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onTabClose(e, serviceId); }}
+                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-800 rounded-md transition-all text-slate-600 hover:text-red-400"
+                                        >
+                                            <X size={10} />
+                                        </button>
+                                    </div>
+                                </TooltipProvider>
+                            </ContextMenuTrigger>
+
+                            <ContextMenuContent className="w-52 bg-[#0a0c10] border-slate-800 shadow-2xl">
+                                <div className="px-2 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-white/5 mb-1">
+                                    {tabLabel}
+                                </div>
+                                <ContextMenuItem 
+                                    onClick={() => { const e = { stopPropagation: () => {}, preventDefault: () => {} } as any; onTabRestart(e, serviceId); }}
+                                    className="gap-2 text-emerald-400 hover:bg-emerald-400/10"
+                                >
+                                    <RotateCcw size={14} />
+                                    <span>Reiniciar Servicio</span>
+                                </ContextMenuItem>
+                                
+                                {isRunning && (
+                                    <ContextMenuItem 
+                                        onClick={() => { const e = { stopPropagation: () => {}, preventDefault: () => {} } as any; onTabStop(e, serviceId); }}
+                                        className="gap-2 text-amber-400 hover:bg-amber-400/10"
+                                    >
+                                        <Square size={14} />
+                                        <span>Detener Proceso</span>
+                                    </ContextMenuItem>
                                 )}
-                            >
-                                {/* Status dot */}
-                                <span className={cn(
-                                    'w-1.5 h-1.5 shrink-0 rounded-full',
-                                    isRunning && 'bg-emerald-400 animate-pulse',
-                                    isError && 'bg-red-400',
-                                    isStopped && 'bg-slate-500',
-                                    !isRunning && !isError && !isStopped && 'bg-slate-600',
-                                )} />
-
-                                {/* Label */}
-                                <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                                    <span className={cn(
-                                        'truncate text-xs font-semibold',
-                                        isActive && !isError && !isStopped && 'text-slate-100',
-                                        isActive && isError && 'text-red-400',
-                                        isActive && isStopped && 'text-slate-400',
-                                        !isActive && 'text-slate-500 group-hover:text-slate-300',
-                                    )}>
-                                        {tabLabel}
-                                    </span>
-                                    {scriptLabel && (
-                                        <span className="truncate text-[10px] text-slate-500">{scriptLabel}</span>
-                                    )}
-                                </div>
-
-                                {/* Actions — visibles solo en hover */}
-                                <div className="flex shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {isRunning && (
-                                        <Tooltip>
-                                            <TooltipTrigger render={
-                                                <Button
-                                                    variant="ghost" size="icon-xs"
-                                                    onClick={(e) => { e.stopPropagation(); onTabStop(e, serviceId); }}
-                                                    className="text-slate-500 hover:text-amber-400"
-                                                />
-                                            }>
-                                                <Square size={11} />
-                                            </TooltipTrigger>
-                                            <TooltipContent>Parar proceso</TooltipContent>
-                                        </Tooltip>
-                                    )}
-                                    <Tooltip>
-                                        <TooltipTrigger render={
-                                            <Button
-                                                variant="ghost" size="icon-xs"
-                                                onClick={(e) => { e.stopPropagation(); onTabRestart(e, serviceId); }}
-                                                className={cn(
-                                                    isError ? 'text-red-400 hover:bg-red-900/30' : 'text-slate-500 hover:text-emerald-400',
-                                                )}
-                                            />
-                                        }>
-                                            <RotateCcw size={11} />
-                                        </TooltipTrigger>
-                                        <TooltipContent>Reiniciar</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip>
-                                        <TooltipTrigger render={
-                                            <Button
-                                                variant="ghost" size="icon-xs"
-                                                onClick={(e) => { e.stopPropagation(); onTabClose(e, serviceId); }}
-                                                className="text-slate-500 hover:text-red-400"
-                                            />
-                                        }>
-                                            <X size={11} />
-                                        </TooltipTrigger>
-                                        <TooltipContent>Cerrar</TooltipContent>
-                                    </Tooltip>
-                                </div>
-                            </div>
-                        </TooltipProvider>
+                                
+                                <ContextMenuSeparator />
+                                
+                                <ContextMenuItem 
+                                    onClick={() => { const e = { stopPropagation: () => {}, preventDefault: () => {} } as any; onTabClose(e, serviceId); }}
+                                    className="gap-2 text-red-500 hover:bg-red-500/10"
+                                >
+                                    <X size={14} />
+                                    <span>Cerrar Terminal</span>
+                                </ContextMenuItem>
+                                
+                                <ContextMenuSeparator />
+                                
+                                <ContextMenuItem 
+                                    onClick={onTabCloseFinished}
+                                    className="gap-2 text-slate-300"
+                                >
+                                    <Square size={14} className="opacity-50" />
+                                    <span>Cerrar Terminadas</span>
+                                </ContextMenuItem>
+                                
+                                <ContextMenuItem 
+                                    onClick={onTabCloseAll}
+                                    className="gap-2 text-red-400/80 hover:text-red-400"
+                                >
+                                    <X size={14} className="opacity-50" />
+                                    <span>Cerrar Todas</span>
+                                </ContextMenuItem>
+                            </ContextMenuContent>
+                        </ContextMenu>
                     );
                 })}
             </div>

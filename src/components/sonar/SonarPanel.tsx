@@ -150,7 +150,7 @@ export const SonarPanel: React.FC = () => {
     useEffect(() => {
         if (!selectedPath && projects.length > 0) setSelectedPath('dashboard');
     }, [projects, selectedPath]);
-    
+
     useEffect(() => {
         if (selectedPath) localStorage.setItem(STORAGE_SONAR_PATH, selectedPath);
     }, [selectedPath]);
@@ -312,11 +312,10 @@ export const SonarPanel: React.FC = () => {
                     <div className="flex-1 overflow-y-auto">
                         <div
                             onClick={() => setSelectedPath('dashboard')}
-                            className={`flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors border-l-2 mb-1 border-b border-b-slate-800/50 ${
-                                selectedPath === 'dashboard'
-                                    ? 'bg-blue-500/10 border-blue-500'
-                                    : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600'
-                            }`}
+                            className={`flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors border-l-2 mb-1 border-b border-b-slate-800/50 ${selectedPath === 'dashboard'
+                                ? 'bg-blue-500/10 border-blue-500'
+                                : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600'
+                                }`}
                         >
                             <p className={`text-xs font-bold truncate ${selectedPath === 'dashboard' ? 'text-blue-400' : 'text-slate-300'}`}>
                                 📊 Dashboard General

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Settings, Zap, RefreshCw, Check } from 'lucide-react';
+import { Settings, Zap, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import {
     JiraIssue, createSubTask, transitionIssue, getIssue, loadConfig,
     getProjects, getEpics, getStoriesByEpic, getActivityOptions, getLastWorkingIssue
@@ -253,9 +254,14 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
             if (config.createTask) {
                 setFlowStep('transitioning');
                 try {
-                    await transitionIssue(taskKey, 'Working');
-                } catch {
-                    // non-blocking
+                    // Force the status to uppercase WORKING to match the GitLab hooks
+                    await transitionIssue(taskKey, 'WORKING');
+                    toast.success(`Tarea ${taskKey} activada en WORKING`);
+                    // Small delay to ensure Jira reflects the change for the remote hooks
+                    await new Promise(r => setTimeout(r, 2000));
+                } catch (e: any) {
+                    console.warn('[GitJira] Transition to WORKING failed:', e);
+                    toast.warning(`No se pudo activar la tarea: ${e?.message}`);
                 }
             }
 
@@ -269,15 +275,7 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                 throw new Error(commitResult.stderr || 'Git commit failed');
             }
 
-            setFlowStep('pushing');
-            const branch = currentBranch || 'main';
-            const pushResult: any = await invoke('git_execute', {
-                projectPath,
-                args: ['push', 'origin', branch],
-            });
-            if (!pushResult.success) {
-                throw new Error(pushResult.stderr || 'Git push failed');
-            }
+
 
             const fullIssue = await getIssue(taskKey);
             setCreatedTask(fullIssue);
@@ -291,26 +289,57 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
     const handleTempoSuccess = async () => {
         if (!createdTask) return;
         try {
+            setFlowStep('pushing');
+            const branch = currentBranch || 'main';
+            console.log(`[GitJira] Pushing branch ${branch} (origin HEAD) to remote...`);
+            toast.info(`Subiendo código a origin HEAD...`);
+            
+            const pushResult: any = await invoke('git_execute', {
+                projectPath,
+                args: ['push', 'origin', 'HEAD'],
+            });
+            
+            const combinedOutput = (pushResult.stdout + '\n' + pushResult.stderr).toLowerCase();
+            const hasError = !pushResult.success || 
+                             combinedOutput.includes('rejected') || 
+                             combinedOutput.includes('error:') || 
+                             combinedOutput.includes('failed');
+
+            if (hasError) {
+                console.error('[GitJira] Push failed with output:', pushResult.stderr || pushResult.stdout);
+                toast.error(`Error en Push: ${pushResult.stderr || 'El servidor rechazó el push'}`);
+                setFlowStep('error');
+                setErrorMsg(pushResult.stderr?.slice(0, 200) || 'Push rechazado por el servidor (GL-HOOK-ERR?)');
+                return; // INTERRUMPIR: No cerrar tarea si el push no es 100% exitoso
+            }
+
+            toast.success('Push completado con éxito');
             setFlowStep('closing');
+            
             try {
                 await transitionIssue(createdTask.key, 'Released');
-            } catch {
-                // non-blocking
+                toast.success(`Tarea ${createdTask.key} cerrada (Released)`);
+            } catch (e: any) {
+                console.warn('[GitJira] Could not close task:', e);
+                toast.warning(`La tarea quedó abierta (WORKING) pero el código se subió.`);
             }
 
             setFlowStep('done');
             setCreatedTask(null);
             onSuccess();
         } catch (e: any) {
-            setErrorMsg(e?.message ?? 'Error al cerrar tarea');
+            console.error('[GitJira] Critical error during push flow:', e);
+            toast.error(`Error crítico: ${e?.message}`);
+            setErrorMsg(e?.message ?? 'Ocurrió un error inesperado');
             setFlowStep('error');
         }
     };
 
     const handleTempoClose = () => {
+        // Si cierran Tempo sin guardar, simplemente volvemos al estado anterior o error
+        // pero NO llamamos a onSuccess porque el flujo no terminó (falta push y cierre)
         setCreatedTask(null);
         setFlowStep('idle');
-        onSuccess();
     };
 
     if (!isJiraConnected()) return null;
@@ -417,7 +446,19 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
 
 
             {flowStep === 'error' && errorMsg && (
-                <p className="text-[10px] text-microtermix-danger mt-1 leading-snug">{errorMsg}</p>
+                <div className="flex items-start gap-1.5 text-[10px] text-microtermix-danger mt-2 bg-microtermix-danger/5 p-1.5 rounded border border-microtermix-danger/10 animate-in fade-in slide-in-from-top-1">
+                    <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                    <p className="leading-snug">{errorMsg}</p>
+                </div>
+            )}
+
+            {flowStep === 'error' && createdTask && (
+                <Button
+                    onClick={handleTempoSuccess}
+                    className="w-full h-8 mt-2 bg-microtermix-accent hover:bg-microtermix-accent/80 text-white text-xs font-bold rounded flex items-center justify-center font-sans"
+                >
+                    <RefreshCw size={12} className="mr-1.5" /> Reintentar Push & Cerrar
+                </Button>
             )}
 
             {flowStep === 'tempo' && createdTask && (

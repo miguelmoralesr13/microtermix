@@ -50,9 +50,12 @@ export const useProcessStore = create<ProcessStore>()(
                     let nextLogs = base.logs;
                     let nextRestarts = base.restarts;
 
-                    if (status === 'running' && (!existing || incrementRestart)) {
+                    // Si pasamos de cualquier estado a 'running', o si forzamos incremento, limpiamos logs
+                    const isNewStart = status === 'running' && (base.status !== 'running' || !existing || incrementRestart);
+                    
+                    if (isNewStart) {
                         nextLogs = [];
-                        if (incrementRestart) nextRestarts += 1;
+                        if (incrementRestart || existing) nextRestarts += 1;
                     }
 
                     return {
@@ -86,18 +89,14 @@ export const useProcessStore = create<ProcessStore>()(
                         };
                     }
 
-                    // De-dupe: filter lines that already exist in the very end of the buffer
-                    const lastFew = existing.logs.slice(-20);
-                    const filtered = newLines.filter(line => !lastFew.includes(line));
-                    
-                    if (filtered.length === 0) return state;
-
+                    // Optimized: direct append without expensive O(N) deduplication
+                    // React will handle the delta in TerminalView efficiently
                     return {
                         activeProcesses: {
                             ...state.activeProcesses,
                             [serviceId]: {
                                 ...existing,
-                                logs: [...existing.logs, ...filtered].slice(-1000)
+                                logs: [...existing.logs, ...newLines].slice(-1000)
                             }
                         }
                     };
@@ -143,6 +142,6 @@ export const batchedAppendLogs = (serviceId: string, logLine: string) => {
             Object.entries(bufferCopy).forEach(([sId, lines]) => {
                 store.appendLogs(sId, lines);
             });
-        }, 150);
+        }, 50);
     }
 };

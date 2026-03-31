@@ -15,6 +15,8 @@ interface ServiceTerminalsProps {
     onTabStop: (e: React.MouseEvent, id: string) => void;
     onTabRestart: (e: React.MouseEvent, id: string) => void;
     onTabClose: (e: React.MouseEvent, id: string) => void;
+    onTabCloseAll: () => void;
+    onTabCloseFinished: () => void;
 }
 
 export const ServiceTerminals: React.FC<ServiceTerminalsProps> = ({
@@ -27,7 +29,36 @@ export const ServiceTerminals: React.FC<ServiceTerminalsProps> = ({
     onTabStop,
     onTabRestart,
     onTabClose,
+    onTabCloseAll,
+    onTabCloseFinished,
 }) => {
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.key === 'Tab') {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                if (processIds.length <= 1) return;
+                
+                const currentIndex = processIds.indexOf(activeTerminalTab || '');
+                let nextIndex;
+                
+                if (e.shiftKey) {
+                    // Ctrl + Shift + Tab
+                    nextIndex = (currentIndex - 1 + processIds.length) % processIds.length;
+                } else {
+                    // Ctrl + Tab
+                    nextIndex = (currentIndex + 1) % processIds.length;
+                }
+                
+                onTabSelect(processIds[nextIndex]);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [processIds, activeTerminalTab, onTabSelect]);
+
     if (processIds.length === 0) {
         return <EmptyTerminalState />;
     }
@@ -48,6 +79,8 @@ export const ServiceTerminals: React.FC<ServiceTerminalsProps> = ({
                 onTabStop={onTabStop}
                 onTabRestart={onTabRestart}
                 onTabClose={onTabClose}
+                onTabCloseAll={onTabCloseAll}
+                onTabCloseFinished={onTabCloseFinished}
             />
 
             {activeProjectRemotes && (
@@ -60,7 +93,6 @@ export const ServiceTerminals: React.FC<ServiceTerminalsProps> = ({
 
             <TerminalArea
                 processIds={processIds}
-                activeProcesses={activeProcesses}
                 activeTerminalTab={activeTerminalTab}
             />
         </div>

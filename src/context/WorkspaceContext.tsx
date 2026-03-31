@@ -80,6 +80,7 @@ const getPathHash = (path: string) => {
 
 export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const updateProcessStatusStore = useProcessStore(s => s.updateProcessStatus);
+    const executingServiceIdsRef = React.useRef<Set<string>>(new Set());
 
     // We'll use a temporary state during boot until path is confirmed
     const [isInitialized, setIsInitialized] = useState(false);
@@ -466,9 +467,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
     ) => {
         const { globalEnvName = 'none', buildFirst = false, incrementRestart = false } = options || {};
-        const compositeServiceId = `${projectPath}::${rawScript} `;
+        const actualScriptBase = rawScript.trim();
+        // Normalización estricta del ID para evitar duplicados por espacios extra
+        const compositeServiceId = `${projectPath}::${actualScriptBase} `;
 
-        let actualScript = rawScript.trim();
+        let actualScript = actualScriptBase;
         if (state.savedCommands && state.savedCommands[actualScript]) {
             actualScript = state.savedCommands[actualScript];
         }
@@ -519,14 +522,21 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         const baseScript = scriptToRun || builtScript;
         const effectiveScript = buildFirst ? `npm run build && ${baseScript}` : baseScript;
 
+        const envVarsJson = JSON.stringify({ ...configuredEnv, ...inlineEnvs });
+        const viteConfig = getViteWrapperConfig(projectPath);
+        const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
+
+        const customJavaHome = useToolStore.getState().projectJdks[projectPath];
+
+        // Prevención de doble ejecución atómica
+        if (executingServiceIdsRef.current.has(compositeServiceId)) {
+            console.warn(`[Workspace] Execution already in progress for ${compositeServiceId}, skipping duplicate.`);
+            return;
+        }
+        executingServiceIdsRef.current.add(compositeServiceId);
+
         try {
-            const envVarsJson = JSON.stringify({ ...configuredEnv, ...inlineEnvs });
-            const viteConfig = getViteWrapperConfig(projectPath);
-            const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
-
-            const customJavaHome = useToolStore.getState().projectJdks[projectPath];
-
-            updateProcessStatusStore(compositeServiceId, 'running', rawScript, envVarsJson, incrementRestart);
+            updateProcessStatusStore(compositeServiceId, 'running', actualScriptBase, envVarsJson, incrementRestart);
             await invoke('execute_service_script', {
                 serviceId: compositeServiceId,
                 projectPath,
@@ -542,6 +552,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         } catch (e) {
             console.error(`Execution failed for ${compositeServiceId}`, e);
             updateProcessStatusStore(compositeServiceId, 'error');
+        } finally {
+            // Liberar el bloqueo después de un pequeño margen para permitir que el estado de Zustand se estabilice
+            setTimeout(() => {
+                executingServiceIdsRef.current.delete(compositeServiceId);
+            }, 500);
         }
     }, [updateProcessStatusStore, state.savedCommands, state.projects]);
 

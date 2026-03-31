@@ -411,9 +411,16 @@ export const TempoLogModal: React.FC<TempoLogModalProps> = ({ issue, authorAccou
                     <Button
                         variant="ghost"
                         onClick={onClose}
-                        className="text-xs text-slate-400 hover:text-slate-200"
+                        className="text-xs text-slate-400 hover:text-red-400"
                     >
                         Cancelar
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => { onSuccess(); onClose(); }}
+                        className="text-xs text-slate-400 hover:text-slate-200 border-slate-700 hover:bg-slate-800"
+                    >
+                        Omitir horas
                     </Button>
                     <Button
                         onClick={handleSubmit}

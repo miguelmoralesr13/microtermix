@@ -60,51 +60,111 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     // ─── Handlers ────────────────────────────────────────────────────────
     const handlePlayScript = useCallback(async (projectPath: string, script: string) => {
         if (!script) return;
-        const compositeServiceId = `${projectPath}::${script} `;
-        const existing = activeProcesses[compositeServiceId];
-        if (existing?.status === 'running') return;
+        const normalizedScript = script.trim();
+        const compositeServiceId = `${projectPath}::${normalizedScript} `;
 
-        await executeProjectScript(projectPath, script, {
+        // Consultar el estado REAL y actual de Zustand, no la 'foto' del closure de React
+        const currentProcesses = useProcessStore.getState().activeProcesses;
+        const existing = currentProcesses[compositeServiceId];
+
+        if (existing?.status === 'running') {
+            console.warn(`[Services] Skipping execution: ${compositeServiceId} is already running.`);
+            return;
+        }
+
+        await executeProjectScript(projectPath, normalizedScript, {
             globalEnvName
         });
-    }, [activeProcesses, executeProjectScript, globalEnvName]);
+    }, [executeProjectScript, globalEnvName]);
 
     const handleQuickAction = useCallback(async (path: string, action: 'start' | 'stop' | 'logs' | 'restart') => {
         const project = state.projects.find(p => p.path === path);
         if (!project) return;
 
-        // Determinar el script principal
+        // Determinar el script principal (por defecto o específico de lenguaje)
         let mainScript = project.scripts?.[0] || '';
         if (project.project_type === 'java') {
             const isGradle = project.build_system === 'gradle';
             mainScript = isGradle ? './gradlew bootRun' : 'mvn spring-boot:run';
         }
 
+        if (action === 'restart') {
+            // Buscamos si hay algún proceso ACTIVO para este proyecto
+            const current = useProcessStore.getState().activeProcesses;
+            const runningId = Object.keys(current).find(id => id.startsWith(path + '::'));
+            const scriptToRestart = runningId ? current[runningId].script : mainScript;
+
+            if (runningId) {
+                // Notificamos e intentamos matar
+                toast.info(`Reiniciando ${path.split(/[/\\]/).pop()}...`);
+                await invoke('kill_service', { serviceId: runningId });
+                updateProcessStatus(runningId, 'stopped');
+                await new Promise(r => setTimeout(r, 1000));
+            }
+
+            if (scriptToRestart) {
+                await handlePlayScript(path, scriptToRestart);
+            } else {
+                toast.error("No hay script para reiniciar");
+            }
+            return;
+        }
+
         if (action === 'start') {
-            if (!mainScript) return toast.error("No se encontró un script principal");
-            await handlePlayScript(path, mainScript);
+            if (mainScript) await handlePlayScript(path, mainScript);
+            else toast.error("No se encontró un script principal");
         } else if (action === 'stop') {
-            const serviceIds = Object.keys(activeProcesses).filter(id => id.startsWith(path + '::'));
+            const current = useProcessStore.getState().activeProcesses;
+            const serviceIds = Object.keys(current).filter(id => id.startsWith(path + '::'));
             for (const id of serviceIds) {
                 await invoke('kill_service', { serviceId: id });
                 updateProcessStatus(id, 'stopped');
             }
-        } else if (action === 'restart') {
-            const runningId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::') && activeProcesses[id].status === 'running');
-            const scriptToRestart = runningId ? activeProcesses[runningId].script : mainScript;
-            
-            if (runningId) {
-                await invoke('kill_service', { serviceId: runningId });
-                updateProcessStatus(runningId, 'stopped');
-                await new Promise(r => setTimeout(r, 500));
-            }
-            if (scriptToRestart) await handlePlayScript(path, scriptToRestart as string);
         } else if (action === 'logs') {
             const serviceId = Object.keys(activeProcesses).find(id => id.startsWith(path + '::'));
             if (serviceId) setActiveTerminalTab(serviceId);
             else toast.info("No hay procesos activos");
         }
     }, [state.projects, activeProcesses, handlePlayScript, updateProcessStatus, setActiveTerminalTab]);
+
+    const handleCloseAllTabs = useCallback(async () => {
+        const ids = Object.keys(activeProcesses);
+        if (ids.length === 0) return;
+        
+        for (const id of ids) {
+            await invoke('kill_service', { serviceId: id }).catch(() => {});
+        }
+        useProcessStore.getState().clearAllProcesses();
+        setActiveTerminalTab(null);
+        toast.success("Todas las terminales cerradas");
+    }, [activeProcesses, setActiveTerminalTab]);
+
+    const handleCloseFinishedTabs = useCallback(() => {
+        const ids = Object.keys(activeProcesses);
+        let closedCount = 0;
+        for (const id of ids) {
+            const status = activeProcesses[id].status;
+            if (status === 'stopped' || status === 'error' || status === 'idle') {
+                removeProcess(id);
+                closedCount++;
+            }
+        }
+        
+        if (closedCount > 0) {
+            toast.success(`${closedCount} terminales terminadas cerradas`);
+            // Si la tab activa se cerró, seleccionar la primera disponible o null
+            const remaining = Object.keys(useProcessStore.getState().activeProcesses);
+            if (remaining.length > 0) {
+                if (!remaining.includes(activeTerminalTab || '')) {
+                    setActiveTerminalTab(remaining[0]);
+                }
+            } else {
+                setActiveTerminalTab(null);
+            }
+        } else {
+            toast.info("No hay terminales terminadas para cerrar");
+        }
+    }, [activeProcesses, removeProcess, activeTerminalTab, setActiveTerminalTab]);
 
     const projectWithPresets = useMemo(() => {
         if (!settingsProject) return null;
@@ -150,7 +210,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                                     const parsed = JSON.parse(raw);
                                     Object.keys(parsed.envs || {}).forEach(e => envs.add(e));
                                 }
-                            } catch {}
+                            } catch { }
                         });
                         return Array.from(envs);
                     }, [state.projects])}
@@ -207,12 +267,22 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     onTabRestart={async (e, id) => {
                         e.preventDefault();
                         const p = activeProcesses[id];
-                        await invoke('kill_service', { serviceId: id });
+                        // Cambiar a stopped en lugar de removeProcess para no cerrar la terminal
                         updateProcessStatus(id, 'stopped');
-                        await new Promise(r => setTimeout(r, 500));
-                        if (p.script) await handlePlayScript(id.split('::')[0], p.script as string);
+                        await invoke('kill_service', { serviceId: id });
+                        await new Promise(r => setTimeout(r, 800));
+                        if (p.script) {
+                            toast.info(`Reiniciando ${id.split('::')[1]}...`);
+                            await handlePlayScript(id.split('::')[0], p.script as string);
+                        }
                     }}
-                    onTabClose={(e, id) => { e.preventDefault(); removeProcess(id); }}
+                    onTabClose={async (e, id) => { 
+                        e.preventDefault(); 
+                        await invoke('kill_service', { serviceId: id }).catch(() => {});
+                        removeProcess(id); 
+                    }}
+                    onTabCloseAll={handleCloseAllTabs}
+                    onTabCloseFinished={handleCloseFinishedTabs}
                 />
             </div>
         </div>
