@@ -4,8 +4,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { SettingsModal } from '../project/SettingsModal';
 import { 
     Server, Activity, Globe, FolderOpen, FlaskConical, 
-    Network, Package, Ghost,  Cloud, Regex,
-    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette
+    Network, Package, Ghost, Cloud, Regex,
+    ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette, Code
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 
@@ -80,6 +80,7 @@ export const Sidebar: React.FC = () => {
                 {renderNavIcon('swagger', SiSwagger, "Swagger / OpenAPI Editor")}
                 {renderNavIcon('designer', SiMermaid, "Visual Designer (Mermaid)")}
                 {renderNavIcon('zeplin', Palette, "Zeplin Integration")}
+                {renderNavIcon('template-compiler', Code, "Template Compiler (Pug, EJS, Mustache, Liquid)")}
                 
                 {process.env.NODE_ENV === 'development' && (
                     <div className="w-8 h-px bg-slate-800 my-2" />

@@ -25,6 +25,7 @@ import { SemgrepPanel } from '../semgrep/SemgrepPanel';
 import { SystemMonitorPanel } from '../system/SystemMonitorPanel';
 import { ZeplinPanel } from '../zeplin/ZeplinPanel';
 import { FileServerPanel } from '../networking/FileServerPanel';
+import { TemplateCompilerPanel } from '../templates/TemplateCompilerPanel';
 
 interface UtilityRendererProps {
     view?: AppView;
@@ -78,6 +79,7 @@ export const UtilityRenderer: React.FC<UtilityRendererProps> = ({ view: forcedVi
         case 'semgrep': return <SemgrepPanel />;
         case 'system': return <SystemMonitorPanel />;
         case 'zeplin': return <ZeplinPanel />;
+        case 'template-compiler': return <TemplateCompilerPanel />;
         default:
             return (
                 <div className="flex items-center justify-center w-full h-full text-slate-500 italic">
