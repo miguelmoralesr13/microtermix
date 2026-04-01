@@ -479,6 +479,7 @@ pub fn run() {
             write_file,
             read_file,
             os_utils::rust_copy_to_clipboard,
+            os_utils::check_command_installed,
             diagnostics::get_microtermix_performance_data,
             list_http_collections,
             write_http_collection,

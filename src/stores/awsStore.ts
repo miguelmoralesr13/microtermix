@@ -17,35 +17,107 @@ export interface SsmTunnel {
     active: boolean;
 }
 
+export interface AwsAccount extends CwCredentials {
+    id: string;
+    name: string;
+    status?: 'valid' | 'expired' | 'unknown';
+}
+
 interface AwsState {
-    credentials: CwCredentials | null;
+    accounts: AwsAccount[];
+    activeAccountId: string | null;
+    credentials: CwCredentials | null; // Compatibility getter
     ssm: {
         tunnels: SsmTunnel[];
         loading: boolean;
     };
+    globalSettings: {
+        ssmPluginPath: string | null;
+    };
 }
 
 interface AwsActions {
-    setCredentials: (cfg: CwCredentials) => void;
+    addAccount: (account: Omit<AwsAccount, 'id'>) => string;
+    updateAccount: (id: string, patch: Partial<Omit<AwsAccount, 'id'>>) => void;
+    removeAccount: (id: string) => void;
+    setActiveAccount: (id: string | null) => void;
+    setCredentials: (cfg: CwCredentials) => void; // Legacy support
+    _updateCredentials: () => void;
     
     // SSM Tunnels
     addTunnel: (tunnel: Omit<SsmTunnel, 'id' | 'active'>) => void;
     removeTunnel: (id: string) => void;
     toggleTunnel: (id: string) => Promise<void>;
     hydrateTunnels: (tunnels: SsmTunnel[]) => void;
+    updateGlobalSettings: (patch: Partial<AwsState['globalSettings']>) => void;
+    setAccountStatus: (id: string, status: 'valid' | 'expired' | 'unknown') => void;
 }
 
 export const useAwsStore = create<AwsState & AwsActions>()(
     devtools(
         persist(
             (set, get) => ({
+                accounts: [],
+                activeAccountId: null,
                 credentials: null,
                 ssm: {
                     tunnels: [],
                     loading: false,
                 },
+                globalSettings: {
+                    ssmPluginPath: null,
+                },
 
-                setCredentials: (cfg) => set({ credentials: cfg }),
+                _updateCredentials: () => {
+                    const { accounts, activeAccountId } = get();
+                    const active = accounts.find(a => a.id === activeAccountId) || null;
+                    set({ credentials: active });
+                },
+
+                addAccount: (acc) => {
+                    const id = crypto.randomUUID();
+                    const newAccount = { ...acc, id, status: 'unknown' as const };
+                    set(s => ({ 
+                        accounts: [...s.accounts, newAccount],
+                        activeAccountId: s.activeAccountId || id
+                    }));
+                    get()._updateCredentials();
+                    return id;
+                },
+
+                updateAccount: (id, patch) => {
+                    set(s => ({
+                        accounts: s.accounts.map(a => a.id === id ? { ...a, ...patch } : a)
+                    }));
+                    get()._updateCredentials();
+                },
+
+                removeAccount: (id) => {
+                    set(s => {
+                        const newAccounts = s.accounts.filter(a => a.id !== id);
+                        const newActiveId = s.activeAccountId === id ? (newAccounts[0]?.id || null) : s.activeAccountId;
+                        return {
+                            accounts: newAccounts,
+                            activeAccountId: newActiveId
+                        };
+                    });
+                    get()._updateCredentials();
+                },
+
+                setActiveAccount: (id) => {
+                    set({ activeAccountId: id });
+                    get()._updateCredentials();
+                },
+
+                setCredentials: (cfg) => {
+                    // Legacy: convert single credentials to an account if none exists
+                    const { accounts } = get();
+                    if (accounts.length === 0) {
+                        get().addAccount({ ...cfg, name: 'Default' });
+                    } else if (get().activeAccountId) {
+                        get().updateAccount(get().activeAccountId!, cfg);
+                    }
+                },
 
                 addTunnel: (t) => {
                     const id = crypto.randomUUID();
@@ -104,7 +176,7 @@ export const useAwsStore = create<AwsState & AwsActions>()(
                             remotePort: tunnel.remotePort,
                             localPort: tunnel.localPort,
                             serviceId,
-                            pluginPath: credentials.ssmPluginPath || null
+                            pluginPath: credentials.ssmPluginPath || get().globalSettings.ssmPluginPath || null
                         });
 
                         set(s => ({
@@ -114,26 +186,46 @@ export const useAwsStore = create<AwsState & AwsActions>()(
                             }
                         }));
                     }
+                },
+
+                updateGlobalSettings: (patch) => {
+                    set(s => ({
+                        globalSettings: { ...s.globalSettings, ...patch }
+                    }));
+                },
+
+                setAccountStatus: (id, status) => {
+                    set(s => ({
+                        accounts: s.accounts.map(a => a.id === id ? { ...a, status } : a)
+                    }));
+                    get()._updateCredentials();
                 }
             }),
             {
                 name: 'microtermix-aws-store',
                 partialize: (s) => ({
-                    credentials: s.credentials,
-                    // tunnels no se persisten globalmente por petición del usuario
+                    accounts: s.accounts,
+                    activeAccountId: s.activeAccountId,
+                    globalSettings: s.globalSettings,
                 }),
                 onRehydrateStorage: () => (state) => {
-                    if (state && !state.credentials) {
-                        try {
-                            const raw = localStorage.getItem('microtermix-cloudwatch-cfg');
-                            if (raw) {
-                                const old = JSON.parse(raw);
-                                if (old?.accessKeyId) {
-                                    state.credentials = old;
-                                    localStorage.removeItem('microtermix-cloudwatch-cfg');
+                    if (state) {
+                        // After hydration, ensure credentials is set based on activeAccountId
+                        const active = state.accounts.find(a => a.id === state.activeAccountId) || null;
+                        state.credentials = active;
+
+                        if (state.accounts.length === 0) {
+                            try {
+                                const raw = localStorage.getItem('microtermix-cloudwatch-cfg');
+                                if (raw) {
+                                    const old = JSON.parse(raw);
+                                    if (old?.accessKeyId) {
+                                        state.addAccount({ ...old, name: 'Imported' });
+                                        localStorage.removeItem('microtermix-cloudwatch-cfg');
+                                    }
                                 }
-                            }
-                        } catch { /* ignore */ }
+                            } catch { /* ignore */ }
+                        }
                     }
                 },
             }

@@ -67,6 +67,24 @@ pub fn fix_path_env() {
 }
 
 #[tauri::command]
+pub async fn check_command_installed(command: String) -> Result<bool, String> {
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = silent_command("cmd");
+        c.args(["/c", &format!("where {}", command)]);
+        c
+    } else {
+        let mut c = silent_command("sh");
+        c.args(["-c", &format!("command -v {}", command)]);
+        c
+    };
+    
+    match cmd.output() {
+        Ok(output) => Ok(output.status.success()),
+        Err(_) => Ok(false),
+    }
+}
+
+#[tauri::command]
 pub fn rust_copy_to_clipboard(text: String) -> Result<(), String> {
     use arboard::Clipboard;
     let mut clipboard = Clipboard::new().map_err(|e| format!("No se pudo inicializar el portapapeles: {e}"))?;

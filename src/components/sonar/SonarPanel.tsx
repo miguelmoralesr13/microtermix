@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
     BarChart3, Play, Square, Settings,
@@ -189,6 +190,23 @@ export const SonarPanel: React.FC = () => {
     const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
     const [isConsoleOpen, setIsConsoleOpen] = useState(false);
     const [testResult, setTestResult] = useState<{ ok: boolean | null; message: string } | null>(null);
+    const [depsStatus, setDepsStatus] = useState<{ java: boolean | null; sonar: boolean | null }>({ java: null, sonar: null });
+    const [showDepsWarning, setShowDepsWarning] = useState(false);
+
+    const checkDependencies = useCallback(async () => {
+        try {
+            const javaOk = await invoke('check_command_installed', { command: 'java' }) as boolean;
+            const sonarOk = await invoke('check_command_installed', { command: 'sonar-scanner' }) as boolean;
+            setDepsStatus({ java: javaOk, sonar: sonarOk });
+            if (!javaOk || !sonarOk) setShowDepsWarning(true);
+        } catch (e) {
+            console.error('Error checking dependencies:', e);
+        }
+    }, []);
+
+    useEffect(() => {
+        checkDependencies();
+    }, [checkDependencies]);
 
     // ── Auto-link search
     const [searchingFor, setSearchingFor] = useState<string | null>(null);
@@ -223,6 +241,9 @@ export const SonarPanel: React.FC = () => {
         if (includeToken) cmd += ` -Dsonar.token=${token}`;
         if (includeOrganization && organization) cmd += ` -Dsonar.organization=${organization}`;
         if (includeBranch && currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
+        if (link.sources) cmd += ` -Dsonar.sources=${link.sources}`;
+        if (link.extraProps) cmd += ` ${link.extraProps}`;
+        if (link.debug) cmd += ' -X';
 
         return cmd;
     }, [projectAccount, baseUrl, projectKey, currentBranch, link]);
@@ -235,6 +256,11 @@ export const SonarPanel: React.FC = () => {
     const reportUrl = useMemo(() => {
         const logs = processState?.logs ?? [];
         return extractReportUrl(logs);
+    }, [processState?.logs]);
+
+    const isBranchError = useMemo(() => {
+        const logs = processState?.logs ?? [];
+        return logs.some(l => l.includes('sonar.branch.name') && l.includes('Developer Edition or above is required'));
     }, [processState?.logs]);
 
     const addLog = useCallback((type: DebugLog['type'], message: string) => {
@@ -709,9 +735,15 @@ export const SonarPanel: React.FC = () => {
                                 <TabsContent value="analysis" className="m-0 border-none outline-none h-full">
                                     <div className="h-full flex flex-col gap-4">
                                         <Card className="shrink-0 p-4 bg-slate-950/50 border-slate-800 shadow-none flex flex-col gap-4">
-                                            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-                                                <div className="flex flex-col gap-1.5 min-w-[200px] flex-1">
-                                                    <Label className="text-[10px] text-slate-500 uppercase font-black tracking-widest pl-0.5">Base Command</Label>
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+                                                <div className="flex flex-col gap-1.5 min-w-[200px] flex-[2]">
+                                                    <div className="flex items-center justify-between pl-0.5">
+                                                        <Label className="text-[10px] text-slate-500 uppercase font-black tracking-widest ">Scanner / Base Script</Label>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-[8px] text-slate-600 font-bold uppercase tracking-tighter">Directory:</span>
+                                                            <span className="text-[8px] text-blue-500 font-mono truncate max-w-[200px] bg-blue-500/5 px-2 rounded">{selectedPath.split('/').pop()}</span>
+                                                        </div>
+                                                    </div>
                                                     <Input
                                                         value={link.customCommand || 'sonar-scanner'}
                                                         onChange={e => linkProject(selectedPath, { ...link, customCommand: e.target.value })}
@@ -719,7 +751,48 @@ export const SonarPanel: React.FC = () => {
                                                         placeholder="sonar-scanner"
                                                     />
                                                 </div>
-                                                <div className="flex flex-wrap items-center gap-4 pt-4">
+                                                <div className="flex flex-col gap-1.5 min-w-[150px] flex-1">
+                                                    <div className="flex items-center justify-between pl-0.5">
+                                                        <Label className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Project Key</Label>
+                                                        <button 
+                                                            onClick={() => setSearchingFor(selectedPath)}
+                                                            className="text-[8px] text-blue-400 font-black uppercase tracking-tighter hover:underline"
+                                                        >
+                                                            Vincular
+                                                        </button>
+                                                    </div>
+                                                    <Input
+                                                        value={projectKey}
+                                                        onChange={e => linkProject(selectedPath, { ...link, projectKey: e.target.value })}
+                                                        className="h-8 bg-black/40 font-mono text-[11px] border-slate-800"
+                                                        placeholder="Ej: my-project"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1.5 min-w-[100px] flex-1">
+                                                    <Label className="text-[10px] text-slate-500 uppercase font-black tracking-widest pl-0.5">Sources</Label>
+                                                    <Input
+                                                        value={link.sources || '.'}
+                                                        onChange={e => linkProject(selectedPath, { ...link, sources: e.target.value })}
+                                                        className="h-8 bg-black/40 font-mono text-[11px] border-slate-800"
+                                                        placeholder="Ej: src"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1.5 min-w-[200px] flex-[2]">
+                                                    <div className="flex items-center justify-between pl-0.5">
+                                                        <Label className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Extra Props (-D...)</Label>
+                                                        <div className="flex items-center gap-1.5 cursor-help">
+                                                            <Activity size={10} className="text-blue-500" />
+                                                            <span className="text-[8px] text-slate-500 font-bold uppercase tracking-tight">Sync with CI/CD</span>
+                                                        </div>
+                                                    </div>
+                                                    <Input
+                                                        value={link.extraProps || ''}
+                                                        onChange={e => linkProject(selectedPath, { ...link, extraProps: e.target.value })}
+                                                        className="h-8 bg-black/40 font-mono text-[11px] border-slate-800"
+                                                        placeholder="Ej: -Dsonar.exclusions=**/test/** -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info"
+                                                    />
+                                                </div>
+                                                <div className="w-full flex flex-wrap items-center gap-4 pt-2">
                                                     <Checkbox
                                                         label="Key"
                                                         checked={link.includeProjectKey ?? true}
@@ -743,15 +816,44 @@ export const SonarPanel: React.FC = () => {
                                                     <Checkbox
                                                         label="Branch"
                                                         checked={link.includeBranch ?? true}
+                                                        className={cn(isBranchError && "border-red-500")}
                                                         onChange={e => linkProject(selectedPath, { ...link, includeBranch: e.target.checked })}
+                                                    />
+                                                    <Checkbox
+                                                        label="Debug (-X)"
+                                                        checked={link.debug ?? false}
+                                                        onChange={e => linkProject(selectedPath, { ...link, debug: e.target.checked })}
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="bg-black/40 p-2.5 rounded border border-slate-950 font-mono text-[11px] text-slate-400 break-all select-all flex items-start gap-2">
+                                            <div className="bg-black/40 p-2.5 rounded border border-slate-950 font-mono text-[11px] text-slate-400 break-all select-all flex items-start gap-2 relative group">
                                                 <span className="text-blue-500 shrink-0 select-none">$</span>
-                                                <span>{scanCommand}</span>
+                                                <span className="flex-1">{scanCommand}</span>
+                                                <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-[8px] font-bold text-slate-500 pointer-events-none">
+                                                    Escaneando en: {selectedPath}
+                                                </div>
                                             </div>
                                         </Card>
+                                        {isBranchError && (
+                                            <Card className="shrink-0 flex flex-col gap-3 px-4 py-3 bg-red-500/10 border-red-500/30 border-dashed shadow-none">
+                                                <div className="flex items-center gap-3">
+                                                    <AlertCircle size={16} className="text-red-400 shrink-0" />
+                                                    <p className="flex-1 text-xs font-bold text-red-400">
+                                                        Tu servidor no soporta análisis de ramas (Requiere Developer Edition o superior).
+                                                    </p>
+                                                    <Button 
+                                                        onClick={() => {
+                                                            linkProject(selectedPath, { ...link, includeBranch: false });
+                                                            toast.success('Campo "Branch" desactivado automáticamente');
+                                                        }}
+                                                        size="sm" 
+                                                        variant="ghost" 
+                                                        className="h-8 text-[10px] font-black uppercase text-red-400 hover:bg-red-500/20"
+                                                    >
+                                                    </Button>
+                                                </div>
+                                            </Card>
+                                        )}
                                         {reportUrl && (
                                             <Card className="shrink-0 flex items-center gap-3 px-4 py-3 bg-microtermix-success/10 border-microtermix-success/30 shadow-none">
                                                 <ShieldCheck size={16} className="text-microtermix-success shrink-0" />
@@ -759,6 +861,53 @@ export const SonarPanel: React.FC = () => {
                                                 <Button onClick={() => { openUrl(reportUrl); setActiveTab('overview'); }} size="sm" className="bg-microtermix-success text-slate-900 hover:bg-green-400 font-black h-8">
                                                     <ExternalLink size={13} className="mr-1.5" /> Ver reporte
                                                 </Button>
+                                            </Card>
+                                        )}
+                                        {showDepsWarning && (
+                                            <Card className="shrink-0 p-4 bg-orange-500/10 border-orange-500/30 shadow-none border-dashed">
+                                                <div className="flex items-start gap-4">
+                                                    <div className="p-2 bg-orange-500/20 rounded-lg text-orange-500">
+                                                        <AlertCircle size={20} />
+                                                    </div>
+                                                    <div className="flex-1 space-y-3">
+                                                        <div>
+                                                            <h3 className="text-sm font-black text-orange-400 uppercase tracking-tight">Dependencias faltantes detectadas</h3>
+                                                            <p className="text-[10px] text-slate-400 mt-1">Para ejecutar análisis locales necesitas tener instalados Java 17+ y sonar-scanner en tu PATH.</p>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={cn("w-2 h-2 rounded-full", depsStatus.java ? "bg-emerald-500" : "bg-red-500")} />
+                                                                    <span className="text-[10px] font-bold text-slate-300 uppercase">Java 17+</span>
+                                                                </div>
+                                                                {!depsStatus.java && (
+                                                                    <div className="text-[9px] text-slate-500 space-y-1 bg-black/30 p-2 rounded border border-slate-800">
+                                                                        <p><span className="text-blue-400 font-bold">Linux:</span> <code>sudo apt install openjdk-17-jdk</code></p>
+                                                                        <p><span className="text-blue-400 font-bold">macOS:</span> <code>brew install openjdk@17</code></p>
+                                                                        <p><span className="text-blue-400 font-bold">Win:</span> <code>winget install Oracle.JDK.17</code></p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className={cn("w-2 h-2 rounded-full", depsStatus.sonar ? "bg-emerald-500" : "bg-red-500")} />
+                                                                    <span className="text-[10px] font-bold text-slate-300 uppercase">Sonar Scanner</span>
+                                                                </div>
+                                                                {!depsStatus.sonar && (
+                                                                    <div className="text-[9px] text-slate-500 space-y-1 bg-black/30 p-2 rounded border border-slate-800">
+                                                                        <p><span className="text-blue-400 font-bold">NPM:</span> <code>npm install -g sonar-scanner</code></p>
+                                                                        <p><span className="text-blue-400 font-bold">macOS:</span> <code>brew install sonar-scanner</code></p>
+                                                                        <p><span className="text-blue-400 font-bold">Manual:</span> <a href="https://docs.sonarsource.com/sonarqube/latest/analyzing-source-code/scanners/sonar-scanner/" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Download Zip</a></p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button variant="ghost" size="sm" onClick={() => setShowDepsWarning(false)} className="h-7 text-[10px] uppercase font-bold text-slate-500">Ignorar</Button>
+                                                            <Button variant="outline" size="sm" onClick={checkDependencies} className="h-7 text-[10px] uppercase font-bold border-orange-500/50 text-orange-400 hover:bg-orange-500/10">Re-escanear</Button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </Card>
                                         )}
                                         <div className="flex-1 min-[200px] border border-slate-800 rounded-xl overflow-hidden">

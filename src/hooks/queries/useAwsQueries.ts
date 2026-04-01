@@ -24,11 +24,37 @@ export const awsKeys = {
     logGroups: (pattern?: string) => [...awsKeys.cloudwatch(), 'log-groups', pattern || 'all'] as const,
 };
 
+/**
+ * Centrally handles AWS API errors, specifically detecting session expiration.
+ */
+function handleAwsError(e: any) {
+    const msg = String(e);
+    const { activeAccountId, setAccountStatus } = useAwsStore.getState();
+    
+    // Detect authentication/session expiration patterns
+    if (msg.includes('401') || msg.includes('ExpiredToken') || msg.includes('UnrecognizedClientException') || msg.includes('InvalidSignatureException')) {
+        if (activeAccountId) {
+            setAccountStatus(activeAccountId, 'expired');
+            toast.error('Sesión de AWS expirada. Por favor, actualiza tus credenciales.', {
+                id: 'aws-session-expired',
+                duration: 5000
+            });
+        }
+    }
+}
+
 export function useEc2Instances() {
     const credentials = useAwsStore(s => s.credentials);
     return useQuery({
         queryKey: [...awsKeys.instances(), credentials?.accessKeyId],
-        queryFn: () => invoke<Ec2Instance[]>('ec2_list_instances', { credentials: getRustCreds() }),
+        queryFn: async () => {
+            try {
+                return await invoke<Ec2Instance[]>('ec2_list_instances', { credentials: getRustCreds() });
+            } catch (e) {
+                handleAwsError(e);
+                throw e;
+            }
+        },
         enabled: !!credentials,
         staleTime: 5 * 60 * 1000,
         refetchInterval: 60_000,
@@ -44,7 +70,10 @@ export function useEc2Actions() {
             toast.success('Starting instance...');
             queryClient.invalidateQueries({ queryKey: awsKeys.instances() });
         },
-        onError: (e) => toast.error(`Failed to start instance: ${e}`),
+        onError: (e) => {
+            handleAwsError(e);
+            toast.error(`Failed to start instance: ${e}`);
+        },
     });
 
     const stopMutation = useMutation({
@@ -53,7 +82,10 @@ export function useEc2Actions() {
             toast.success('Stopping instance...');
             queryClient.invalidateQueries({ queryKey: awsKeys.instances() });
         },
-        onError: (e) => toast.error(`Failed to stop instance: ${e}`),
+        onError: (e) => {
+            handleAwsError(e);
+            toast.error(`Failed to stop instance: ${e}`);
+        },
     });
 
     return {
@@ -68,7 +100,14 @@ export function useLogGroups(pattern?: string) {
     const credentials = useAwsStore(s => s.credentials);
     return useQuery({
         queryKey: [...awsKeys.logGroups(pattern), credentials?.accessKeyId],
-        queryFn: () => cwGetLogGroups(credentials!, pattern),
+        queryFn: async () => {
+            try {
+                return await cwGetLogGroups(credentials!, pattern);
+            } catch (e) {
+                handleAwsError(e);
+                throw e;
+            }
+        },
         enabled: !!credentials,
         staleTime: 10 * 60 * 1000,
     });

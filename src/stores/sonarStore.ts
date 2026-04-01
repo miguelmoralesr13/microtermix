@@ -22,6 +22,9 @@ export interface SonarProjectLink {
     includeToken?: boolean;
     includeOrganization?: boolean;
     includeBranch?: boolean;
+    sources?: string;
+    extraProps?: string;
+    debug?: boolean;
 }
 
 export interface SonarAccount {
