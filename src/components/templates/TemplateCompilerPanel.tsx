@@ -68,6 +68,17 @@ export const TemplateCompilerPanel: React.FC = () => {
         return () => clearTimeout(timeout);
     }, [template, data, engine, autoDetect, setOutput, setError, setEngine]);
 
+    const handleBootstrap = () => {
+        const seed = TemplateEngineFactory.getSeed(engine);
+        setTemplate(seed.template);
+        setData(seed.data);
+        setCss(seed.css);
+        toast.info(`Cargada plantilla de ejemplo para ${engine.toUpperCase()}`, {
+            description: "Puedes modificar los datos y estilos para ver los cambios en tiempo real.",
+            icon: <Wand2 className="w-4 h-4 text-microtermix-neon" />
+        });
+    };
+
     const copyToClipboard = () => {
         navigator.clipboard.writeText(output);
         setCopied(true);
@@ -153,6 +164,17 @@ export const TemplateCompilerPanel: React.FC = () => {
                         language={engine === 'pug' ? 'pug' : 'html'}
                         isLoading={compiling}
                         loadingTitle="Compilando..."
+                        headerRight={
+                            <Button 
+                                variant="ghost" 
+                                size="xs" 
+                                onClick={handleBootstrap}
+                                className="h-6 text-[9px] font-black uppercase tracking-widest gap-2 bg-microtermix-neon/10 text-microtermix-neon hover:bg-microtermix-neon/20 border border-microtermix-neon/20"
+                            >
+                                <Wand2 className="w-3 h-3" />
+                                Magic Bootstrap
+                            </Button>
+                        }
                     />
 
                     <ResizablePanel direction="horizontal" initialSize={320} minSize={250}>

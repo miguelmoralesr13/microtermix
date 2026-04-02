@@ -1085,7 +1085,6 @@ fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     fn init_test_repo() -> (tempfile::TempDir, git2::Repository) {
         let dir = tempfile::tempdir().unwrap();

@@ -14,6 +14,7 @@ export default defineConfig(async () => ({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      'ejs': path.resolve(__dirname, 'node_modules/ejs/ejs.min.js'),
     },
   },
 
