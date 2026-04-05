@@ -28,6 +28,7 @@ export interface SonarProjectLink {
     localAuditMode?: boolean;
     localAuditCommand?: string;
     localReportFile?: string;
+    [key: string]: any;
 }
 
 export interface SonarAccount {
