@@ -390,7 +390,7 @@ pub async fn git_execute_impl(
         }
         "fetch" => {
             let account = crate::workspace_config::get_account_for_project(&project_path);
-            tokio::task::spawn_blocking({
+            let native_res = tokio::task::spawn_blocking({
                 let p = project_path.clone();
                 let acc = account.clone();
                 move || {
@@ -402,17 +402,36 @@ pub async fn git_execute_impl(
                         .ok_or("No remotes configured")?;
                     crate::git_native::fetch_remote_native(&repo, remote_name, acc)
                 }
-            }).await.map_err(|e| e.to_string())?
-            .map(|_| GitResult { stdout: "Fetched from remote".into(), stderr: String::new(), success: true })
+            }).await.map_err(|e| e.to_string())?;
+
+            match native_res {
+                Ok(_) => Ok(GitResult { stdout: "Fetched from remote (native)".into(), stderr: String::new(), success: true }),
+                Err(err) if err.contains("auth") || err.contains("authentication") => {
+                    git_cli_fallback(&app_handle, &project_path, &args).await
+                }
+                Err(err) => Err(err),
+            }
         }
         "pull" => {
-            crate::git_native::git_pull_native_impl(project_path.clone()).await
-            .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
+            let native_res = crate::git_native::git_pull_native_impl(project_path.clone()).await;
+            match native_res {
+                Ok(msg) => Ok(GitResult { stdout: msg, stderr: String::new(), success: true }),
+                Err(err) if err.contains("auth") || err.contains("authentication") => {
+                    git_cli_fallback(&app_handle, &project_path, &args).await
+                }
+                Err(err) => Err(err),
+            }
         }
         "push" => {
             let force = args.contains(&"--force".to_string()) || args.contains(&"-f".to_string());
-            crate::git_native::git_push_native_impl(project_path.clone(), force).await
-            .map(|msg| GitResult { stdout: msg, stderr: String::new(), success: true })
+            let native_res = crate::git_native::git_push_native_impl(project_path.clone(), force).await;
+            match native_res {
+                Ok(msg) => Ok(GitResult { stdout: msg, stderr: String::new(), success: true }),
+                Err(err) if err.contains("auth") || err.contains("authentication") => {
+                    git_cli_fallback(&app_handle, &project_path, &args).await
+                }
+                Err(err) => Err(err),
+            }
         }
 
         // ── Fallback for everything else (reset, stash, rebase, merge…) ──
