@@ -194,9 +194,50 @@ pub fn get_service_logs(service_id: String, limit: Option<usize>) -> Result<Vec<
 }
 
 #[tauri::command]
-pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> Result<(), String> {
-    // Try to open with VS Code if available (supports line/column)
-    let mut cmd = if cfg!(target_os = "windows") {
+pub async fn open_in_editor(
+    path: String, 
+    editor_cmd: Option<String>,
+    line: Option<u32>, 
+    column: Option<u32>
+) -> Result<(), String> {
+    println!("[Editor] >>> ATTEMPTING TO OPEN: {}", path);
+    if let Some(ref ed) = editor_cmd {
+        println!("[Editor] >>> TARGET EDITOR: {}", ed);
+    } else {
+        println!("[Editor] >>> TARGET: Default/VSCode");
+    }
+
+    // Try specific editor if provided
+    if let Some(editor) = editor_cmd {
+        let mut cmd = if editor.contains(" ") {
+            if cfg!(target_os = "windows") {
+                let mut c = silent_command("cmd");
+                c.args(["/C", &editor, &path]);
+                c
+            } else {
+                let mut c = silent_command("sh");
+                c.args(["-c", &format!("{} \"{}\"", editor, path)]);
+                c
+            }
+        } else {
+            let mut c = silent_command(&editor);
+            c.arg(&path);
+            c
+        };
+
+        match cmd.status() {
+            Ok(status) if status.success() => {
+                println!("[Editor] SUCCESS: {}", editor);
+                return Ok(());
+            },
+            Ok(status) => println!("[Editor] FAIL: {} (status: {})", editor, status),
+            Err(e) => println!("[Editor] ERROR: {} (err: {})", editor, e),
+        }
+    }
+
+    // VSCode Fallback
+    println!("[Editor] Trying VS Code fallback...");
+    let mut cmd_code = if cfg!(target_os = "windows") {
         silent_command("cmd")
     } else {
         silent_command("sh")
@@ -211,21 +252,26 @@ pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> R
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        cmd.args(["/C", "code", "--goto", &goto_arg]).creation_flags(0x08000000);
+        cmd_code.args(["/C", "code", "--goto", &goto_arg]).creation_flags(0x08000000);
     }
     #[cfg(not(target_os = "windows"))]
     {
-        cmd.args(["-c", &format!("code --goto {}", goto_arg)]);
+        cmd_code.args(["-c", &format!("code --goto {}", goto_arg)]);
     }
 
-    if let Ok(status) = cmd.status() {
+    if let Ok(status) = cmd_code.status() {
         if status.success() {
+            println!("[Editor] SUCCESS: VSCode");
             return Ok(());
         }
     }
 
-    // Fallback to system default opener (no line/column support usually)
-    tauri_plugin_opener::open_path(path, None::<String>).map_err(|e| e.to_string())
+    // Default Fallback
+    println!("[Editor] Final fallback: system opener");
+    tauri_plugin_opener::open_path(path, None::<String>).map_err(|e| {
+        println!("[Editor] CRITICAL FAIL: {}", e);
+        e.to_string()
+    })
 }
 
 /// Public wrapper called from state.rs on app exit.

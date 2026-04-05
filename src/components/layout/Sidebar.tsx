@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 
-    SiJenkins, SiJson, SiSwagger, SiMarkdown, SiMermaid 
+    SiJenkins, SiJson, SiSwagger, SiMarkdown, SiMermaid, SiDocker 
 } from 'react-icons/si';
 
 export const Sidebar: React.FC = () => {
@@ -81,6 +81,7 @@ export const Sidebar: React.FC = () => {
                 {renderNavIcon('designer', SiMermaid, "Visual Designer (Mermaid)")}
                 {renderNavIcon('zeplin', Palette, "Zeplin Integration")}
                 {renderNavIcon('template-compiler', Code, "Template Compiler (Pug, EJS, Mustache, Liquid)")}
+                {renderNavIcon('docker', SiDocker, "Docker Desktop / Orbstack")}
                 
                 {process.env.NODE_ENV === 'development' && (
                     <div className="w-8 h-px bg-slate-800 my-2" />

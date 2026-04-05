@@ -35,7 +35,7 @@ const MIN_PANEL = 150;
 const MAX_PANEL = 800;
 
 export const GitPanel: React.FC = () => {
-    const { state } = useWorkspace();
+    const { state, scanWorkspace } = useWorkspace();
     const queryClient = useQueryClient();
 
     // Selectores Zustand (Solo UI y Cuentas)
@@ -282,8 +282,39 @@ export const GitPanel: React.FC = () => {
             {/* Main Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col relative">
                 {!activeTab ? (
-                    <div className="flex-1 flex items-center justify-center text-slate-500 p-8 text-center text-sm">
-                        Select a repository tab to manage Git operations.
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-700">
+                        <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-700/50">
+                            <Github className="text-slate-500" size={32} />
+                        </div>
+                        <h2 className="text-xl font-bold text-white mb-2">Workspace sin repositorios</h2>
+                        <p className="text-slate-400 max-w-sm mb-8">
+                            Añade tus proyectos locales o clona repositorios remotos para empezar a gestionar tus cambios Git.
+                        </p>
+                        
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <Button 
+                                onClick={() => state.currentPath && scanWorkspace(state.currentPath)}
+                                className="bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold px-6"
+                            >
+                                <RefreshCw size={14} className="mr-2" />
+                                Escanear Workspace
+                            </Button>
+                            <Button 
+                                variant="outline"
+                                onClick={() => setIsCloneModalOpen(true)}
+                                className="border-slate-700 hover:bg-slate-800 text-slate-300 font-bold px-6"
+                            >
+                                <Download size={14} className="mr-2" />
+                                Clonar Repositorio
+                            </Button>
+                        </div>
+                        
+                        <button 
+                            onClick={() => setIsAccountModalOpen(true)}
+                            className="mt-8 text-xs text-slate-500 hover:text-microtermix-neon transition-colors font-medium"
+                        >
+                            ¿Necesitas configurar tus credenciales primero?
+                        </button>
                     </div>
                 ) : (isGitRepo === undefined || loadingRepo) ? (
                     <div className="flex-1 flex items-center justify-center text-slate-500 text-sm gap-2">
@@ -367,9 +398,9 @@ export const GitPanel: React.FC = () => {
                 />
             )}
 
-            {isAccountModalOpen && activeTab && (
+            {isAccountModalOpen && (
                 <AccountManagerModal
-                    repoPath={activeTab}
+                    repoPath={activeTab || null}
                     onClose={() => setIsAccountModalOpen(false)}
                 />
             )}

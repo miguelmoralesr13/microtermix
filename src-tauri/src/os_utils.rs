@@ -1,28 +1,27 @@
 use std::process::Command as StdCommand;
 use tokio::process::Command as AsyncCommand;
+use serde_json::Value;
 
 #[cfg(target_os = "windows")]
 pub const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub fn silent_command(program: &str) -> StdCommand {
-    let cmd = StdCommand::new(program);
+    #[allow(unused_mut)]
+    let mut cmd = StdCommand::new(program);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        let mut cmd = cmd;
         cmd.creation_flags(CREATE_NO_WINDOW);
-        return cmd;
     }
     cmd
 }
 
 pub fn silent_async_command(program: &str) -> AsyncCommand {
-    let cmd = AsyncCommand::new(program);
+    #[allow(unused_mut)]
+    let mut cmd = AsyncCommand::new(program);
     #[cfg(target_os = "windows")]
     {
-        let mut cmd = cmd;
         cmd.creation_flags(CREATE_NO_WINDOW);
-        return cmd;
     }
     cmd
 }
@@ -32,27 +31,18 @@ pub fn fix_path_env() {
     #[cfg(not(target_os = "windows"))]
     {
         use std::env;
-        // If we already have a reasonably long path, we might still need to fix it
-        // because GUI apps on Linux/macOS are often launched with a very minimal PATH.
-        
         let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
         
-        // We run the shell as a login shell and ask for the PATH.
-        // Some users might have nvm/node paths in .bashrc (interactive) instead of .profile (login).
-        // Using -l (login) is usually standard for this, but sometimes -i (interactive) is needed.
-        // We'll try to get the PATH from a login shell first.
         let output = StdCommand::new(&shell)
             .args(["-l", "-i", "-c", "echo $PATH"])
             .output();
 
         if let Ok(out) = output {
             let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            // Basic sanity check: path should contain more than just /usr/bin and /bin
             if !path_str.is_empty() && path_str.contains(':') {
                 env::set_var("PATH", path_str);
             }
         } else {
-            // Fallback for shells that might not like -i -l together or other issues
             let output_simple = StdCommand::new(&shell)
                 .args(["-l", "-c", "echo $PATH"])
                 .output();
@@ -84,6 +74,82 @@ pub async fn check_command_installed(command: String) -> Result<bool, String> {
     }
 }
 
+pub fn get_command_full_path(command: &str) -> Option<String> {
+    let mut cmd = if cfg!(target_os = "windows") {
+        let mut c = StdCommand::new("cmd");
+        c.args(["/c", &format!("where {}", command)]);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            c.creation_flags(0x08000000);
+        }
+        c
+    } else {
+        let mut c = StdCommand::new("sh");
+        c.args(["-c", &format!("command -v {}", command)]);
+        c
+    };
+    
+    match cmd.output() {
+        Ok(output) if output.status.success() => {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // Take the first one if multiple
+            Some(path.lines().next().unwrap_or("").to_string())
+        },
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub fn get_available_editors() -> Vec<Value> {
+    let mut editors_to_check = vec![
+        ("Visual Studio Code", "code"),
+        ("VS Code Insiders", "code-insiders"),
+        ("Cursor", "cursor"),
+        ("VSCodium", "codium"),
+        ("Antigravity", "antigravity"),
+        ("Microtermix Edit", "microtermix"), // maybe it's in path?
+        ("Zed", "zed"),
+        ("Sublime Text", "subl"),
+        ("Atom", "atom"),
+        ("Helix", "hx"),
+        ("Micro", "micro"),
+        ("Emacs", "emacs"),
+        ("IntelliJ IDEA", "idea"),
+        ("PyCharm", "pycharm"),
+        ("WebStorm", "webstorm"),
+        ("GoLand", "goland"),
+        ("RustRover", "rustrover"),
+        ("Vim", "vim"),
+        ("Nano", "nano"),
+    ];
+    
+    #[cfg(target_os = "macos")]
+    {
+        editors_to_check.push(("TextEdit", "open -e"));
+        editors_to_check.push(("Xcode", "xed"));
+    }
+
+    let mut available = Vec::new();
+    for (label, cmd_str) in editors_to_check {
+        let cmd_to_test = cmd_str.split_whitespace().next().unwrap_or(cmd_str);
+        if let Some(full_path) = get_command_full_path(cmd_to_test) {
+            // Keep the arguments if it was a complex command like "open -e"
+            let final_cmd = if cmd_str.contains(" ") {
+                cmd_str.to_string() 
+            } else {
+                full_path
+            };
+            
+            available.push(serde_json::json!({
+                "label": label,
+                "cmd": final_cmd
+            }));
+        }
+    }
+    available
+}
+
 #[tauri::command]
 pub fn rust_copy_to_clipboard(text: String) -> Result<(), String> {
     use arboard::Clipboard;
@@ -91,4 +157,3 @@ pub fn rust_copy_to_clipboard(text: String) -> Result<(), String> {
     clipboard.set_text(text).map_err(|e| format!("No se pudo copiar al portapapeles: {e}"))?;
     Ok(())
 }
-
