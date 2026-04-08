@@ -388,32 +388,6 @@ pub fn git_commit_native_impl(
     Ok(format!("Commit created: {}", commit_id))
 }
 
-pub async fn git_push_native_impl(project_path: String, force: bool) -> Result<String, String> {
-    let path = project_path.clone();
-    let account = crate::workspace_config::get_account_for_project(&path);
-    
-    tokio::task::spawn_blocking(move || {
-        let repo = repo_open(&path)?;
-        let auth = make_auth(account);
-
-        let head = repo.head().map_err(|e| e.to_string())?;
-        let branch_name = head.shorthand().ok_or("HEAD is detached")?.to_string();
-        
-        let remote_name = repo.branch_upstream_remote(&format!("refs/heads/{}", branch_name))
-            .ok()
-            .and_then(|buf| buf.as_str().map(|s| s.to_string()))
-            .unwrap_or_else(|| "origin".to_string());
-
-        let mut remote = repo.find_remote(&remote_name).map_err(|e| e.to_string())?;
-        let refspec = format!("{}refs/heads/{}:refs/heads/{}",
-            if force { "+" } else { "" }, branch_name, branch_name);
-
-        match auth.push(&repo, &mut remote, &[&refspec]) {
-            Ok(_) => Ok(format!("Pushed '{}' to {}", branch_name, remote_name)),
-            Err(e) => Err(format!("Push failed: {}", e)),
-        }
-    }).await.map_err(|e| e.to_string())?
-}
 
 pub async fn git_pull_native_impl(project_path: String) -> Result<String, String> {
     let path = project_path.clone();
