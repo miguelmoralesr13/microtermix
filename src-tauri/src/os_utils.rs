@@ -31,27 +31,66 @@ pub fn fix_path_env() {
     #[cfg(not(target_os = "windows"))]
     {
         use std::env;
-        let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        
+        // If we already have a reasonably long PATH, maybe it's already set (e.g. running from terminal)
+        if let Ok(current_path) = env::var("PATH") {
+            if current_path.split(':').count() > 5 {
+                return;
+            }
+        }
+
+        let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+        
+        // Use a unique delimiter to find the path in case the shell config prints other stuff
+        let cmd_str = "printf \"__MTX_PATH__%s__MTX_PATH__\" \"$PATH\"";
         
         let output = StdCommand::new(&shell)
-            .args(["-l", "-i", "-c", "echo $PATH"])
+            .args(["-l", "-i", "-c", cmd_str])
             .output();
 
+        let mut extracted_path = None;
+
         if let Ok(out) = output {
-            let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !path_str.is_empty() && path_str.contains(':') {
-                env::set_var("PATH", path_str);
-            }
-        } else {
-            let output_simple = StdCommand::new(&shell)
-                .args(["-l", "-c", "echo $PATH"])
-                .output();
-            if let Ok(out) = output_simple {
-                let path_str = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !path_str.is_empty() {
-                    env::set_var("PATH", path_str);
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if let Some(start) = stdout.find("__MTX_PATH__") {
+                if let Some(end) = stdout.rfind("__MTX_PATH__") {
+                    if start < end {
+                        let path = &stdout[start + 12..end];
+                        if !path.is_empty() && path.contains(':') {
+                            extracted_path = Some(path.to_string());
+                        }
+                    }
                 }
             }
+        }
+
+        if extracted_path.is_none() {
+            // Try simpler login shell without interactive mode
+            let output_simple = StdCommand::new(&shell)
+                .args(["-l", "-c", cmd_str])
+                .output();
+            if let Ok(out) = output_simple {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                if let Some(start) = stdout.find("__MTX_PATH__") {
+                    if let Some(end) = stdout.rfind("__MTX_PATH__") {
+                        if start < end {
+                            let path = &stdout[start + 12..end];
+                            if !path.is_empty() && path.contains(':') {
+                                extracted_path = Some(path.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(path) = extracted_path {
+            env::set_var("PATH", &path);
+            // We can't use crate::app_logs here yet as it might not be initialized, 
+            // but we can print to stderr which Tauri's log system might catch if started.
+            eprintln!("[Microtermix] Fixed PATH: {}", path);
+        } else {
+            eprintln!("[Microtermix] Failed to fix PATH environment.");
         }
     }
 }

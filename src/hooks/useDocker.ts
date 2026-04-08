@@ -44,7 +44,15 @@ export const useDockerContainers = () => {
         queryFn: async () => {
             return await invoke<DockerContainer[]>('docker_ps');
         },
-        refetchInterval: 3000, // Poll every 3s to keep UI feeling alive like Orbstack
+        refetchInterval: (query) => (query.state.error ? false : 3000), // Stop polling if Docker is not running
+        retry: (failureCount, error) => {
+            // No need to retry 3 times if the daemon is simply not running (very common developer state)
+            const errMsg = String(error).toLowerCase();
+            if (errMsg.includes('daemon') || errMsg.includes('connection') || errMsg.includes('not found')) {
+                return false;
+            }
+            return failureCount < 2;
+        }
     });
 };
 
@@ -57,6 +65,12 @@ export const useDockerAction = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['docker-containers'] });
         }
+    });
+};
+
+export const useStartDocker = () => {
+    return useMutation({
+        mutationFn: async () => invoke('start_docker')
     });
 };
 
@@ -74,7 +88,8 @@ export const useDockerImages = () => {
     return useQuery<DockerImageItem[]>({
         queryKey: ['docker-images'],
         queryFn: async () => invoke<DockerImageItem[]>('docker_images'),
-        refetchInterval: 5000,
+        refetchInterval: (query) => (query.state.error ? false : 5000),
+        retry: false,
     });
 };
 
@@ -82,7 +97,8 @@ export const useDockerVolumes = () => {
     return useQuery<DockerVolumeItem[]>({
         queryKey: ['docker-volumes'],
         queryFn: async () => invoke<DockerVolumeItem[]>('docker_volumes'),
-        refetchInterval: 5000,
+        refetchInterval: (query) => (query.state.error ? false : 5000),
+        retry: false,
     });
 };
 
@@ -90,6 +106,7 @@ export const useDockerNetworks = () => {
     return useQuery<DockerNetworkItem[]>({
         queryKey: ['docker-networks'],
         queryFn: async () => invoke<DockerNetworkItem[]>('docker_networks'),
-        refetchInterval: 5000,
+        refetchInterval: (query) => (query.state.error ? false : 5000),
+        retry: false,
     });
 };

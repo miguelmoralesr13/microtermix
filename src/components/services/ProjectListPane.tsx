@@ -162,7 +162,7 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
                     </Button>
                 )}
             </div>
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
+            <div className="flex-1 overflow-y-auto">
                 {projects.length === 0 ? (
                     <div className="p-6 text-center text-slate-500 text-sm">No projects found.</div>
                 ) : (

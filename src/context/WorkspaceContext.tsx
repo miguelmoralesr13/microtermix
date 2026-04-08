@@ -21,9 +21,9 @@ import { useAwsStore } from '../stores/awsStore';
 import { useJenkinsStore } from '../stores/jenkinsStore';
 
 export interface Project {
-    name: String;
-    path: String;
-    project_type: String;
+    name: string;
+    path: string;
+    project_type: string;
     framework?: string;
     build_system?: string;
     scripts?: string[];
@@ -70,7 +70,7 @@ interface WorkspaceContextType {
     ) => Promise<void>;
 }
 
-const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
+export const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 // Helper to create a stable ID from a path
 const getPathHash = (path: string) => {
@@ -272,7 +272,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         // Hidratar config de Sonar de workspace JSON
         if (config.sonarAccounts != null) {
             useSonarStore.getState().hydrate(
-                config.sonarAccounts, 
+                config.sonarAccounts,
                 config.sonarActiveAccountId,
                 config.sonarProjectLinks
             );
@@ -294,13 +294,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     const scanWorkspace = useCallback(async (path: string): Promise<Project[]> => {
         try {
-            // 1. Escanear la raíz (comportamiento original)
             const rootProjects: Project[] = await invoke('scan_projects', { rootPath: path });
-
             let finalProjects = [...rootProjects];
 
-            // 2. Identificar y actualizar proyectos externos
-            // Los proyectos externos son los que NO empiezan con la ruta raíz
             const currentProjects = state.projects;
             const externalPaths = currentProjects
                 .map(p => p.path as string)
@@ -311,14 +307,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 for (const extPath of externalPaths) {
                     try {
                         const found: Project[] = await invoke('scan_path', { path: extPath });
-                        // scan_path devuelve un array, pero como es una ruta de proyecto directo, 
-                        // tomamos el primero que coincida con la ruta exacta.
                         const p = found.find(f => f.path === extPath);
                         if (p) updatedExternal.push(p);
                     } catch (e) {
                         console.warn(`Could not refresh external project at ${extPath}`, e);
-                        // Si falla (ej: carpeta borrada), podrías decidir si mantenerlo o no.
-                        // Por ahora mantendremos el anterior si el escaneo falla pero existía.
                         const old = currentProjects.find(cp => cp.path === extPath);
                         if (old) updatedExternal.push(old);
                     }
@@ -332,18 +324,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error('Failed to scan workspace', e);
             return [];
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [state.projects]);
 
     const openFolderInThisWindow = useCallback(async () => {
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta del workspace' });
             if (selected !== null && !Array.isArray(selected)) {
-                // Save the new path to our GLOBAL storage before reloading
-                const globalData = { currentPath: selected };
-                localStorage.setItem('microtermix-settings', JSON.stringify(globalData));
-
-                // Hard reload to clear all stores and re-initialize with the new path
+                localStorage.setItem('microtermix-settings', JSON.stringify({ currentPath: selected }));
                 window.location.reload();
             }
         } catch (e) {
@@ -355,7 +342,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         try {
             const selected = await openDialog({ directory: true, multiple: false, title: 'Seleccionar carpeta para nueva ventana' });
             if (selected !== null && !Array.isArray(selected)) {
-                console.log("[Workspace] Opening in new window:", selected);
                 await invoke('open_new_workspace', { path: selected });
             }
         } catch (e) {
@@ -373,59 +359,39 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             }
 
             if (allFound.length === 0) {
-                if (!silent) toast.error("No se detectaron proyectos válidos en las rutas soltadas");
+                if (!silent) toast.error("No se detectaron proyectos válidos");
                 return;
             }
 
             setState(prev => {
                 const existingPaths = new Set(prev.projects.map(p => p.path as string));
                 const newOnes = allFound.filter(p => !existingPaths.has(p.path as string));
-
-                if (newOnes.length === 0) {
-                    if (!silent && paths.length > 0) toast.info("Los proyectos soltados ya están en el workspace");
-                    return prev;
-                }
+                if (newOnes.length === 0) return prev;
 
                 const updated = [...prev.projects, ...newOnes];
-
                 if (!silent) toast.success(`Añadidos ${newOnes.length} proyectos nuevos`);
                 return { ...prev, projects: updated };
             });
         } catch (e) {
             console.error('Failed to add projects from paths', e);
-            if (!silent) toast.error("Error al escanear rutas soltadas");
         }
-    }, [state.projects]);
+    }, []);
 
     useEffect(() => {
         let unlisten: (() => void) | undefined;
-        let cancelled = false;
         listen<string>('service-stopped', (event) => {
             updateProcessStatusStore(event.payload, 'stopped');
-        }).then(fn => {
-            if (cancelled) fn();
-            else unlisten = fn;
-        });
-        return () => {
-            cancelled = true;
-            unlisten?.();
-        };
+        }).then(fn => unlisten = fn);
+        return () => { unlisten?.(); };
     }, [updateProcessStatusStore]);
 
     useEffect(() => {
         let unlisten: (() => void) | undefined;
-        let cancelled = false;
         listen<{ service_id: string; line: string; is_error: boolean }>('service-logs', (event) => {
             const { service_id, line } = event.payload;
             batchedAppendLogs(service_id, line);
-        }).then(fn => {
-            if (cancelled) fn();
-            else unlisten = fn;
-        });
-        return () => {
-            cancelled = true;
-            unlisten?.();
-        };
+        }).then(fn => unlisten = fn);
+        return () => { unlisten?.(); };
     }, []);
 
     const setActiveView = (view: AppView) => {
@@ -440,23 +406,16 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setState(prev => ({
             ...prev,
             savedCommands: { ...prev.savedCommands, [name]: command },
-            savedCommandSteps: steps
-                ? { ...prev.savedCommandSteps, [name]: steps }
-                : prev.savedCommandSteps,
-            savedCommandTypes: projectType
-                ? { ...prev.savedCommandTypes, [name]: projectType }
-                : prev.savedCommandTypes,
+            savedCommandSteps: steps ? { ...prev.savedCommandSteps, [name]: steps } : prev.savedCommandSteps,
+            savedCommandTypes: projectType ? { ...prev.savedCommandTypes, [name]: projectType } : prev.savedCommandTypes,
         }));
     };
 
     const removeSavedCommand = (name: string) => {
         setState(prev => {
-            const nextCmds = { ...prev.savedCommands };
-            delete nextCmds[name];
-            const nextSteps = { ...prev.savedCommandSteps };
-            delete nextSteps[name];
-            const nextTypes = { ...prev.savedCommandTypes };
-            delete nextTypes[name];
+            const nextCmds = { ...prev.savedCommands }; delete nextCmds[name];
+            const nextSteps = { ...prev.savedCommandSteps }; delete nextSteps[name];
+            const nextTypes = { ...prev.savedCommandTypes }; delete nextTypes[name];
             return { ...prev, savedCommands: nextCmds, savedCommandSteps: nextSteps, savedCommandTypes: nextTypes };
         });
     };
@@ -472,7 +431,6 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     ) => {
         const { globalEnvName = 'none', buildFirst = false, incrementRestart = false } = options || {};
         const actualScriptBase = rawScript.trim();
-        // Normalización estricta del ID para evitar duplicados por espacios extra
         const compositeServiceId = `${projectPath}::${actualScriptBase} `;
 
         let actualScript = actualScriptBase;
@@ -486,38 +444,18 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             if (rawStore) {
                 const parsed = JSON.parse(rawStore);
                 let targetEnv = globalEnvName;
-                if (targetEnv === 'none' && parsed.activeEnv && parsed.activeEnv !== 'none') {
-                    targetEnv = parsed.activeEnv;
-                }
-                if (targetEnv !== 'none' && parsed.envs && parsed.envs[targetEnv]) {
-                    configuredEnv = parsed.envs[targetEnv];
-                }
+                if (targetEnv === 'none' && parsed.activeEnv && parsed.activeEnv !== 'none') targetEnv = parsed.activeEnv;
+                if (targetEnv !== 'none' && parsed.envs && parsed.envs[targetEnv]) configuredEnv = parsed.envs[targetEnv];
             }
         } catch (err) { }
 
-        // Find the project to know its type
         const project = state.projects.find(p => p.path === projectPath);
+        const sanitizeEnvValue = (val: string) => `'${val.split('#')[0].trim().replace(/'/g, "'\\''")}'`;
 
-        // Preparar strings de reemplazo según lenguaje (Limpiando comentarios y escapando valores)
-        const sanitizeEnvValue = (val: string) => {
-            // Quitar comentarios de shell al final de la línea
-            const cleanVal = val.split('#')[0].trim();
-            // Envolver en comillas simples para el shell, escapando comillas simples internas si existen
-            return `'${cleanVal.replace(/'/g, "'\\''")}'`;
-        };
+        const validEnvEntries = Object.entries(configuredEnv).filter(([k]) => k.trim() && !k.includes('#'));
+        const envString = validEnvEntries.map(([k, v]) => `${k}=${sanitizeEnvValue(v)}`).join(' ');
+        const javaPropertyString = validEnvEntries.map(([k, v]) => `-D${k}=${sanitizeEnvValue(v)}`).join(' ');
 
-        const validEnvEntries = Object.entries(configuredEnv)
-            .filter(([k]) => k.trim() && !k.includes('#'));
-
-        const envString = validEnvEntries
-            .map(([k, v]) => `${k}=${sanitizeEnvValue(v)}`)
-            .join(' ');
-
-        const javaPropertyString = validEnvEntries
-            .map(([k, v]) => `-D${k}=${sanitizeEnvValue(v)}`)
-            .join(' ');
-
-        // Construcción del script utilizando el patrón Factory/Strategy
         const processor = ScriptProcessorFactory.getProcessor(project?.project_type?.toLowerCase());
         let builtScript = processor.process(actualScript, envString, javaPropertyString);
         builtScript = finalizeBuiltScript(builtScript);
@@ -529,14 +467,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         const envVarsJson = JSON.stringify({ ...configuredEnv, ...inlineEnvs });
         const viteConfig = getViteWrapperConfig(projectPath);
         const useViteWrapper = !!viteConfig?.enabled && Object.keys(viteConfig?.remotes ?? {}).length > 0;
-
         const customJavaHome = useToolStore.getState().projectJdks[projectPath];
 
-        // Prevención de doble ejecución atómica
-        if (executingServiceIdsRef.current.has(compositeServiceId)) {
-            console.warn(`[Workspace] Execution already in progress for ${compositeServiceId}, skipping duplicate.`);
-            return;
-        }
+        if (executingServiceIdsRef.current.has(compositeServiceId)) return;
         executingServiceIdsRef.current.add(compositeServiceId);
 
         try {
@@ -557,10 +490,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             console.error(`Execution failed for ${compositeServiceId}`, e);
             updateProcessStatusStore(compositeServiceId, 'error');
         } finally {
-            // Liberar el bloqueo después de un pequeño margen para permitir que el estado de Zustand se estabilice
-            setTimeout(() => {
-                executingServiceIdsRef.current.delete(compositeServiceId);
-            }, 500);
+            setTimeout(() => { executingServiceIdsRef.current.delete(compositeServiceId); }, 500);
         }
     }, [updateProcessStatusStore, state.savedCommands, state.projects]);
 
@@ -568,74 +498,39 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         if (!state.currentPath) return;
         try {
             const config = buildWorkspaceConfigFromCurrentState(
-                state.currentPath,
-                uiStore.selectedProjects,
-                uiStore.multiScript,
-                uiStore.globalEnvName,
-                uiStore.vitePreviewOpen,
-                processStoreTerminalTab,
-                state.projects.map(p => p.path as string),
-                state.savedCommands,
-                state.savedCommandSteps,
-                state.savedCommandTypes,
-                state.pipelines,
+                state.currentPath, uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName,
+                uiStore.vitePreviewOpen, processStoreTerminalTab, state.projects.map(p => p.path as string),
+                state.savedCommands, state.savedCommandSteps, state.savedCommandTypes, state.pipelines,
                 uiStore.visibleUtilities,
             );
-            await invoke('write_workspace_config_in_folder', {
-                workspacePath: state.currentPath,
-                content: JSON.stringify(config, null, 2),
-            });
-        } catch (e) {
-            console.error('[Workspace] Save failed', e);
-        }
-    }, [
-        state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines,
-        uiStore.selectedProjects, uiStore.multiScript, uiStore.globalEnvName, uiStore.vitePreviewOpen,
-        uiStore.visibleUtilities,
-        processStoreTerminalTab
-    ]);
+            await invoke('write_workspace_config_in_folder', { workspacePath: state.currentPath, content: JSON.stringify(config, null, 2) });
+        } catch (e) { console.error('[Workspace] Save failed', e); }
+    }, [state.currentPath, state.projects, state.savedCommands, state.savedCommandSteps, state.pipelines, uiStore, processStoreTerminalTab]);
 
     const executePipeline = useCallback(async (pipeline: PipelineConfig) => {
         try {
             const resolvedSteps = pipeline.steps.map((step: PipelineStepConfig) => {
                 const parts = step.serviceId.split('::');
-                const id = parts[0];
-                const script = parts.slice(1).join('::');
-                const fullPath = resolveIdentifierToPath(id, state.projects.map(p => p.path as string), state.currentPath);
+                const fullPath = resolveIdentifierToPath(parts[0], state.projects.map(p => p.path as string), state.currentPath);
                 return {
-                    service_id: `${fullPath}::${script} `,
-                    condition: step.condition ? {
-                        [step.condition.type]: step.condition.value
-                    } : null
+                    service_id: `${fullPath}::${parts.slice(1).join('::')} `,
+                    condition: step.condition ? { [step.condition.type]: step.condition.value } : null
                 };
             });
-
-            await invoke('execute_pipeline', {
-                pipelineId: pipeline.id,
-                steps: resolvedSteps
-            });
-        } catch (e) {
-            console.error('Failed to execute pipeline', e);
-        }
+            await invoke('execute_pipeline', { pipelineId: pipeline.id, steps: resolvedSteps });
+        } catch (e) { console.error('Failed to execute pipeline', e); }
     }, [state.projects, state.currentPath]);
 
     const removeProjectsByPath = useCallback((pathsToRemove: string[]) => {
-        setState(prev => {
-            const updated = prev.projects.filter(p => !pathsToRemove.includes(p.path as string));
-            return { ...prev, projects: updated };
-        });
-        toast.success(`Se han eliminado ${pathsToRemove.length} proyectos del workspace`);
+        setState(prev => ({ ...prev, projects: prev.projects.filter(p => !pathsToRemove.includes(p.path as string)) }));
+        toast.success(`Se han eliminado ${pathsToRemove.length} proyectos`);
     }, []);
 
     return (
         <WorkspaceContext.Provider value={{
             state, setWorkspacePath, scanWorkspace, applyWorkspaceConfig, openFolderInThisWindow, openFolderInNewWindow,
-            addProjectsFromPaths,
-            removeProjectsByPath,
-            setActiveView, setTargetTerminalTab,
-            executeProjectScript, addSavedCommand, removeSavedCommand,
-            saveWorkspaceConfig,
-            executePipeline
+            addProjectsFromPaths, removeProjectsByPath, setActiveView, setTargetTerminalTab,
+            executeProjectScript, addSavedCommand, removeSavedCommand, saveWorkspaceConfig, executePipeline
         }}>
             {children}
         </WorkspaceContext.Provider>
@@ -649,5 +544,3 @@ export const useWorkspace = () => {
     }
     return context;
 };
-
-export { WorkspaceContext };

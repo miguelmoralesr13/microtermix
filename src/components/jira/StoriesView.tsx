@@ -22,7 +22,7 @@ import { toast } from 'sonner';
 export function StoriesView() {
     const queryClient = useQueryClient();
     const cfg = api.loadConfig();
-    
+
     // Main project fallback for each level
     const p1 = cfg.level1Project || cfg.defaultProject;
     const p2 = cfg.level2Project || cfg.defaultProject;
@@ -84,7 +84,7 @@ export function StoriesView() {
     const bStoryJql = useMemo(() => {
         const base = `project = "${p2}" AND issuetype = "${cfg.level2Type || 'Business Story'}"`;
         const parentFilter = selectedPortfolioKey ? ` AND (parent = "${selectedPortfolioKey}" OR "Epic Link" = "${selectedPortfolioKey}" OR issue in linkedIssues("${selectedPortfolioKey}"))` : '';
-        
+
         let jql = base + parentFilter;
         if (storePinnedBusinessStories.length > 0) {
             const pinnedClause = `key in (${storePinnedBusinessStories.map(k => `"${k}"`).join(',')})`;
@@ -94,7 +94,7 @@ export function StoriesView() {
         }
         return jql;
     }, [selectedPortfolioKey, p2, cfg.level2Type, storePinnedBusinessStories]);
-    
+
     const { data: businessStories = [], isLoading: loadingBusinessStories } = useJiraIssues(bStoryJql, !!selectedPortfolioKey || storePinnedBusinessStories.length > 0);
 
     const selectedBusinessStoryKey = storeSelection.businessStoryKey;
@@ -103,7 +103,7 @@ export function StoriesView() {
     const techStoryJql = useMemo(() => {
         const base = `project = "${p3}" AND issuetype = "${cfg.level3Type || 'Story'}"`;
         const parentFilter = selectedBusinessStoryKey ? ` AND (parent = "${selectedBusinessStoryKey}" OR issue in linkedIssues("${selectedBusinessStoryKey}"))` : '';
-        
+
         let jql = base + parentFilter;
         if (storePinnedStories.length > 0) {
             const pinnedClause = `key in (${storePinnedStories.map(k => `"${k}"`).join(',')})`;
@@ -122,7 +122,7 @@ export function StoriesView() {
     const taskJql = useMemo(() => {
         const base = `project = "${p4}" AND issuetype = "${cfg.level4Type || 'Task'}"`;
         const parentFilter = selectedStoryKey ? ` AND parent = "${selectedStoryKey}"` : '';
-        
+
         let jql = base + parentFilter;
         if (storePinnedTasks.length > 0) {
             const pinnedClause = `key in (${storePinnedTasks.map(k => `"${k}"`).join(',')})`;
@@ -328,7 +328,7 @@ export function StoriesView() {
                         ))}
                     </div>
                 </div>
-...
+                ...
 
                 <div className="flex flex-col w-1/5 h-full border-slate-800">
                     <div className={colHeaderCls}><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Detalle / Acción</p></div>

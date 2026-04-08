@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import {
     Monitor, RefreshCw, Play, Square, RotateCcw,
     ChevronDown, ChevronRight, CheckCircle, XCircle, Circle, Loader,
-    AlertCircle, Eye, EyeOff, Search, X, Database, Link2, Trash2, } from 'lucide-react';
+    AlertCircle, Eye, EyeOff, Search, X, Database, Link2, Trash2, ShieldCheck, Download } from 'lucide-react';
 import { useAwsStore } from '../../stores/awsStore';
 import { CwCredentials } from '../../services/cloudwatchApi';
 import { parseAwsCredentialBlock } from './cwUtils';
@@ -11,6 +11,8 @@ import { Button } from '../ui/button';
 import { useEc2Instances, useEc2Actions, awsKeys } from '../../hooks/queries/useAwsQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ec2Instance } from './ec2Types';
+import { toast } from 'sonner';
+import { useWorkspace } from '../../context/WorkspaceContext';
 
 interface SshDefaults {
     username: string;
@@ -320,9 +322,11 @@ function InstanceRow({ inst, ssh, creds, onAction, pending, onTunnelStarted }: I
 
 function SettingsTab({ ssh, setSsh, onSave }: { ssh: SshDefaults; setSsh: (s: SshDefaults) => void; onSave: () => void }) {
     const { credentials, setCredentials } = useAwsStore();
+    const { state: { currentPath } } = useWorkspace();
     const [localCreds, setLocalCreds] = useState<CwCredentials>(() => credentials || { accessKeyId: '', secretAccessKey: '', region: 'us-east-1' });
     const [showSecret, setShowSecret] = useState(false);
     const [testResult, setTestResult] = useState<string | null>(null);
+    const [downloading, setDownloading] = useState(false);
 
     const handlePaste = async () => {
         const text = await navigator.clipboard.readText();
@@ -333,8 +337,26 @@ function SettingsTab({ ssh, setSsh, onSave }: { ssh: SshDefaults; setSsh: (s: Ss
         }
     };
 
+    const downloadCert = async () => {
+        if (!currentPath) {
+            toast.error("No hay un workspace activo");
+            return;
+        }
+        setDownloading(true);
+        try {
+            const separator = currentPath.includes('\\') ? '\\' : '/';
+            const targetPath = `${currentPath}${separator}global-bundle.pem`;
+            await invoke('ec2_download_aws_ca', { targetPath });
+            toast.success("Certificado global-bundle.pem descargado en el workspace");
+        } catch (e) {
+            toast.error(`Error al descargar: ${e}`);
+        } finally {
+            setDownloading(false);
+        }
+    };
+
     return (
-        <div className="p-6 flex flex-col gap-6 max-w-2xl mx-auto">
+        <div className="p-6 flex flex-col gap-6 max-w-2xl mx-auto h-full overflow-y-auto">
             <div className="grid grid-cols-2 gap-8">
                 <div className="flex flex-col gap-4">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">AWS Credentials</h3>
@@ -352,9 +374,29 @@ function SettingsTab({ ssh, setSsh, onSave }: { ssh: SshDefaults; setSsh: (s: Ss
                     <input value={ssh.username} onChange={e => setSsh({ ...ssh, username: e.target.value })} placeholder="Username" className="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-sm" />
                     <input value={ssh.keyPath} onChange={e => setSsh({ ...ssh, keyPath: e.target.value })} placeholder="Key Path" className="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-sm font-mono" />
                     <input type="number" value={ssh.port} onChange={e => setSsh({ ...ssh, port: parseInt(e.target.value) || 22 })} placeholder="Port" className="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-sm" />
+                    
+                    <div className="mt-4 pt-4 border-t border-slate-800 flex flex-col gap-3">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <ShieldCheck size={14} className="text-microtermix-neon" />
+                            Utilidades
+                        </h3>
+                        <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={downloadCert} 
+                            disabled={downloading}
+                            className="text-[10px] bg-slate-900/50 border-slate-700 hover:bg-slate-800 transition-colors flex items-center gap-2"
+                        >
+                            {downloading ? <Loader size={13} className="animate-spin" /> : <Download size={13} />}
+                            Descargar global-bundle.pem
+                        </Button>
+                        <p className="text-[10px] text-slate-500 italic">
+                            Necesario para conexiones SSL/TLS a DocumentDB o RDS.
+                        </p>
+                    </div>
                 </div>
             </div>
-            <div className="flex items-center gap-4 pt-4 border-t border-slate-800">
+            <div className="flex items-center gap-4 pt-4 border-t border-slate-800 shrink-0">
                 <Button onClick={() => { setCredentials(localCreds); onSave(); }} className="bg-microtermix-neon text-slate-900 font-bold px-8">Guardar</Button>
                 {testResult && <span className="text-[10px] font-mono text-emerald-400">{testResult}</span>}
             </div>

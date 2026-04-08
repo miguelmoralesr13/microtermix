@@ -284,27 +284,41 @@ pub fn kill_tree_unix_pub(_pid: u32) {}
 
 /// Recursively kill a process tree on Linux by reading /proc PPid entries.
 /// Kills children first (depth-first), then the process itself.
+/// Recursively kill a process tree on Unix by sending signals to its process group (PGID).
+/// This is more reliable than manual walking because children of children are always in the group.
 #[cfg(not(target_os = "windows"))]
-fn kill_tree_unix(pid: u32, sig: nix::sys::signal::Signal) {
+pub fn kill_tree_unix(pid: u32, sig: nix::sys::signal::Signal) {
     use nix::sys::signal::kill;
     use nix::unistd::Pid;
     use sysinfo::{System, Pid as SysPid};
 
+    let target_pid = Pid::from_raw(pid as i32);
+
+    // 1. Try to kill the whole process group first (most reliable)
+    // We used cmd.process_group(0) so the process is the leader of its own group
+    let _ = kill(Pid::from_raw(-(pid as i32)), sig);
+
+    // 2. Fallback: Manual walk (in case PGID kill failed or wasn't set up)
     let mut s = System::new();
     s.refresh_processes();
 
-    // Find children and kill them first (depth-first)
-    let pids: Vec<u32> = s.processes()
-        .iter()
-        .filter(|(_, p)| p.parent() == Some(SysPid::from(pid as usize)))
-        .map(|(p, _)| p.as_u32())
-        .collect();
+    fn kill_recursive(s: &System, pid: u32, sig: nix::sys::signal::Signal) {
+        let pids: Vec<u32> = s.processes()
+            .iter()
+            .filter(|(_, p)| p.parent() == Some(SysPid::from(pid as usize)))
+            .map(|(p, _)| p.as_u32())
+            .collect();
 
-    for child_pid in pids {
-        kill_tree_unix(child_pid, sig);
+        for child_pid in pids {
+            kill_recursive(s, child_pid, sig);
+        }
+        let _ = kill(Pid::from_raw(pid as i32), sig);
     }
 
-    let _ = kill(Pid::from_raw(pid as i32), sig);
+    kill_recursive(&s, pid, sig);
+    
+    // Final blow to the top process just in case
+    let _ = kill(target_pid, sig);
 }
 
 /// Entrada de proceso en escucha (netstat).
@@ -791,7 +805,9 @@ pub async fn execute_service_script(
     }
 
     #[cfg(not(target_os = "windows"))]
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+        if Path::new("/bin/zsh").exists() { "/bin/zsh".to_string() } else { "sh".to_string() }
+    });
     #[cfg(not(target_os = "windows"))]
     let mut cmd = silent_async_command(&shell);
     #[cfg(not(target_os = "windows"))]
@@ -999,14 +1015,20 @@ pub async fn execute_ephemeral_task(
         c.args(["/c", &command]);
         c
     } else {
-        let mut c = silent_async_command("sh");
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            if Path::new("/bin/zsh").exists() { "/bin/zsh".to_string() } else { "sh".to_string() }
+        });
+        let mut c = silent_async_command(&shell);
         c.args(["-c", &command]);
+        #[cfg(not(target_os = "windows"))]
+        c.process_group(0);
         c
     };
 
     cmd.current_dir(&project_path);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
+    cmd.kill_on_drop(true);
 
     let mut child = cmd.spawn().map_err(|e| format!("Fallo al iniciar tarea: {}", e))?;
     

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, GitBranch, Layers, Play, Square, Terminal, ExternalLink, Star, Folder, Loader2 } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { JenkinsJobSummary, JenkinsBuildSummary, jobApiPath, isFolder, isMultibranch, isBuilding, normalizeUrl, jobToFavorite, formatAgo, formatDuration } from '../../services/jenkinsApi';
+import { JenkinsJobSummary, JenkinsBuildSummary, jobApiPath, isFolder, isMultibranch, isBuilding, normalizeUrl, jobToFavorite, formatAgo, formatDuration, jobMatchesSearch } from '../../services/jenkinsApi';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
 import { useJenkinsChildren, useJenkinsJobStatus, useJenkinsBuilds, useJenkinsTriggerBuild, useJenkinsAbortBuild } from '../../hooks/useJenkins';
 import { ResultBadge, JobColorDot } from './JenkinsCommon';
@@ -85,15 +85,14 @@ export function JenkinsJobRow({
 
     const [expanded, setExpanded] = useState(false);
 
-    if (!cfg) return null; // Defensive check
+    if (!cfg) return null;
 
     const folder = isFolder(job);
     const multi = isMultibranch(job);
     const isBranch = !folder && !multi && depth > 0;
     const jobPath = jobApiPath(job.url, cfg.baseUrl);
 
-    // TanStack queries for auto-polling and data fetching
-    const { data: liveJob } = useJenkinsJobStatus(jobPath, expanded || !!favorites[normalizeUrl(job.url)]);
+    const { data: liveJob } = useJenkinsJobStatus(jobPath, expanded, false);
     const currentJob = liveJob || job;
     const lb = currentJob.lastBuild;
 
@@ -104,6 +103,36 @@ export function JenkinsJobRow({
     const abortMutation = useJenkinsAbortBuild();
 
     const now = useTick(isBuilding(currentJob));
+
+    // canFavorite logic: Leaf jobs OR Multibranch containers (to show environments inside)
+    // Folders are still restricted.
+    const canFavorite = !folder;
+
+    // Auto-expand if searching and children match
+    useEffect(() => {
+        if (!search || expanded) return;
+        const matchChild = currentJob.jobs?.some(child => jobMatchesSearch(child, search));
+        if (matchChild) setExpanded(true);
+    }, [search, currentJob.jobs]);
+
+    const highlightText = (text: string, query: string) => {
+        if (!query.trim()) return text;
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+        return (
+            <span>
+                {parts.map((part, i) =>
+                    part.toLowerCase() === query.trim().toLowerCase() ? (
+                        <span key={i} className="bg-microtermix-neon/20 text-microtermix-neon font-bold px-0.5 rounded">
+                            {part}
+                        </span>
+                    ) : (
+                        <span key={i}>{part}</span>
+                    )
+                )}
+            </span>
+        );
+    };
 
     const handleToggle = () => setExpanded(!expanded);
 
@@ -152,7 +181,7 @@ export function JenkinsJobRow({
             {expanded ? <ChevronDown size={isTopLevel ? 13 : 12} className="text-slate-500 shrink-0" /> : <ChevronRight size={isTopLevel ? 13 : 12} className="text-slate-500 shrink-0" />}
             {!folder && <JobColorDot color={currentJob.color} />}
             {icon}
-            <span className={nameClass}>{currentJob.name}</span>
+            <span className={nameClass}>{highlightText(currentJob.displayName || currentJob.name, search)}</span>
 
             {lb && !folder && (
                 <div className="flex items-center gap-2 shrink-0">
@@ -178,15 +207,17 @@ export function JenkinsJobRow({
                 )}
                 <button onClick={() => openUrl(currentJob.url)} className="p-1 rounded text-slate-600 hover:text-slate-400 transition-colors"><ExternalLink size={10} /></button>
 
-                <button
-                    onClick={(e) => { e.stopPropagation(); toggleFavorite(jobToFavorite(currentJob)); }}
-                    className={cn(
-                        "p-1.5 rounded transition-colors",
-                        isFav ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400 hover:bg-amber-400/5'
-                    )}
-                >
-                    <Star size={13} className={isFav ? 'fill-current' : ''} />
-                </button>
+                {canFavorite && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(jobToFavorite(currentJob)); }}
+                        className={cn(
+                            "p-1.5 rounded transition-colors",
+                            isFav ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400 hover:bg-amber-400/5'
+                        )}
+                    >
+                        <Star size={13} className={isFav ? 'fill-current' : ''} />
+                    </button>
+                )}
             </div>
         </div>
     );

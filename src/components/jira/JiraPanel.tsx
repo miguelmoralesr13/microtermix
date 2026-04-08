@@ -29,6 +29,13 @@ export const JiraPanel: React.FC = () => {
 
     useEffect(() => { localStorage.setItem(STORAGE_JIRA_TAB, tab); }, [tab]);
 
+    // Auto-select first account if none is active (e.g., after loading from hydration)
+    useEffect(() => {
+        if (accounts.length > 0 && !activeAccountId) {
+            storeSetActiveAccount(accounts[0].id);
+        }
+    }, [accounts.length, activeAccountId, storeSetActiveAccount]);
+
     const handleSwitchAccount = (id: string) => {
         storeSetActiveAccount(id);
     };

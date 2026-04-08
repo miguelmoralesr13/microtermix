@@ -21,10 +21,20 @@ export const JenkinsPanel: React.FC = () => {
     const [expandedEntry, setExpandedEntry] = useState<number | null>(null);
 
     useEffect(() => {
+        if (accounts.length > 0 && !activeAccountId) {
+            setActiveAccount(accounts[0].id!);
+        }
+
+        // If we were showing settings because there were no accounts, 
+        // and now accounts have loaded (e.g., from hydration), switch to jobs view.
+        if (accounts.length > 0 && showSettings) {
+            setShowSettings(false);
+        }
+
         if (accounts.length === 0) {
             setShowSettings(true);
         }
-    }, [accounts.length]);
+    }, [accounts.length, activeAccountId, setActiveAccount]);
 
     useEffect(() => {
         const handler = (e: JenkinsApiLogEntry) => setApiLog(prev => [e, ...prev].slice(0, 100));
@@ -93,7 +103,7 @@ export const JenkinsPanel: React.FC = () => {
                         "flex flex-col overflow-hidden transition-all h-full",
                         logTarget ? "w-1/2 border-r border-slate-800 shrink-0" : "flex-1"
                     )}>
-                        <JenkinsJobsTab onOpenLog={setLogTarget} />
+                        <JenkinsJobsTab key={activeAccountId} onOpenLog={setLogTarget} />
                     </div>
                 )}
 
@@ -141,8 +151,8 @@ export const JenkinsPanel: React.FC = () => {
                                     onClick={() => setExpandedEntry(expandedEntry === entry.id ? null : entry.id)}
                                 >
                                     <span className={`shrink-0 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded ${entry.method === 'GET' ? 'bg-sky-500/20 text-sky-400' :
-                                            entry.method === 'POST' ? 'bg-violet-500/20 text-violet-400' :
-                                                'bg-amber-500/20 text-amber-400'
+                                        entry.method === 'POST' ? 'bg-violet-500/20 text-violet-400' :
+                                            'bg-amber-500/20 text-amber-400'
                                         }`}>{entry.method}</span>
                                     {entry.status !== undefined && (
                                         <span className={`shrink-0 font-mono text-[9px] font-bold ${entry.ok ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -156,11 +166,84 @@ export const JenkinsPanel: React.FC = () => {
                                     <span className="shrink-0 text-[9px] text-slate-700 font-mono">{entry.time}</span>
                                 </div>
                                 {expandedEntry === entry.id && (
-                                    <div className="bg-slate-950 px-3 pb-2">
+                                    <div className="bg-slate-950 px-3 pb-3 space-y-3 border-t border-slate-900/50">
+                                        {/* Error Context */}
                                         {entry.error && (
-                                            <p className="text-[10px] text-red-400 font-mono bg-red-500/5 p-1.5 rounded mt-1">{entry.error}</p>
+                                            <div className="text-[10px] text-red-300 font-mono bg-red-500/10 p-2 rounded border border-red-500/20 mt-2">
+                                                <strong className="text-red-400">FAULT:</strong> {entry.error}
+                                            </div>
                                         )}
-                                        <p className="text-[9px] text-slate-600 font-mono mt-1 break-all">{entry.url}</p>
+
+                                        {/* URL & cURL Command */}
+                                        <div className="space-y-1.5 mt-2">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Request Details</span>
+                                                {entry.curl && (
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            navigator.clipboard.writeText(entry.curl!);
+                                                        }}
+                                                        className="text-[9px] px-2 py-0.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded border border-sky-500/20 transition-colors"
+                                                    >
+                                                        Copy cURL
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="bg-slate-900/80 p-2 rounded border border-white/5 space-y-1">
+                                                <p className="text-[9px] text-slate-300 font-mono break-all font-bold">{entry.method} {entry.url}</p>
+                                                {entry.curl && <p className="text-[8px] text-slate-500 font-mono truncate opacity-60">curl -X {entry.method} ...</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* Headers Grid */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {entry.requestHeaders && (
+                                                <div className="space-y-1">
+                                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter">Request Headers</span>
+                                                    <div className="bg-slate-900/40 p-1.5 rounded border border-white/5 max-h-32 overflow-y-auto custom-scrollbar">
+                                                        {Object.entries(entry.requestHeaders).map(([k, v]) => (
+                                                            <div key={k} className="text-[9px] font-mono leading-tight mb-1">
+                                                                <span className="text-sky-500/70">{k}:</span> <span className="text-slate-400">{v}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {entry.responseHeaders && (
+                                                <div className="space-y-1">
+                                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter">Response Headers</span>
+                                                    <div className="bg-slate-900/40 p-1.5 rounded border border-white/5 max-h-32 overflow-y-auto custom-scrollbar">
+                                                        {Object.entries(entry.responseHeaders).map(([k, v]) => (
+                                                            <div key={k} className="text-[9px] font-mono leading-tight mb-1">
+                                                                <span className="text-emerald-500/70">{k}:</span> <span className="text-slate-400">{v}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Response Body */}
+                                        {entry.responseBody && (
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter">Response Body (JSON)</span>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            navigator.clipboard.writeText(JSON.stringify(entry.responseBody, null, 2));
+                                                        }}
+                                                        className="text-[8px] text-slate-500 hover:text-slate-300 transition-colors"
+                                                    >
+                                                        Copy Body
+                                                    </button>
+                                                </div>
+                                                <pre className="text-[9px] font-mono p-2 bg-slate-950 rounded border border-white/5 overflow-x-auto max-h-60 text-emerald-400/90 leading-relaxed selection:bg-emerald-500/20">
+                                                    {JSON.stringify(entry.responseBody, null, 2)}
+                                                </pre>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

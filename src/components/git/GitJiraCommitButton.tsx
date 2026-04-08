@@ -114,8 +114,8 @@ function SelectField({
                 <SelectContent className="max-h-72 min-w-[340px] w-[--anchor-width]">
                     {showFilter && options.length > 5 && (
                         <div className="p-1 pb-2 sticky top-0 bg-popover z-10 border-b border-slate-800">
-                            <input 
-                                className="w-full bg-slate-950 border border-slate-700 text-xs text-slate-200 px-2 py-1.5 rounded focus:outline-none focus:border-microtermix-accent font-sans" 
+                            <input
+                                className="w-full bg-slate-950 border border-slate-700 text-xs text-slate-200 px-2 py-1.5 rounded focus:outline-none focus:border-microtermix-accent font-sans"
                                 placeholder="Filtrar..."
                                 value={filter}
                                 onChange={e => setFilter(e.target.value)}
@@ -275,7 +275,8 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
                 throw new Error(commitResult.stderr || 'Git commit failed');
             }
 
-
+            // Safety delay after commit
+            await new Promise(r => setTimeout(r, 1000));
 
             const fullIssue = await getIssue(taskKey);
             setCreatedTask(fullIssue);
@@ -293,17 +294,17 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
             const branch = currentBranch || 'main';
             console.log(`[GitJira] Pushing branch ${branch} (origin HEAD) to remote...`);
             toast.info(`Subiendo código a origin HEAD...`);
-            
+
             const pushResult: any = await invoke('git_execute', {
                 projectPath,
                 args: ['push', 'origin', 'HEAD'],
             });
-            
+
             const combinedOutput = (pushResult.stdout + '\n' + pushResult.stderr).toLowerCase();
-            const hasError = !pushResult.success || 
-                             combinedOutput.includes('rejected') || 
-                             combinedOutput.includes('error:') || 
-                             combinedOutput.includes('failed');
+            const hasError = !pushResult.success ||
+                combinedOutput.includes('rejected') ||
+                combinedOutput.includes('error:') ||
+                combinedOutput.includes('failed');
 
             if (hasError) {
                 console.error('[GitJira] Push failed with output:', pushResult.stderr || pushResult.stdout);
@@ -316,9 +317,14 @@ export const GitJiraCommitButton: React.FC<GitJiraCommitButtonProps> = ({
             toast.success('Push completado con éxito');
             setFlowStep('closing');
             
+            // Give the user half a second to see the success toast before closing the Jira task
+            await new Promise(r => setTimeout(r, 800));
+
             try {
                 await transitionIssue(createdTask.key, 'Released');
                 toast.success(`Tarea ${createdTask.key} cerrada (Released)`);
+                // Final visual indicator of completion
+                await new Promise(r => setTimeout(r, 1000));
             } catch (e: any) {
                 console.warn('[GitJira] Could not close task:', e);
                 toast.warning(`La tarea quedó abierta (WORKING) pero el código se subió.`);

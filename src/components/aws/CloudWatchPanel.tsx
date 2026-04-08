@@ -13,6 +13,7 @@ import { EcsTab } from './EcsTab';
 import { LambdaTab } from './LambdaTab';
 import { S3Tab } from './S3Tab';
 import { EnvVarsTab } from './EnvVarsTab';
+import { InvokeTesterTab } from './InvokeTesterTab';
 import { useCwStore, CwTab } from '../../stores/cwStore';
 import { useAwsStore } from '../../stores/awsStore';
 import {
@@ -40,6 +41,7 @@ export const CloudWatchPanel: React.FC = () => {
 
     const tabs: { id: CwTab; label: string }[] = [
         { id: 'settings', label: 'Configuración' },
+        { id: 'invoke-tester', label: '⚡ Invoke Tester' },
         { id: 'logs', label: 'Logs' },
         { id: 'metrics', label: 'Métricas' },
         { id: 'env-vars', label: 'Envs (SSM/Secrets)' },
@@ -127,6 +129,8 @@ export const CloudWatchPanel: React.FC = () => {
                 {tab === 'env-vars' && isConfigured && <EnvVarsTab />}
                 {tab === 's3' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
                 {tab === 's3' && isConfigured && <S3Tab />}
+                {tab === 'invoke-tester' && !isConfigured && <NeedConfig onGo={() => setTab('settings')} />}
+                {tab === 'invoke-tester' && isConfigured && <InvokeTesterTab />}
             </div>
         </div>
     );

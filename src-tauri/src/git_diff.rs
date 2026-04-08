@@ -423,15 +423,9 @@ pub async fn git_execute_impl(
             }
         }
         "push" => {
-            let force = args.contains(&"--force".to_string()) || args.contains(&"-f".to_string());
-            let native_res = crate::git_native::git_push_native_impl(project_path.clone(), force).await;
-            match native_res {
-                Ok(msg) => Ok(GitResult { stdout: msg, stderr: String::new(), success: true }),
-                Err(err) if err.contains("auth") || err.contains("authentication") => {
-                    git_cli_fallback(&app_handle, &project_path, &args).await
-                }
-                Err(err) => Err(err),
-            }
+            // Prefer CLI for push as it handles interactive prompts and hook errors better than libgit2
+            // especially when the frontend is calling specific refs like 'origin HEAD'.
+            git_cli_fallback(&app_handle, &project_path, &args).await
         }
 
         // ── Fallback for everything else (reset, stash, rebase, merge…) ──

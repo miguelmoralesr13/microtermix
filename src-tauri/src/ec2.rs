@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use reqwest;
 
 // ── Credentials ───────────────────────────────────────────────────────────────
 
@@ -262,6 +263,7 @@ pub async fn spawn_interactive(
     let mut cmd = {
         let mut c = AsyncCommand::new("sh");
         c.args(["-c", &command]);
+        c.process_group(0);
         c
     };
 
@@ -349,7 +351,16 @@ pub async fn spawn_interactive(
         let n = notify.clone();
         tokio::spawn(async move {
             tokio::select! {
-                _ = n.notified() => { let _ = child.kill().await; }
+                _ = n.notified() => {
+                    #[cfg(not(target_os = "windows"))]
+                    if let Some(pid) = child.id() {
+                        use nix::sys::signal::Signal;
+                        crate::processes::kill_tree_unix(pid, Signal::SIGTERM);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+                        crate::processes::kill_tree_unix(pid, Signal::SIGKILL);
+                    }
+                    let _ = child.kill().await;
+                }
                 _ = child.wait() => {
                     procs_arc.lock().await.remove(&sid);
                     stdins_arc.lock().await.remove(&sid);
@@ -403,9 +414,9 @@ pub async fn spawn_process(
     let mut cmd = AsyncCommand::new(&program);
     cmd.args(&args);
 
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_os = "windows"))]
     {
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.process_group(0);
     }
 
     cmd.stdin(Stdio::piped())
@@ -514,7 +525,16 @@ pub async fn spawn_process(
         let n = notify.clone();
         tokio::spawn(async move {
             tokio::select! {
-                _ = n.notified() => { let _ = child.kill().await; }
+                _ = n.notified() => {
+                    #[cfg(not(target_os = "windows"))]
+                    if let Some(pid) = child.id() {
+                        use nix::sys::signal::Signal;
+                        crate::processes::kill_tree_unix(pid, Signal::SIGTERM);
+                        tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
+                        crate::processes::kill_tree_unix(pid, Signal::SIGKILL);
+                    }
+                    let _ = child.kill().await;
+                }
                 _ = child.wait() => {
                     procs_arc.lock().await.remove(&sid);
                     stdins_arc.lock().await.remove(&sid);
@@ -760,8 +780,11 @@ pub async fn spawn_pty_shell(
     };
     #[cfg(not(target_os = "windows"))]
     let mut cmd = {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            if std::path::Path::new("/bin/zsh").exists() { "/bin/zsh".to_string() } else { "sh".to_string() }
+        });
         let mut c = CommandBuilder::new(&shell);
+        c.arg("-l"); // Adding login shell flag
         c.arg("-c");
         c.arg(&command);
         c
@@ -972,4 +995,16 @@ pub fn ec2_open_terminal(ssh_command: String) -> Result<(), String> {
 
     #[allow(unreachable_code)]
     Err("Unsupported platform".to_string())
+}
+
+#[tauri::command]
+pub async fn ec2_download_aws_ca(target_path: String) -> Result<String, String> {
+    let url = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
+    let resp = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Failed to download certificate: HTTP {}", resp.status()));
+    }
+    let content = resp.text().await.map_err(|e| e.to_string())?;
+    std::fs::write(&target_path, content).map_err(|e| e.to_string())?;
+    Ok(target_path)
 }

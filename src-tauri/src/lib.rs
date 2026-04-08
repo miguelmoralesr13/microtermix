@@ -66,7 +66,7 @@ pub use serde::Serialize;
 pub use crate::http_client::make_http_request;
 pub use crate::ec2::{
     ec2_list_instances, ec2_start_instance, ec2_stop_instance, ec2_reboot_instance, ec2_open_terminal,
-    spawn_interactive, spawn_pty_process, spawn_pty_shell, resize_pty, write_stdin_line,
+    ec2_download_aws_ca, spawn_interactive, spawn_pty_process, spawn_pty_shell, resize_pty, write_stdin_line,
 };
 pub use crate::ssm::{
     ssm_start_session, ssm_start_port_forward, ssm_check_plugin,
@@ -89,6 +89,8 @@ pub use crate::git_watcher::{watch_repo, stop_watching_repo};
 pub use crate::stepfunctions::{
     sfn_list_state_machines, sfn_list_executions, sfn_get_execution_history, sfn_start_execution,
     sfn_describe_state_machine, sfn_list_express_executions_from_logs, sfn_get_express_execution_history_from_logs,
+    sfn_start_execution_local,
+    sfn_upsert_local_machine,
 };
 pub use crate::http_collections::{
     list_http_collections, write_http_collection, delete_http_collection,
@@ -419,6 +421,7 @@ pub fn run() {
             ec2_stop_instance,
             ec2_reboot_instance,
             ec2_open_terminal,
+            ec2_download_aws_ca,
             spawn_interactive,
             spawn_pty_shell,
             resize_pty,
@@ -501,9 +504,14 @@ pub fn run() {
             ecs_resolve_secret,
             lambda_list_functions,
             lambda_get_function,
+            lambda_invoke,
+            lambda_invoke_local,
+            sfn_start_execution_local,
+            sfn_upsert_local_machine,
             s3_list_buckets,
             s3_list_objects,
             s3_download_object,
+            start_docker,
             docker_ps,
             docker_action,
             docker_list_files,

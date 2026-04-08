@@ -136,28 +136,30 @@ export const GitPanel: React.FC = () => {
     return (
         <div className="flex-1 relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
             {/* Header / Tabs */}
-            <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4 h-11">
-                <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="h-full flex flex-col justify-end">
-                    <TabsList className="bg-transparent h-10 gap-0 p-0 rounded-none border-b-0">
-                        {state.projects.length === 0 ? (
-                            <div className="px-4 py-2.5 text-[10px] text-slate-500 font-mono uppercase tracking-widest">No Repositories</div>
-                        ) : (
-                            state.projects.map(project => (
-                                <TabsTrigger
-                                    key={project.path as string}
-                                    value={project.path as string}
-                                    className={cn(
-                                        "h-10 px-4 rounded-none border-t-2 border-transparent transition-all",
-                                        "data-[state=active]:bg-slate-900 data-[state=active]:text-microtermix-accent data-[state=active]:border-t-microtermix-accent",
-                                        "data-[state=inactive]:text-slate-500 hover:data-[state=inactive]:bg-slate-900 hover:data-[state=inactive]:text-slate-300",
-                                        "text-xs font-bold"
-                                    )}
-                                >
-                                    {project.name}
-                                </TabsTrigger>
-                            ))
-                        )}
-                    </TabsList>
+            <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4 h-11 overflow-hidden">
+                <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="h-full flex flex-col justify-end min-w-0 flex-1 overflow-hidden">
+                    <div className="overflow-x-auto overflow-y-hidden scrollbar-none flex-1 flex flex-col justify-end min-w-0">
+                        <TabsList className="bg-transparent h-10 gap-0 p-0 rounded-none border-b-0 w-max min-w-full flex-nowrap">
+                            {state.projects.length === 0 ? (
+                                <div className="px-4 py-2.5 text-[10px] text-slate-500 font-mono uppercase tracking-widest">No Repositories</div>
+                            ) : (
+                                state.projects.map(project => (
+                                    <TabsTrigger
+                                        key={project.path as string}
+                                        value={project.path as string}
+                                        className={cn(
+                                            "h-10 px-4 rounded-none border-t-2 border-transparent transition-all shrink-0",
+                                            "data-[state=active]:bg-slate-900 data-[state=active]:text-microtermix-accent data-[state=active]:border-t-microtermix-accent",
+                                            "data-[state=inactive]:text-slate-500 hover:data-[state=inactive]:bg-slate-900 hover:data-[state=inactive]:text-slate-300",
+                                            "text-xs font-bold"
+                                        )}
+                                    >
+                                        {project.name}
+                                    </TabsTrigger>
+                                ))
+                            )}
+                        </TabsList>
+                    </div>
                 </Tabs>
 
                 <div className="flex items-center space-x-1 pl-4 h-full">

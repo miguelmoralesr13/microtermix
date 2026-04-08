@@ -19,6 +19,28 @@ import { useLogGroups } from '../../hooks/queries/useAwsQueries';
 
 // ── Components ──
 
+const smartParse = (msg: string): any => {
+    const trimmed = msg.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            const deepParse = (obj: any): any => {
+                if (typeof obj === 'string' && (obj.trim().startsWith('{') || obj.trim().startsWith('['))) {
+                    try { return deepParse(JSON.parse(obj)); } catch { return obj; }
+                }
+                if (obj && typeof obj === 'object' && obj !== null) {
+                    const res: any = Array.isArray(obj) ? [] : {};
+                    for (const k in obj) { (res as any)[k] = deepParse(obj[k]); }
+                    return res;
+                }
+                return obj;
+            };
+            return deepParse(parsed);
+        } catch { return null; }
+    }
+    return null;
+};
+
 const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy, filters }: { 
     event: CwLogEvent, 
     index: number, 
@@ -30,13 +52,18 @@ const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy, 
     const lineId = `${event.timestamp}-${index}`;
     const [expanded, setExpanded] = useState(false);
     
-    const jsonParsed = useMemo(() => {
-        const msg = event.message.trim();
-        if (msg.startsWith('{') && msg.endsWith('}')) {
-            try { return JSON.parse(msg); } catch { return null; }
-        }
-        return null;
-    }, [event.message]);
+    const jsonParsed = useMemo(() => smartParse(event.message), [event.message]);
+
+    const extracted = useMemo(() => {
+        if (!jsonParsed) return null;
+        const data = jsonParsed.log_data || jsonParsed;
+        return {
+            level: data.level || data.status || data.severity || (data.errorMessage ? 'ERROR' : null),
+            message: data.message || data.mensaje || data.msg || data.log,
+            exception: data.exception || data.stackTrace || data.stack_trace || data.error,
+            timestamp: data.date || data.timestamp || data.time
+        };
+    }, [jsonParsed]);
 
     const requestId = useMemo(() => {
         const match = event.message.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
@@ -44,6 +71,19 @@ const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy, 
     }, [event.message]);
 
     const renderMessage = () => {
+        if (extracted && (extracted.level || extracted.message)) {
+            const level = String(extracted.level || 'INFO').toUpperCase();
+            const levelClass = level.includes('ERR') || level.includes('FAIL') || level === '500' ? 'text-red-400 bg-red-500/10 border-red-500/20' : 
+                               (level.includes('WARN') || level.includes('DEB') ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20');
+            
+            return (
+                <div className="flex items-start gap-2 group/msg">
+                    {extracted.level && <span className={`px-1.5 py-0.5 rounded border text-[9px] font-black uppercase tracking-tighter shrink-0 mt-0.5 ${levelClass}`}>{level}</span>}
+                    <span className="text-slate-200 line-clamp-2 group-hover/msg:line-clamp-none transition-all">{String(extracted.message || 'Log JSON (Click para expandir)')}</span>
+                </div>
+            );
+        }
+
         let msg = event.message;
         if (!filters.length && !requestId) return msg;
         const highlightTokens = [...filters];
@@ -63,16 +103,35 @@ const LogLine = React.memo(({ event, index, onRequestIdClick, copiedId, onCopy, 
     };
 
     return (
-        <div onClick={() => jsonParsed && setExpanded(!expanded)} className={`flex gap-3 leading-relaxed p-1.5 rounded-md transition-colors w-full group overflow-hidden relative border-b border-transparent hover:border-slate-800/50 ${jsonParsed ? 'cursor-pointer hover:bg-slate-800/60' : 'hover:bg-slate-800/40'}`}>
-            <span className="text-slate-600 shrink-0 select-none whitespace-nowrap mt-0.5 w-16 text-right" title={new Date(event.timestamp).toLocaleString()}>{new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}</span>
+        <div onClick={() => jsonParsed && setExpanded(!expanded)} className={`flex gap-3 leading-relaxed p-1.5 rounded-md transition-colors w-full group overflow-hidden relative border-b border-slate-900/40 ${jsonParsed ? 'cursor-pointer hover:bg-slate-900/60' : 'hover:bg-slate-800/40'}`}>
+            <span className="text-slate-600 shrink-0 select-none whitespace-nowrap mt-1 w-16 text-right font-mono" title={new Date(event.timestamp).toLocaleString()}>{new Date(event.timestamp).toLocaleTimeString([], { hour12: false })}</span>
             <div className="flex-1 min-w-0">
                 <div className="break-all whitespace-pre-wrap">{renderMessage()}</div>
-                {expanded && jsonParsed && <div className="mt-2 animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}><pre className="p-2.5 bg-slate-950 border border-microtermix-neon/30 rounded-lg text-[10px] overflow-x-auto whitespace-pre font-mono text-slate-300 shadow-[0_0_20px_-10px_rgba(34,211,238,0.3)]">{JSON.stringify(jsonParsed, null, 2)}</pre></div>}
+                
+                {expanded && jsonParsed && (
+                    <div className="mt-2 animate-in fade-in zoom-in-95 duration-200 space-y-2" onClick={(e) => e.stopPropagation()}>
+                        {extracted?.exception && (
+                            <div className="p-3 bg-red-950/20 border border-red-500/20 rounded-lg text-[10px] text-red-300/80 font-mono whitespace-pre-wrap leading-relaxed shadow-inner">
+                                <div className="flex items-center gap-2 mb-2 text-red-400 font-bold uppercase tracking-widest text-[9px]">
+                                    <AlertTriangle size={10} /> Exception Detected
+                                </div>
+                                {String(extracted.exception)}
+                            </div>
+                        )}
+                        <div className="relative group/json">
+                            <pre className="p-3 bg-slate-950 border border-microtermix-neon/20 rounded-lg text-[10px] overflow-x-auto whitespace-pre font-mono text-slate-300 shadow-2xl">
+                                {JSON.stringify(jsonParsed, null, 2)}
+                            </pre>
+                            <div className="absolute top-2 right-2 text-[8px] font-bold text-slate-600 uppercase tracking-widest pointer-events-none group-hover/json:text-microtermix-neon/50">Smart JSON Parsed</div>
+                        </div>
+                    </div>
+                )}
             </div>
             <button onClick={(e) => { e.stopPropagation(); onCopy(event.message, lineId); }} className={`absolute right-2 top-2 p-1.5 rounded bg-slate-900/80 border border-slate-700 opacity-0 group-hover:opacity-100 transition-all hover:bg-slate-800 ${copiedId === lineId ? 'text-emerald-400 opacity-100' : 'text-slate-400'}`}>{copiedId === lineId ? <Check size={12} /> : <Copy size={12} />}</button>
         </div>
     );
 });
+
 
 const Sidebar = React.memo(({
     sidebarWidth, groupSearch, setGroupSearch, fetchGroups, loadingGroups, groupError, sortedGroups, selectedGroup, setSelectedGroup, favorites, toggleFavorite,

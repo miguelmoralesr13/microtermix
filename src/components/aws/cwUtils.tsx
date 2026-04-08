@@ -53,3 +53,34 @@ export function detectOs(): OsTab {
     if (p.includes('Mac')) return 'macos';
     return 'linux';
 }
+
+export function extractLambdaName(resource: string | undefined, parameters: any): string | null {
+    let arn = resource || '';
+    if (arn.includes(':::lambda:invoke') || (!arn && parameters?.FunctionName)) {
+        arn = parameters?.FunctionName || '';
+    }
+    if (!arn.startsWith('arn:aws:lambda:')) return null;
+    const parts = arn.split(':');
+    // arn:aws:lambda:region:account:function:name[:alias or version]
+    if (parts.length >= 7) return parts[6];
+    return null;
+}
+
+export function extractSfnArn(resource: string | undefined, parameters: any): string | null {
+    let arn = resource || '';
+    // Check if it's a step function execution (standard, sync, or SDK-based)
+    if (arn.includes(':::states:startExecution') || 
+        arn.includes(':::aws-sdk:sfn:startSyncExecution') ||
+        arn.includes(':::aws-sdk:sfn:startExecution') ||
+        (!arn && parameters?.StateMachineArn)) {
+        return parameters?.StateMachineArn || null;
+    }
+    // If resource itself is a Step Function ARN
+    if (arn.startsWith('arn:aws:states:') && arn.includes(':stateMachine:')) {
+        return arn;
+    }
+    // Final fallback: if there is a StateMachineArn in parameters, it's likely a sub-sfn
+    if (parameters?.StateMachineArn) return parameters.StateMachineArn;
+    
+    return null;
+}

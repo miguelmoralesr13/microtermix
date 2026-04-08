@@ -50,7 +50,7 @@ function AppContent() {
     if (state.activeView === 'git' && gitActiveTab) return [gitActiveTab];
     return [];
   }, [state.activeView, gitActiveTab]);
-  
+
   useGitWatcher(pathsToWatch);
 
   React.useEffect(() => {
@@ -88,9 +88,9 @@ function AppContent() {
   // Purge phantom processes only once at mount, not on every re-render.
   React.useEffect(() => {
     if (!isStandalone) {
-        invoke('kill_all_services').catch(console.error);
+      invoke('kill_all_services').catch(console.error);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
@@ -114,7 +114,7 @@ function AppContent() {
             ...state.projects.map((p) => p.path as string),
             ...(config.allProjectPaths || [])
           ]));
-          
+
           applyWorkspaceConfig(config, state.currentPath, allPotentialPaths);
 
           if (config.allProjectPaths && Array.isArray(config.allProjectPaths)) {
@@ -133,9 +133,9 @@ function AppContent() {
 
   if (isStandalone && standaloneUtility) {
     return (
-        <div className="w-full h-screen bg-slate-900 overflow-hidden relative">
-            <UtilityRenderer view={standaloneUtility} />
-        </div>
+      <div className="w-full h-screen bg-slate-900 overflow-hidden relative">
+        <UtilityRenderer view={standaloneUtility} />
+      </div>
     );
   }
 
@@ -219,17 +219,17 @@ function useLinuxClipboardFix() {
       const key = e.key.toLowerCase();
       // Ctrl+Shift+Z → redo (alternative to Ctrl+Y)
       const cmd = (e.shiftKey && key === 'z') ? 'redo' : EDIT_SHORTCUT_MAP[key];
-      
+
       if (cmd) {
         // Prevent double trigger if we are in an input/textarea
         const active = document.activeElement;
         const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
-        
+
         if (isInput && cmd === 'paste') {
           // Let the browser handle native paste in inputs
           return;
         }
-        
+
         document.execCommand(cmd);
       }
     };

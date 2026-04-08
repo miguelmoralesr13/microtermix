@@ -167,7 +167,10 @@ export const useApiGatewayStore = create<ApiGatewayState & ApiGatewayActions>()(
 
                 invokeEndpoint: async (req) => {
                     const rustCreds = getRustCreds();
-                    if (!rustCreds) return;
+                    if (!rustCreds) {
+                        set({ error: "No se detectaron credenciales de AWS activas. Por favor, carga tus credenciales en el panel principal.", loadingInvoke: false });
+                        return;
+                    }
 
                     set({ loadingInvoke: true, error: null });
                     try {

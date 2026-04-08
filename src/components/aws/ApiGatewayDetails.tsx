@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { useApiGatewayStore, RestApiResource, HttpApiRoute } from '../../stores/apiGatewayStore';
+import React, { useState, useEffect } from 'react';
+import { useApiGatewayStore } from '../../stores/apiGatewayStore';
 import { Badge } from '../ui/badge';
 import { Loader2, FileJson, X, Download, Copy, CheckCircle2, Server, Zap, ListTree, RefreshCw } from 'lucide-react';
 import SwaggerUI from 'swagger-ui-react';
@@ -8,97 +8,10 @@ import { Button } from '../ui/button';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import { ApiTreeItem } from './ApiTreeItem';
+import { ApiResourcesTree } from './ApiResourcesTree';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { useApiResources, useApiStages, apigwKeys } from '../../hooks/queries/useApiGatewayQueries';
+import { useApiStages, apigwKeys } from '../../hooks/queries/useApiGatewayQueries';
 import { useQueryClient } from '@tanstack/react-query';
-
-interface ApiTreeNode {
-    segment: string;
-    fullPath: string;
-    methods: string[];
-    children: Record<string, ApiTreeNode>;
-    resourceId?: string;
-    target?: string | null;
-}
-
-const buildRestTree = (resources: RestApiResource[]): ApiTreeNode => {
-    const root: ApiTreeNode = { segment: '/', fullPath: '/', methods: [], children: {} };
-    resources.forEach(res => {
-        if (res.path === '/') {
-            root.resourceId = res.id;
-            root.methods = res.methods;
-            return;
-        }
-        const segments = res.path.split('/').filter(Boolean);
-        let current = root;
-        let currentPath = '';
-        segments.forEach((seg, i) => {
-            currentPath += '/' + seg;
-            if (!current.children[seg]) {
-                current.children[seg] = { segment: seg, fullPath: currentPath, methods: [], children: {} };
-            }
-            current = current.children[seg];
-            if (i === segments.length - 1) {
-                current.resourceId = res.id;
-                current.methods = res.methods;
-            }
-        });
-    });
-    return root;
-};
-
-const buildHttpTree = (routes: HttpApiRoute[]): ApiTreeNode => {
-    const root: ApiTreeNode = { segment: '/', fullPath: '/', methods: [], children: {} };
-    routes.forEach(route => {
-        let method = "ANY";
-        let pathStr = route.route_key;
-
-        if (route.route_key.includes(' ')) {
-            const parts = route.route_key.split(' ');
-            method = parts[0];
-            pathStr = parts.slice(1).join(' ');
-        } else if (route.route_key === '$default') {
-            method = "ANY";
-            pathStr = "$default";
-        }
-
-        if (pathStr === '/' || pathStr === '$default') {
-            if (pathStr === '$default') {
-                if (!root.children['$default']) {
-                    root.children['$default'] = { segment: '$default', fullPath: '$default', methods: [], children: {} };
-                }
-                root.children['$default'].methods.push(method);
-                root.children['$default'].resourceId = route.route_id;
-                root.children['$default'].target = route.target;
-            } else {
-                root.methods.push(method);
-                root.resourceId = route.route_id;
-                root.target = route.target;
-            }
-            return;
-        }
-
-        const segments = pathStr.split('/').filter(Boolean);
-        let current = root;
-        let currentPath = '';
-        segments.forEach((seg, i) => {
-            currentPath += '/' + seg;
-            if (!current.children[seg]) {
-                current.children[seg] = { segment: seg, fullPath: currentPath, methods: [], children: {} };
-            }
-            current = current.children[seg];
-            if (i === segments.length - 1) {
-                if (!current.methods.includes(method)) {
-                    current.methods.push(method);
-                }
-                current.resourceId = route.route_id;
-                current.target = route.target;
-            }
-        });
-    });
-    return root;
-};
 
 export const ApiGatewayDetails: React.FC = () => {
     const {
@@ -108,7 +21,6 @@ export const ApiGatewayDetails: React.FC = () => {
     } = useApiGatewayStore();
 
     const queryClient = useQueryClient();
-    const { data: resources, isLoading: isLoadingResources, error: errorResources } = useApiResources(selectedApi?.id, selectedApi?.type);
     const { data: stagesData, isLoading: isLoadingStages } = useApiStages(selectedApi?.id, selectedApi?.type === 'rest');
 
     const [showSwagger, setShowSwagger] = useState(false);
@@ -193,15 +105,6 @@ export const ApiGatewayDetails: React.FC = () => {
         }
     };
 
-    const tree = useMemo(() => {
-        if (!selectedApi || !resources) return null;
-        if (selectedApi.type === 'rest') {
-            return buildRestTree(resources as RestApiResource[]);
-        } else {
-            return buildHttpTree(resources as HttpApiRoute[]);
-        }
-    }, [selectedApi, resources]);
-
     const handleRefresh = () => {
         if (selectedApi) {
             queryClient.invalidateQueries({ queryKey: apigwKeys.details(selectedApi.id) });
@@ -221,7 +124,7 @@ export const ApiGatewayDetails: React.FC = () => {
         );
     }
 
-    const isLoading = isLoadingResources || isLoadingStages;
+    const isLoading = isLoadingStages;
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden bg-slate-950/30">
@@ -340,11 +243,6 @@ export const ApiGatewayDetails: React.FC = () => {
                                 <FileJson size={48} className="text-slate-700 mb-2" />
                                 <h4 className="text-white text-lg font-medium">Previsualización no disponible</h4>
                                 <p className="text-slate-400">Error al cargar la especificación OpenAPI / Swagger.</p>
-                                {errorResources && (
-                                    <div className="bg-red-950/40 border border-red-900/50 text-red-300 p-3 rounded-md text-xs mt-2 text-left font-mono break-all w-full overflow-y-auto max-h-40">
-                                        {String(errorResources)}
-                                    </div>
-                                )}
                                 <Button variant="outline" className="mt-4" onClick={() => setShowSwagger(false)}>Cerrar</Button>
                             </div>
                         )}
@@ -359,19 +257,13 @@ export const ApiGatewayDetails: React.FC = () => {
                         <Loader2 className="animate-spin mb-4" size={32} />
                         <p>Cargando árbol de recursos...</p>
                     </div>
-                ) : !tree ? (
-                    <div className="flex flex-col items-center justify-center p-8 text-slate-500">
-                        No se encontraron endpoints o rutas para esta API.
-                    </div>
                 ) : (
                     <div className="bg-slate-900/30 border border-slate-800/50 rounded-xl overflow-hidden shadow-xl max-w-5xl mx-auto">
                         <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
                             <span className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">HTTP Endpoints & Integrations</span>
                             <span className="text-[10px] text-slate-600 font-mono italic">Selecciona un método para ver detalles</span>
                         </div>
-                        <div className="p-4 bg-slate-900/20">
-                            <ApiTreeItem node={tree} />
-                        </div>
+                        <ApiResourcesTree />
                     </div>
                 )}
             </div>

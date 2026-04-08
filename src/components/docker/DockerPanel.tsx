@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useDockerStore } from '@/stores/dockerStore';
-import { useDockerContainers, useDockerImages, useDockerVolumes } from '@/hooks/useDocker';
+import { useDockerContainers, useDockerImages, useDockerVolumes, useStartDocker } from '@/hooks/useDocker';
 import { ContainerList } from './ContainerList';
 import { NetworkList } from './NetworkList';
 import { ContainerFileExplorer } from './ContainerFileExplorer';
@@ -84,7 +84,8 @@ export const DockerPanel: React.FC = () => {
         activeServiceId, setActiveServiceId,
         bottomPanelHeight, setBottomPanelHeight
     } = useDockerStore();
-    const { isFetching, isLoading, refetch } = useDockerContainers();
+    const { isFetching, isLoading, refetch, error } = useDockerContainers();
+    const startDocker = useStartDocker();
 
     const containerRef = useRef<HTMLDivElement>(null);
     const draggingRef = useRef(false);
@@ -183,10 +184,58 @@ export const DockerPanel: React.FC = () => {
 
             {/* Main Area (Top Panel) */}
             <div className="flex-1 overflow-hidden flex flex-col">
-                {activeTab === 'containers' && <ContainerList />}
-                {activeTab === 'images' && <ImageList />}
-                {activeTab === 'volumes' && <VolumeList />}
-                {activeTab === 'networks' && <NetworkList />}
+                {error ? (
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950/50">
+                        <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-6 border border-blue-500/20">
+                            <SiDocker size={32} className={cn("text-blue-500", startDocker.isPending && "animate-pulse")} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-100 mb-2">Docker no está disponible</h3>
+                        <p className="text-xs text-slate-500 max-w-sm mb-8 leading-relaxed">
+                            No se ha podido conectar al daemon de Docker. Asegúrate de que tu gestor (Docker Desktop, OrbStack, Rancher Desktop o Colima) esté iniciado correctamente.
+                        </p>
+                        
+                        <div className="flex flex-col gap-3 w-64">
+                            <Button 
+                                onClick={() => startDocker.mutate()}
+                                disabled={startDocker.isPending}
+                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold h-10 gap-2 shadow-lg shadow-blue-900/20"
+                            >
+                                {startDocker.isPending ? (
+                                    <>
+                                        <RefreshCw size={14} className="animate-spin" />
+                                        Iniciando Docker...
+                                    </>
+                                ) : (
+                                    <>
+                                        <SiDocker size={14} />
+                                        Iniciar Docker Manager
+                                    </>
+                                )}
+                            </Button>
+                            
+                            <Button 
+                                variant="outline" 
+                                onClick={() => refetch()}
+                                className="border-slate-800 text-slate-400 hover:text-white h-10 gap-2"
+                            >
+                                <RefreshCw size={14} /> Reintentar conexión
+                            </Button>
+                        </div>
+                        
+                        {startDocker.isError && (
+                            <p className="mt-4 text-[10px] text-red-400 font-mono italic">
+                                Fallo al intentar abrir: {String(startDocker.error)}
+                            </p>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        {activeTab === 'containers' && <ContainerList />}
+                        {activeTab === 'images' && <ImageList />}
+                        {activeTab === 'volumes' && <VolumeList />}
+                        {activeTab === 'networks' && <NetworkList />}
+                    </>
+                )}
             </div>
 
             {/* Bottom Panel (Integrated Terminal/Logs) */}

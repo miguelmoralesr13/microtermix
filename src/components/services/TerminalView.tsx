@@ -133,10 +133,19 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             }
         });
 
+        let isDisposed = false;
+
         searchAddon.activate(term as Parameters<SearchAddon['activate']>[0]);
         searchAddonRef.current = searchAddon;
         term.open(terminalRef.current);
-        fitAddon.fit();
+        
+        // Use requestAnimationFrame for the initial fit to ensure renderer is ready
+        requestAnimationFrame(() => {
+            if (!isDisposed && terminalRef.current && terminalRef.current.offsetWidth > 0) {
+                try { fitAddon.fit(); } catch (_) { }
+            }
+        });
+
         xtermRef.current = term;
 
         term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
@@ -194,7 +203,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         }
 
         const resizeObserver = new ResizeObserver(() => {
-            if (terminalRef.current && terminalRef.current.offsetWidth > 0) {
+            // Only fit if the element is visible and we haven't disposed yet
+            if (!isDisposed && terminalRef.current && terminalRef.current.offsetParent !== null) {
                 try { 
                     fitAddon.fit();
                     // Sync backend PTY after fit
@@ -221,6 +231,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         setTimeout(() => term.focus(), 100);
 
         return () => {
+            isDisposed = true;
             resizeObserver.disconnect();
             searchAddonRef.current = null;
             xtermRef.current = null;

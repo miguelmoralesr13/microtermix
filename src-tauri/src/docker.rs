@@ -13,6 +13,66 @@ pub struct DockerContainer {
 }
 
 #[tauri::command]
+pub async fn start_docker() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let apps = ["Docker", "OrbStack", "Rancher Desktop"];
+        let mut last_err = String::new();
+        
+        for app in apps {
+            let app_path = format!("/Applications/{}.app", app);
+            if std::path::Path::new(&app_path).exists() {
+                let mut cmd = Command::new("open");
+                cmd.args(["-a", app]);
+                if let Ok(output) = cmd.output() {
+                    if output.status.success() {
+                        return Ok(());
+                    } else {
+                        last_err = String::from_utf8_lossy(&output.stderr).to_string();
+                    }
+                }
+            }
+        }
+        
+        // If none of the .app exists, maybe it's colima or something else
+        let mut cmd = Command::new("colima");
+        cmd.arg("start");
+        if let Ok(status) = cmd.status() {
+            if status.success() {
+                return Ok(());
+            }
+        }
+
+        if last_err.is_empty() {
+            Err("No se detectó Docker Desktop, OrbStack o Rancher Desktop en /Applications.".to_string())
+        } else {
+            Err(last_err)
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", "Docker Desktop"]);
+        cmd.output().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        // Try systemd
+        let mut cmd = Command::new("systemctl");
+        cmd.args(["start", "docker"]);
+        if let Ok(status) = cmd.status() {
+            if status.success() {
+                return Ok(());
+            }
+        }
+        Err("Could not start docker service (systemctl failed)".to_string())
+    }
+}
+
+#[tauri::command]
 pub fn docker_ps() -> Result<Vec<DockerContainer>, String> {
     let mut cmd = Command::new("docker");
     cmd.args(["ps", "-a", "--format", "{{json .}}"]);

@@ -6,7 +6,6 @@ import {
     Server, Activity, Globe, FolderOpen, FlaskConical, 
     Network, Package, Ghost, Cloud, Regex,
     ChevronUp, ChevronDown, ShieldAlert, Terminal, Palette, Code, Settings,
-    LayoutDashboard
 } from 'lucide-react';
 import { 
     SiSonar, SiGit, SiJira, 
