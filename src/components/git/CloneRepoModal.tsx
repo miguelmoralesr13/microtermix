@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Github, Gitlab, Star, Download, Search, Lock, Globe, RefreshCw, AlertTriangle, FolderGit2, ExternalLink } from 'lucide-react';
+import { X, Github, Gitlab, Star, Download, Search, Lock, Globe, RefreshCw, AlertTriangle, AlertCircle, FolderGit2, ExternalLink } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useGitStore, type CloneFavorite } from '../../stores/gitStore';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { fetchUserGithubRepos, searchGithubRepos, type GithubRepo } from '../../services/githubApi';
+import { fetchUserGithubRepos, searchGithubRepos, fetchUserOrganizations, fetchOrgRepos, type GithubRepo, type GithubOrg } from '../../services/githubApi';
 import { fetchUserGitlabProjects, searchGitlabProjects, type GitlabProject } from '../../services/gitlabApi';
+import { cn } from '../../lib/utils';
 
 interface CloneRepoModalProps {
     onClose: () => void;
@@ -21,6 +22,7 @@ interface NormalizedRepo {
     language: string | null;
     stars: number;
     provider: 'github' | 'gitlab';
+    visibility?: string;
 }
 
 function normalizeGithubRepo(r: GithubRepo): NormalizedRepo {
@@ -35,6 +37,7 @@ function normalizeGithubRepo(r: GithubRepo): NormalizedRepo {
         language: r.language,
         stars: r.stargazers_count,
         provider: 'github',
+        visibility: r.visibility,
     };
 }
 
@@ -61,6 +64,12 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
     const removeCloneFavorite = useGitStore(s => s.removeCloneFavorite);
 
     const [selectedAccountId, setSelectedAccountId] = useState<string>(accounts[0]?.id ?? '');
+    
+    // Debug accounts list
+    useEffect(() => {
+        console.log('[GITHUB_DEBUG] Accounts in store:', accounts.map(a => ({ id: a.id, alias: a.alias, provider: a.provider })));
+    }, [accounts]);
+
     const [search, setSearch] = useState('');
     const [repos, setRepos] = useState<NormalizedRepo[]>([]);
     const [loading, setLoading] = useState(false);
@@ -68,6 +77,9 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
     const [cloningId, setCloningId] = useState<string | null>(null);
     const [clonedIds, setClonedIds] = useState<Set<string>>(new Set());
     const [cloneTargetName, setCloneTargetName] = useState<string>('');
+    const [manualRepoStr, setManualRepoStr] = useState<string>('');
+    const [orgs, setOrgs] = useState<GithubOrg[]>([]);
+    const [selectedOrg, setSelectedOrg] = useState<string>(''); // '' means personal repos
     const searchRef = useRef<HTMLInputElement>(null);
 
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -79,9 +91,14 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
         setRepos([]);
         try {
             if (selectedAccount.provider === 'github') {
-                const data = query
-                    ? await searchGithubRepos(selectedAccount.url, selectedAccount.token, query)
-                    : await fetchUserGithubRepos(selectedAccount.url, selectedAccount.token);
+                let data: GithubRepo[] = [];
+                if (query) {
+                    data = await searchGithubRepos(selectedAccount.url, selectedAccount.token, query);
+                } else if (selectedOrg) {
+                    data = await fetchOrgRepos(selectedAccount.url, selectedAccount.token, selectedOrg);
+                } else {
+                    data = await fetchUserGithubRepos(selectedAccount.url, selectedAccount.token);
+                }
                 setRepos(data.map(normalizeGithubRepo));
             } else {
                 const data = query
@@ -93,6 +110,24 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
             setError(e.message || 'Error fetching repositories');
         } finally {
             setLoading(false);
+            // Si cargamos 0 repos pero el perfil funciona, es casi seguro un tema de permisos
+            if (repos.length === 0 && !error && !query && !selectedOrg) {
+                // El log ya nos dirá los scopes
+            }
+        }
+    }, [selectedAccount, selectedOrg]);
+
+    const loadOrgs = useCallback(async () => {
+        if (!selectedAccount || selectedAccount.provider !== 'github') {
+            setOrgs([]);
+            return;
+        }
+        try {
+            const data = await fetchUserOrganizations(selectedAccount.url, selectedAccount.token);
+            console.log(`[GITHUB_DEBUG] Organizations found: ${data.length}`, data.map(o => o.login));
+            setOrgs(data);
+        } catch (e) {
+            console.error('[GITHUB_DEBUG] Error fetching orgs', e);
         }
     }, [selectedAccount]);
 
@@ -100,12 +135,24 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
         setSearch('');
         setRepos([]);
         setError(null);
-        if (selectedAccount) loadRepos();
+        setSelectedOrg('');
+        if (selectedAccount) {
+            loadRepos();
+            loadOrgs();
+        }
     }, [selectedAccountId]);
+
+    useEffect(() => {
+        if (selectedAccount && !search) {
+            loadRepos();
+        }
+    }, [selectedOrg]);
 
     const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             const q = search.trim();
+            console.log('[GITHUB_DEBUG] Triggering search for:', q);
+            // If we have a query, we perform a search. Otherwise we reload the default list.
             loadRepos(q || undefined);
         }
     };
@@ -127,7 +174,7 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
         }
     };
 
-    const handleClone = async (repo: NormalizedRepo, targetName?: string) => {
+    const handleClone = async (repo: Partial<NormalizedRepo> & { cloneUrl: string, id: string, name: string }, targetName?: string) => {
         if (!state.currentPath) return;
         setCloningId(repo.id);
         setError(null);
@@ -149,11 +196,32 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
             }
             setClonedIds(prev => new Set(prev).add(repo.id));
             setCloneTargetName('');
+            setManualRepoStr('');
         } catch (e: any) {
             setError(e.message);
         } finally {
             setCloningId(null);
         }
+    };
+
+    const handleManualClone = async () => {
+        const val = manualRepoStr.trim();
+        if (!val) return;
+
+        let cloneUrl = val;
+        let name = val.split('/').pop()?.replace('.git', '') || 'repo';
+        let id = val;
+
+        // If it looks like owner/repo, complete the URL for GitHub
+        if (!val.startsWith('http') && !val.startsWith('git@')) {
+            if (selectedAccount?.provider === 'github') {
+                cloneUrl = `https://github.com/${val}.git`;
+                id = val;
+                name = val.split('/').pop() || val;
+            }
+        }
+
+        handleClone({ id, name, cloneUrl }, cloneTargetName);
     };
 
     const isFav = (id: string) => cloneFavorites.some(f => f.id === id);
@@ -208,26 +276,53 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
 
                 {/* Account selector + Search */}
                 <div className="px-5 py-3 border-b border-slate-800 shrink-0 space-y-2">
-                    <div className="flex items-center gap-2">
-                        <label className="text-xs text-slate-500 shrink-0">Cuenta:</label>
-                        <select
-                            value={selectedAccountId}
-                            onChange={e => setSelectedAccountId(e.target.value)}
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon"
-                        >
-                            {accounts.map(a => (
-                                <option key={a.id} value={a.id}>
-                                    [{a.provider === 'github' ? 'GitHub' : 'GitLab'}] {a.alias}
-                                </option>
-                            ))}
-                        </select>
-                        {selectedAccount && (
-                            <span className="shrink-0">
-                                {selectedAccount.provider === 'github'
-                                    ? <Github size={15} className="text-slate-400" />
-                                    : <Gitlab size={15} className="text-orange-400" />
-                                }
-                            </span>
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <label className="text-xs text-slate-500 shrink-0 w-12">Cuenta:</label>
+                            <select
+                                value={selectedAccountId}
+                                onChange={e => setSelectedAccountId(e.target.value)}
+                                className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon"
+                            >
+                                {accounts.map(a => (
+                                    <option key={a.id} value={a.id}>
+                                        [{a.provider === 'github' ? 'GitHub' : 'GitLab'}] {a.alias} ({a.url.replace('https://', '')})
+                                    </option>
+                                ))}
+                            </select>
+                            {selectedAccount && (
+                                <span className="shrink-0">
+                                    {selectedAccount.provider === 'github'
+                                        ? <Github size={15} className="text-slate-400" />
+                                        : <Gitlab size={15} className="text-orange-400" />
+                                    }
+                                </span>
+                            )}
+                        </div>
+
+                        {selectedAccount?.provider === 'github' && orgs.length > 0 && (
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs text-slate-500 shrink-0 w-12">Filtrar por:</label>
+                                <select
+                                    value={selectedOrg}
+                                    onChange={e => setSelectedOrg(e.target.value)}
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon"
+                                >
+                                    <option value="">[Todo] Mis Repos y Colaboraciones</option>
+                                    {orgs.map(org => (
+                                        <option key={org.login} value={org.login}>
+                                            [Org] {org.login}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button 
+                                    onClick={() => loadRepos()}
+                                    className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors"
+                                    title="Refrescar lista"
+                                >
+                                    <RefreshCw size={12} className={cn(loading && "animate-spin")} />
+                                </button>
+                            </div>
                         )}
                     </div>
 
@@ -255,15 +350,25 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <label className="text-xs text-slate-500 shrink-0">Nombre:</label>
-                        <input
-                            type="text"
-                            value={cloneTargetName}
-                            onChange={e => setCloneTargetName(e.target.value)}
-                            placeholder="nombre-carpeta (opcional, por defecto: nombre del repo)"
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
-                        />
+                        <label className="text-xs text-slate-500 shrink-0">Path/URL:</label>
+                        <div className="relative flex-1">
+                            <input
+                                type="text"
+                                value={manualRepoStr}
+                                onChange={e => setManualRepoStr(e.target.value)}
+                                placeholder="usuario/repo o URL .git completa"
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-microtermix-neon"
+                            />
+                        </div>
+                        <button
+                            onClick={handleManualClone}
+                            disabled={!manualRepoStr.trim() || !!cloningId}
+                            className="px-3 py-1.5 rounded bg-microtermix-neon/10 hover:bg-microtermix-neon/20 border border-microtermix-neon/30 text-microtermix-neon text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                            {cloningId === manualRepoStr ? <RefreshCw size={12} className="animate-spin" /> : 'Clonar Directo'}
+                        </button>
                     </div>
+
                     {state.currentPath && (
                         <p className="text-[10px] text-slate-600 font-mono" title={state.currentPath}>
                             <span className="text-slate-700">en: </span>
@@ -278,7 +383,39 @@ export const CloneRepoModal: React.FC<CloneRepoModalProps> = ({ onClose }) => {
                     {error && (
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-red-900/20 border border-red-900/40 text-red-400 text-xs">
                             <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                            <span>{error}</span>
+                            <div className="flex-1">
+                                <p className="font-bold mb-1">Error de Conexión</p>
+                                <p>{error}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loading && !error && repos.length === 0 && !search && (
+                        <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-900/20 border border-amber-900/40 text-amber-200 text-xs">
+                            <AlertCircle size={18} className="text-amber-500 shrink-0" />
+                            <div className="space-y-2">
+                                <p className="font-bold text-amber-400 flex items-center gap-1.5">
+                                    No se encontraron repositorios
+                                </p>
+                                <p className="text-slate-300 leading-relaxed">
+                                    Tu token está conectado correctamente, pero **GitHub no devuelve ningún repositorio**. Esto suele pasar por:
+                                </p>
+                                <ul className="list-disc pl-4 space-y-1 text-slate-400">
+                                    <li>Falta el permiso <code className="text-amber-500">repo</code> en el Token.</li>
+                                    <li>Falta el permiso <code className="text-amber-500">read:org</code> para ver repositorios de empresa.</li>
+                                    <li>El Token necesita ser **Autorizado vía SSO** por tu organización.</li>
+                                </ul>
+                                <div className="pt-1">
+                                    <a 
+                                        href="https://github.com/settings/tokens" 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="text-microtermix-neon hover:underline font-bold"
+                                    >
+                                        Ir a GitHub para revisar permisos →
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -410,10 +547,24 @@ const RepoCard: React.FC<RepoCardProps> = ({ repo, isFav, isCloning, isCloned, o
                 <div className="flex items-center gap-1.5 min-w-0">
                     <span className="font-semibold text-slate-200 text-xs shrink-0 truncate max-w-[200px]">{repoName}</span>
                     {orgName && <span className="text-[10px] text-slate-500 truncate shrink min-w-0">{orgName}/</span>}
-                    {repo.isPrivate
-                        ? <Lock size={10} className="text-slate-500 shrink-0" />
-                        : <Globe size={10} className="text-slate-600 shrink-0" />
-                    }
+                    
+                    {repo.isPrivate ? (
+                        <div className="flex items-center gap-1">
+                            <Lock size={10} className="text-amber-500 shrink-0" />
+                            <span className="text-[9px] font-bold text-amber-600/80 uppercase tracking-tighter">Private</span>
+                        </div>
+                    ) : repo.visibility === 'internal' ? (
+                        <div className="flex items-center gap-1">
+                            <Lock size={10} className="text-blue-400 shrink-0" />
+                            <span className="text-[9px] font-bold text-blue-500/80 uppercase tracking-tighter">Internal</span>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1">
+                            <Globe size={10} className="text-slate-600 shrink-0" />
+                            <span className="text-[9px] font-bold text-slate-500/80 uppercase tracking-tighter">Public</span>
+                        </div>
+                    )}
+
                     {repo.language && (
                         <span className="text-[10px] text-slate-500 bg-slate-700/60 px-1.5 py-0.5 rounded shrink-0">{repo.language}</span>
                     )}

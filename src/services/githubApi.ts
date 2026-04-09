@@ -17,11 +17,145 @@ export interface GithubRepo {
     stargazers_count: number;
     updated_at: string;
     fork: boolean;
+    owner: {
+        login: string;
+        avatar_url: string;
+    };
+    visibility?: string;
+    permissions?: {
+        pull: boolean;
+        push: boolean;
+        admin: boolean;
+    };
+}
+
+export interface GithubUser {
+    login: string;
+    id: number;
+    avatar_url: string;
+}
+
+export async function fetchUserGithubProfile(apiUrl: string, token: string): Promise<GithubUser> {
+    const base = apiUrl || GITHUB_API_BASE;
+    const response = await fetch(`${base}/user`, {
+        headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${token}`,
+        },
+    });
+    if (!response.ok) {
+        console.error('[GITHUB_DEBUG] Error fetching profile:', response.status, response.statusText);
+        throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json();
+    const scopes = response.headers.get('X-OAuth-Scopes');
+    console.log('[GITHUB_DEBUG] Profile fetched:', data.login, '| Scopes:', scopes || 'no detected');
+    return data;
 }
 
 export async function fetchUserGithubRepos(apiUrl: string, token: string): Promise<GithubRepo[]> {
+    console.log('[GITHUB_DEBUG] fetchUserGithubRepos starting...');
     const base = apiUrl || GITHUB_API_BASE;
-    const response = await fetch(`${base}/user/repos?type=all&sort=updated&per_page=50`, {
+    let allRepos: GithubRepo[] = [];
+    let page = 1;
+    let hasMore = true;
+
+    try {
+        const user = await fetchUserGithubProfile(apiUrl, token);
+        const myLogin = user.login.toLowerCase();
+
+        while (hasMore && page <= 3) {
+            const url = `${base}/user/repos?sort=pushed&per_page=100&page=${page}`;
+            console.log(`[GITHUB_DEBUG] Fetching full URL: ${url}`);
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Authorization': `token ${token}`,
+                },
+            });
+            
+            if (!response.ok) {
+                const scopes = response.headers.get('X-OAuth-Scopes');
+                console.error('[GITHUB_DEBUG] Page fetch failed:', response.status, response.statusText, '| Scopes:', scopes);
+                const errBody = await response.text().catch(() => '');
+                console.error('[GITHUB_DEBUG] Error body:', errBody);
+                break;
+            }
+            
+            const data: GithubRepo[] = await response.json();
+            console.log(`[GITHUB_DEBUG] Page ${page} RAW count: ${data.length}`);
+            if (data.length > 0) {
+                console.log('[GITHUB_DEBUG] SAMPLE REPO (first of page):', data[0].full_name, data[0]);
+            } else {
+                console.warn('[GITHUB_DEBUG] WARNING: GitHub returned zero repos for this account.');
+            }
+            
+            if (data.length === 0) {
+                hasMore = false;
+            } else {
+                // Debug log for filtering
+                const relevant = data.filter(r => {
+                    const isPrivate = r.private;
+                    const isInternal = r.visibility === 'internal';
+                    const isOwner = r.owner.login.toLowerCase() === myLogin;
+                    const hasPush = r.permissions?.push === true;
+                    
+                    const keep = isPrivate || isInternal || isOwner || hasPush;
+                    
+                    if (!keep && page === 1) {
+                        // Log a few ignored ones only for the first page to avoid spam
+                        console.log(`[GITHUB_DEBUG] Ignoring public non-owned/non-collab repo: ${r.full_name}`, { isPrivate, isInternal, isOwner, hasPush });
+                    }
+                    
+                    return keep;
+                });
+                
+                console.log(`[GITHUB_DEBUG] Kept ${relevant.length} relevant repos on page ${page}`);
+                allRepos = [...allRepos, ...relevant];
+                
+                const link = response.headers.get('Link');
+                if (!link || !link.includes('rel="next"')) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('[GITHUB_DEBUG] Error in fetchUserGithubRepos:', e);
+        throw e;
+    }
+
+    console.log(`[GITHUB_DEBUG] Returning total ${allRepos.length} repos`);
+    return allRepos;
+}
+
+export interface GithubOrg {
+    login: string;
+    id: number;
+    avatar_url: string;
+    description: string;
+}
+
+export async function fetchUserOrganizations(apiUrl: string, token: string): Promise<GithubOrg[]> {
+    const base = apiUrl || GITHUB_API_BASE;
+    const response = await fetch(`${base}/user/orgs`, {
+        headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${token}`,
+        },
+    });
+    if (!response.ok) {
+        const err = await response.text().catch(() => '');
+        console.error('[GITHUB_DEBUG] Orgs fetch failed:', response.status, err);
+        throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+    }
+    return response.json();
+}
+
+export async function fetchOrgRepos(apiUrl: string, token: string, org: string): Promise<GithubRepo[]> {
+    const base = apiUrl || GITHUB_API_BASE;
+    const response = await fetch(`${base}/orgs/${org}/repos?sort=updated&per_page=100`, {
         headers: {
             'Accept': 'application/vnd.github.v3+json',
             'Authorization': `token ${token}`,
@@ -33,15 +167,59 @@ export async function fetchUserGithubRepos(apiUrl: string, token: string): Promi
 
 export async function searchGithubRepos(apiUrl: string, token: string, query: string): Promise<GithubRepo[]> {
     const base = apiUrl || GITHUB_API_BASE;
-    const response = await fetch(`${base}/search/repositories?q=${encodeURIComponent(query)}&per_page=30`, {
-        headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            'Authorization': `token ${token}`,
-        },
-    });
-    if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
-    const data = await response.json();
-    return data.items as GithubRepo[];
+    
+    try {
+        const user = await fetchUserGithubProfile(apiUrl, token);
+        const myLogin = user.login.toLowerCase();
+        
+        // Buscamos repositorios donde el usuario tenga acceso (privados o públicos donde colabora)
+        // El parámetro 'q' puede incluir 'user:LOGIN' para buscar en sus repos, 
+        // pero queremos buscar en TODO a lo que tiene acceso. 
+        // Al estar autenticado, el search API devuelve privados donde tiene acceso.
+        // Añadimos 'user:LOGIN' opcionalmente o simplemente dejamos que el API filtre,
+        // pero el usuario pidió ignorar públicos ajenos.
+        
+        const response = await fetch(`${base}/search/repositories?q=${encodeURIComponent(query)}+user:${myLogin}&per_page=100`, {
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'Authorization': `token ${token}`,
+            },
+        });
+        
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+        const data = await response.json();
+        let items = data.items as GithubRepo[];
+        
+        // Aplicamos el mismo filtro de relevancia que en el listado general
+        return items.filter(r => 
+            r.private || 
+            r.visibility === 'internal' ||
+            r.owner.login.toLowerCase() === myLogin ||
+            r.permissions?.push === true
+        );
+    } catch (e) {
+        // Si falla la búsqueda filtrada por usuario (ej: el query es demasiado complejo), 
+        // intentamos búsqueda normal pero filtrando resultados finales.
+        const response = await fetch(`${base}/search/repositories?q=${encodeURIComponent(query)}&per_page=100`, {
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'Authorization': `token ${token}`,
+            },
+        });
+        if (!response.ok) throw new Error(`GitHub API Error: ${response.status} ${response.statusText}`);
+        const data = await response.json();
+        const items = data.items as GithubRepo[];
+        
+        const user = await fetchUserGithubProfile(apiUrl, token);
+        const myLogin = user.login.toLowerCase();
+        
+        return items.filter(r => 
+            r.private || 
+            r.visibility === 'internal' ||
+            r.owner.login.toLowerCase() === myLogin ||
+            r.permissions?.push === true
+        );
+    }
 }
 
 export interface GithubPR {
