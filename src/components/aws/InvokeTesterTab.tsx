@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Zap, GitBranch, Globe } from 'lucide-react';
 import { LambdaInvoker } from './LambdaInvoker';
 import { SfnInvoker } from './SfnInvoker';
 import { ApiInvoker } from './ApiInvoker';
 import { cn } from '@/lib/utils';
+import { useCwStore } from '../../stores/cwStore';
 
 type InvokerSubTab = 'lambda' | 'sfn' | 'api';
 
@@ -15,6 +16,14 @@ const SUB_TABS: { id: InvokerSubTab; label: string; icon: React.ReactNode }[] = 
 
 export function InvokeTesterTab() {
     const [subTab, setSubTab] = useState<InvokerSubTab>('lambda');
+    const { preloadedInvokerType } = useCwStore();
+
+    // Switch sub-tab when navigated from Lambda/SFN tabs
+    useEffect(() => {
+        if (preloadedInvokerType === 'lambda' || preloadedInvokerType === 'sfn') {
+            setSubTab(preloadedInvokerType);
+        }
+    }, [preloadedInvokerType]);
 
     return (
         <div className="flex flex-col h-full bg-slate-950">

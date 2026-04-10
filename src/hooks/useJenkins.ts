@@ -15,14 +15,14 @@ export function useJenkinsJobs() {
 }
 
 /** Hook to fetch children of a folder/multibranch */
-export function useJenkinsChildren(jobPath: string, enabled = false) {
+export function useJenkinsChildren(jobPath: string, enabled = false, live = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
     queryKey: ['jenkins', 'children', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetChildren(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: false,
+    refetchInterval: live ? 10_000 : false,
   });
 }
 
@@ -39,7 +39,7 @@ export function useJenkinsJobStatus(jobPath: string, enabled = false, live = fal
 }
 
 /** Hook to fetch build history */
-export function useJenkinsBuilds(jobPath: string, enabled = false) {
+export function useJenkinsBuilds(jobPath: string, enabled = false, live = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
@@ -47,6 +47,7 @@ export function useJenkinsBuilds(jobPath: string, enabled = false) {
     queryFn: () => api.jenkinsGetBuilds(config, jobPath),
     enabled: enabled && !!config.baseUrl,
     refetchInterval: (query) => {
+        if (live) return 10_000;
         const data = query.state.data;
         const building = Array.isArray(data) && data.some(b => b.building);
         return building ? 10_000 : 30_000;

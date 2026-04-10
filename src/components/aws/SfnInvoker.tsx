@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
     GitBranch, Play, Loader, CheckCircle, AlertTriangle,
     ExternalLink, FolderOpen, LayoutTemplate, Terminal,
@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn, formatAwsError } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useWorkspace, Project } from '../../context/WorkspaceContext';
+import { useCwStore } from '../../stores/cwStore';
 import { SfnHistory, SfnHistoryItem } from './sfnTypes';
 import {
     Dialog,
@@ -26,7 +27,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { Clock, Clock3, Copy, ArrowRightLeft, Database, Zap } from 'lucide-react';
+import { Clock, Clock3, Copy, ArrowRightLeft, Database, Zap, ScrollText, Settings2 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ const getRustCreds = () => {
 export function SfnInvoker() {
     const { state: { projects, currentPath } } = useWorkspace();
     const workspacePath = currentPath;
+    const { preloadedInvokerType, preloadedInvokerName, clearPreloadedInvoker, goToLogs, goToSfn } = useCwStore();
 
     const [selectedArn, setSelectedArn]     = useState<string | null>(null);
     const [machineSearch, setMachineSearch] = useState('');
@@ -86,6 +88,22 @@ export function SfnInvoker() {
     const { data: defData, isLoading: loadingDef } = useSfnDefinition(selectedArn);
 
     const definition = defData?.definition ?? null;
+
+    // Apply preloaded machine name from SFN/Logs navigation
+    useEffect(() => {
+        if (preloadedInvokerType !== 'sfn' || !preloadedInvokerName) return;
+        setMachineSearch(preloadedInvokerName);
+        clearPreloadedInvoker();
+    }, [preloadedInvokerType, preloadedInvokerName, clearPreloadedInvoker]);
+
+    // Auto-select when exactly one machine matches the search
+    useEffect(() => {
+        if (!machineSearch || machines.length === 0 || selectedArn) return;
+        const matches = machines.filter(m =>
+            m.name.toLowerCase().includes(machineSearch.toLowerCase())
+        );
+        if (matches.length === 1) handleSelectMachine(matches[0].arn);
+    }, [machines, machineSearch, selectedArn]);
 
     // Reset state when a different machine is selected
     const handleSelectMachine = (arn: string) => {
@@ -384,6 +402,26 @@ export function SfnInvoker() {
                                     </span>
                                 </div>
                             )}
+
+                            {/* Navigation buttons */}
+                            <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                                <button
+                                    onClick={() => goToLogs(
+                                        `/aws/vendedlogs/states/${selectedMachine.name}-Logs`
+                                    )}
+                                    className="flex items-center gap-1 px-2 py-1 rounded border border-slate-700 text-[10px] text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+                                    title="Ver logs en CloudWatch"
+                                >
+                                    <ScrollText size={11} /> Logs
+                                </button>
+                                <button
+                                    onClick={() => goToSfn(selectedMachine.name)}
+                                    className="flex items-center gap-1 px-2 py-1 rounded border border-microtermix-neon/30 text-[10px] text-microtermix-neon hover:bg-microtermix-neon/10 transition-all"
+                                    title="Ver ejecuciones y configuración"
+                                >
+                                    <Settings2 size={11} /> Config
+                                </button>
+                            </div>
 
                             {/* Sub-tab toggle */}
                             <div className="ml-auto flex items-center gap-0.5 bg-slate-800/60 rounded-lg p-0.5">

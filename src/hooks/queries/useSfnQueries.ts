@@ -37,9 +37,9 @@ export function useSfnDefinition(machineArn: string | null) {
     const credentials = useAwsStore(s => s.credentials);
     return useQuery({
         queryKey: [...sfnKeys.definition(machineArn || ''), credentials?.accessKeyId],
-        queryFn: () => invoke<{ definition: string, logGroupName: string | null }>('sfn_describe_state_machine', { 
-            credentials: getRustCreds(), 
-            machineArn 
+        queryFn: () => invoke<{ definition: string, logGroupName: string | null }>('sfn_describe_state_machine', {
+            credentials: getRustCreds(),
+            machineArn
         }),
         enabled: !!credentials && !!machineArn,
         staleTime: 10 * 60 * 1000,
@@ -48,27 +48,27 @@ export function useSfnDefinition(machineArn: string | null) {
 
 export function useSfnExecutions(machineArn: string | null, machineType?: string, logGroupName?: string | null) {
     const credentials = useAwsStore(s => s.credentials);
-    
+
     return useQuery({
         queryKey: [...sfnKeys.executions(machineArn || ''), credentials?.accessKeyId, logGroupName],
         queryFn: async () => {
             const creds = getRustCreds();
             const isExpress = machineType?.includes('EXPRESS');
-            
+
             if (isExpress && logGroupName) {
                 try {
-                    return await invoke<SfnExecution[]>('sfn_list_express_executions_from_logs', { 
-                        credentials: creds, 
-                        logGroup: logGroupName 
+                    return await invoke<SfnExecution[]>('sfn_list_express_executions_from_logs', {
+                        credentials: creds,
+                        logGroup: logGroupName
                     });
                 } catch (e) {
                     console.warn("Failed express logs fetch, falling back", e);
                 }
             }
-            
-            return await invoke<SfnExecution[]>('sfn_list_executions', { 
-                credentials: creds, 
-                machineArn 
+
+            return await invoke<SfnExecution[]>('sfn_list_executions', {
+                credentials: creds,
+                machineArn
             });
         },
         enabled: !!credentials && !!machineArn,
@@ -85,16 +85,16 @@ export function useSfnHistory(executionArn: string | null, machineType?: string,
             const isExpress = machineType?.includes('EXPRESS');
 
             if (isExpress && logGroupName) {
-                return await invoke<SfnStep[]>('sfn_get_express_execution_history_from_logs', { 
-                    credentials: creds, 
+                return await invoke<SfnStep[]>('sfn_get_express_execution_history_from_logs', {
+                    credentials: creds,
                     logGroup: logGroupName,
                     executionArn
                 });
             }
-            
-            return await invoke<SfnStep[]>('sfn_get_execution_history', { 
-                credentials: creds, 
-                executionArn 
+
+            return await invoke<SfnStep[]>('sfn_get_execution_history', {
+                credentials: creds,
+                executionArn
             });
         },
         enabled: !!credentials && !!executionArn,
@@ -105,10 +105,10 @@ export function useStartSfnExecution() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ machineArn, input }: { machineArn: string, input: string }) => {
-            return await invoke('sfn_start_execution', { 
-                credentials: getRustCreds(), 
-                machineArn, 
-                input 
+            return await invoke('sfn_start_execution', {
+                credentials: getRustCreds(),
+                machineArn,
+                input
             });
         },
         onSuccess: (_, variables) => {

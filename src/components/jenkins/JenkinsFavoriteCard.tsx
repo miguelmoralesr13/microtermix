@@ -104,8 +104,8 @@ export function JenkinsFavoriteCard({
     const isContainer = isMultibranch(currentJob) || isFolder(currentJob);
     const lb = currentJob.lastBuild;
 
-    const { data: children, isLoading: loadingChildren } = useJenkinsChildren(jobPath, expanded);
-    const { data: builds, isLoading: loadingBuilds } = useJenkinsBuilds(jobPath, expanded && !isContainer);
+    const { data: children, isLoading: loadingChildren } = useJenkinsChildren(jobPath, expanded, live);
+    const { data: builds, isLoading: loadingBuilds } = useJenkinsBuilds(jobPath, expanded && !isContainer, live);
 
     const triggerMutation = useJenkinsTriggerBuild();
     const abortMutation = useJenkinsAbortBuild();

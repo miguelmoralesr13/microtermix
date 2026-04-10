@@ -28,6 +28,8 @@ export interface SonarProjectLink {
     localAuditMode?: boolean;
     localAuditCommand?: string;
     localReportFile?: string;
+    propertiesFileName?: string;
+    autoSync?: boolean;
     [key: string]: any;
 }
 

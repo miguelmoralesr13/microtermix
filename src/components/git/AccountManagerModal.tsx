@@ -11,21 +11,44 @@ interface AccountManagerModalProps {
     onClose: () => void;
 }
 
-type VerifyState = 'idle' | 'loading' | { ok: true; username: string } | { ok: false; error: string };
+type VerifyState = 'idle' | 'loading' | { ok: true; username: string; detectedUrl: string } | { ok: false; error: string };
 
 const DEFAULT_URLS = {
     github: 'https://api.github.com',
     gitlab: 'https://gitlab.com',
 };
 
-async function verifyToken(provider: 'github' | 'gitlab', url: string, token: string): Promise<string> {
+async function verifyToken(provider: 'github' | 'gitlab', url: string, token: string): Promise<{ username: string; detectedUrl: string }> {
     if (provider === 'github') {
-        const res = await fetch(`${url || DEFAULT_URLS.github}/user`, {
-            headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
-        });
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const data = await res.json();
-        return data.login;
+        let base = url || DEFAULT_URLS.github;
+        // Strip trailing slash
+        if (base.endsWith('/')) base = base.slice(0, -1);
+
+        const tryUrl = async (apiUrl: string) => {
+            const res = await fetch(`${apiUrl}/user`, {
+                headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+            });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            return data.login;
+        };
+
+        try {
+            const username = await tryUrl(base);
+            return { username, detectedUrl: base };
+        } catch (e) {
+            // If it's not the default URL and failed, try appending /api/v3
+            if (base !== DEFAULT_URLS.github && !base.includes('/api/v3')) {
+                const altBase = `${base}/api/v3`;
+                try {
+                    const username = await tryUrl(altBase);
+                    return { username, detectedUrl: altBase };
+                } catch {
+                    throw e; // Throw original error if both fail
+                }
+            }
+            throw e;
+        }
     } else {
         const base = url || DEFAULT_URLS.gitlab;
         const res = await fetch(`${base}/api/v4/user`, {
@@ -33,7 +56,7 @@ async function verifyToken(provider: 'github' | 'gitlab', url: string, token: st
         });
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const data = await res.json();
-        return data.username;
+        return { username: data.username, detectedUrl: base };
     }
 }
 
@@ -86,8 +109,12 @@ export const AccountManagerModal: React.FC<AccountManagerModalProps> = ({ repoPa
     const handleVerify = async () => {
         setVerifyState('loading');
         try {
-            const username = await verifyToken(form.provider, form.url, form.token);
-            setVerifyState({ ok: true, username });
+            const result = await verifyToken(form.provider, form.url, form.token);
+            setVerifyState({ ok: true, username: result.username, detectedUrl: result.detectedUrl });
+            // Si se detectó una URL diferente (ej: se añadió /api/v3), actualizar el formulario
+            if (result.detectedUrl !== form.url) {
+                setForm(f => ({ ...f, url: result.detectedUrl }));
+            }
         } catch (e: any) {
             setVerifyState({ ok: false, error: e.message || 'Error desconocido' });
         }

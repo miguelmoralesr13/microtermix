@@ -160,7 +160,7 @@ export function EcsTab() {
         setSelectedClusterArn, setSelectedServiceArn
     } = useEcsStore();
     
-    const { goToLogs } = useCwStore();
+    const { goToLogs, preloadedEcsServiceName, clearPreloadedEcsServiceName } = useCwStore();
     const [search, setSearch] = useState('');
     const [detailTab, setDetailTab] = useState<'tasks' | 'config'>('tasks');
 
@@ -194,6 +194,25 @@ export function EcsTab() {
     } = useEcsTaskDefinition(detailTab === 'config' ? selectedService?.task_definition_arn : undefined);
 
     const combinedError = clusterError || serviceError || taskError;
+
+    // Consume preloaded service name from Logs tab navigation
+    useEffect(() => {
+        if (!preloadedEcsServiceName) return;
+        setSearch(preloadedEcsServiceName);
+        clearPreloadedEcsServiceName();
+        if (!selectedClusterArn && clusters.length > 0) {
+            setSelectedClusterArn(clusters[0].cluster_arn.toString());
+        }
+    }, [preloadedEcsServiceName, clearPreloadedEcsServiceName, selectedClusterArn, clusters, setSelectedClusterArn]);
+
+    // Auto-select service when services load and filter matches exactly one
+    useEffect(() => {
+        if (!search || services.length === 0 || selectedServiceArn) return;
+        const matches = services.filter(s =>
+            s.service_name.toLowerCase().includes(search.toLowerCase())
+        );
+        if (matches.length === 1) setSelectedServiceArn(matches[0].service_arn);
+    }, [services, search, selectedServiceArn, setSelectedServiceArn]);
 
     useEffect(() => {
         setDetailTab('tasks');

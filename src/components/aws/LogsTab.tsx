@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw, Star, X, Copy, Check, Filter, AlertTriangle, BarChart3 } from 'lucide-react';
+import { RefreshCw, Star, X, Copy, Check, Filter, AlertTriangle, BarChart3, Zap, GitBranch, Server, Globe, ExternalLink } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import {
@@ -13,7 +13,7 @@ import {
 } from '../../services/cloudwatchApi';
 import { usePersistedState } from './cwUtils';
 
-import { useCwStore } from '../../stores/cwStore';
+import { useCwStore, CwTab } from '../../stores/cwStore';
 import { useAwsStore } from '../../stores/awsStore';
 import { useLogGroups } from '../../hooks/queries/useAwsQueries';
 
@@ -190,10 +190,119 @@ const Sidebar = React.memo(({
     );
 });
 
+// ── Resource Detection ──────────────────────────────────────────────────────
+
+interface DetectedResource {
+    type: 'lambda' | 'step-function' | 'ecs' | 'api-gateway';
+    name: string;
+    tab: CwTab;
+    label: string;
+}
+
+function detectLogGroupResource(logGroup: string): DetectedResource | null {
+    if (!logGroup) return null;
+
+    // Lambda: /aws/lambda/{function-name}
+    if (logGroup.startsWith('/aws/lambda/')) {
+        const name = logGroup.replace('/aws/lambda/', '');
+        return { type: 'lambda', name, tab: 'lambda', label: 'Lambda' };
+    }
+
+    // Step Functions: /aws/vendedlogs/states/{name}  or  /aws/states/{name}
+    // Suffixes to strip: -Logs, -cloudwatch-Logs, -CloudWatch-Logs, etc.
+    if (logGroup.startsWith('/aws/vendedlogs/states/') || logGroup.startsWith('/aws/states/')) {
+        let name = logGroup
+            .replace('/aws/vendedlogs/states/', '')
+            .replace('/aws/states/', '');
+        // Strip any trailing -cloudwatch-Logs / -Logs variants (case-insensitive)
+        name = name.replace(/(?:-cloudwatch)?-logs$/i, '');
+        return { type: 'step-function', name, tab: 'step-functions', label: 'Step Function' };
+    }
+
+    // ECS / Fargate: /ecs/{name}  or  /aws/ecs/{name}
+    if (logGroup.startsWith('/ecs/') || logGroup.startsWith('/aws/ecs/')) {
+        const name = logGroup.replace(/^\/(?:aws\/)?ecs\//, '');
+        return { type: 'ecs', name, tab: 'ecs', label: 'ECS / Fargate' };
+    }
+
+    // API Gateway: /aws/api-gateway/{name}  or  API-Gateway-Execution-Logs_{id}/{stage}
+    if (logGroup.startsWith('/aws/api-gateway/') || logGroup.startsWith('API-Gateway-Execution-Logs_')) {
+        const name = logGroup
+            .replace('/aws/api-gateway/', '')
+            .replace('API-Gateway-Execution-Logs_', '');
+        return { type: 'api-gateway', name, tab: 'api-gateway', label: 'API Gateway' };
+    }
+
+    return null;
+}
+
+const RESOURCE_ICONS: Record<DetectedResource['type'], React.ReactNode> = {
+    'lambda':       <Zap size={12} className="text-amber-400" />,
+    'step-function':<GitBranch size={12} className="text-microtermix-neon" />,
+    'ecs':          <Server size={12} className="text-blue-400" />,
+    'api-gateway':  <Globe size={12} className="text-violet-400" />,
+};
+
+const RESOURCE_COLORS: Record<DetectedResource['type'], string> = {
+    'lambda':       'border-amber-500/20 bg-amber-500/5 text-amber-300',
+    'step-function':'border-microtermix-neon/20 bg-microtermix-neon/5 text-microtermix-neon',
+    'ecs':          'border-blue-500/20 bg-blue-500/5 text-blue-300',
+    'api-gateway':  'border-violet-500/20 bg-violet-500/5 text-violet-300',
+};
+
+interface ResourceBannerProps {
+    logGroup: string;
+    onNavigate: (resource: DetectedResource) => void;
+    onMetrics: (functionName: string) => void;
+}
+
+const ResourceBanner: React.FC<ResourceBannerProps> = ({ logGroup, onNavigate, onMetrics }) => {
+    const resource = detectLogGroupResource(logGroup);
+    if (!resource) return null;
+
+    const colorCls = RESOURCE_COLORS[resource.type];
+
+    return (
+        <div className={`px-3 py-1.5 border-b border-slate-800 flex items-center gap-2 text-[10px] ${colorCls} bg-opacity-50`}>
+            {RESOURCE_ICONS[resource.type]}
+            <span className="font-bold uppercase tracking-tighter opacity-70">{resource.label}:</span>
+            <span className="font-mono font-semibold truncate max-w-[260px]" title={resource.name}>
+                {resource.name}
+            </span>
+
+            <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                {resource.type === 'lambda' && (
+                    <button
+                        onClick={() => onMetrics(resource.name)}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded border border-current/30 hover:bg-current/10 transition-colors font-bold"
+                    >
+                        <BarChart3 size={10} /> Métricas
+                    </button>
+                )}
+                <button
+                    onClick={() => onNavigate(resource)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded border border-current/30 hover:bg-current/10 transition-colors font-bold"
+                >
+                    <ExternalLink size={10} /> Ir a {resource.label}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 export function LogsTab() {
     const cfg = useAwsStore(s => s.credentials);
     if (!cfg) return null;
-    const { goToMetrics, preloadedLogGroup, clearPreloadedLogGroup } = useCwStore();
+    const { goToMetrics, goToSfn, goToLambda, goToEcs, setActiveTab, preloadedLogGroup, clearPreloadedLogGroup } = useCwStore();
+
+    const handleResourceNavigate = (resource: DetectedResource) => {
+        switch (resource.type) {
+            case 'step-function': goToSfn(resource.name); break;
+            case 'lambda':        goToLambda(resource.name); break;
+            case 'ecs':           goToEcs('', undefined, resource.name); break;
+            default:              setActiveTab(resource.tab);
+        }
+    };
     const [groupSearch, setGroupSearch] = usePersistedState('microtermix-cw-logs-group-search', '');
     const [selectedGroup, setSelectedGroup] = usePersistedState<string | null>('microtermix-cw-logs-selected-group', null);
 
@@ -295,7 +404,7 @@ export function LogsTab() {
             <div onMouseDown={(e) => { setIsResizing(true); e.preventDefault(); }} className={`w-1 cursor-col-resize hover:bg-microtermix-neon/50 shrink-0 z-10 ${isResizing ? 'bg-microtermix-neon' : 'bg-transparent'}`} />
             <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-slate-950">
                 {!selectedStream && !mergedView ? (<div className="flex-1 flex flex-col items-center justify-center text-slate-600 text-sm gap-4"><p>Selecciona un grupo y un stream</p>{selectedGroup && <button onClick={() => setMergedView(true)} className="px-4 py-2 bg-microtermix-neon/10 text-microtermix-neon border border-microtermix-neon/30 rounded-lg text-xs font-bold hover:bg-microtermix-neon/20 transition-colors">Vista Combinada (Cross-stream)</button>}</div>) : (
-                    <><div className="flex flex-col border-b border-slate-800 shrink-0 bg-slate-900/40 min-w-0"><div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 min-w-0"><div className="flex flex-col min-w-0 flex-1"><span className="text-[10px] text-slate-500 font-mono truncate">{selectedGroup}</span><span className="text-[9px] text-microtermix-neon/70 font-mono truncate">{mergedView ? '› Multistream' : `› ${selectedStream}`}</span></div><div className="flex items-center gap-1.5 shrink-0"><select value={timeRange} onChange={(e) => setTimeRange(Number(e.target.value))} className="bg-slate-800 border border-slate-700 text-[10px] text-slate-300 rounded px-1.5 py-1 focus:outline-none"><option value={5}>5m</option><option value={15}>15m</option><option value={60}>1h</option><option value={360}>6h</option><option value={1440}>24h</option></select><button onClick={() => setTailing(!tailing)} className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded border transition-all ${tailing ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}`}><div className={`w-1.5 h-1.5 rounded-full ${tailing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />LIVE</button><button onClick={() => { setMergedView(!mergedView); if (!mergedView) setSelectedStream(null); }} className={`px-2 py-1 text-[10px] font-bold rounded border transition-all ${mergedView ? 'bg-microtermix-neon/10 text-microtermix-neon border-microtermix-neon/30' : 'bg-slate-800 text-slate-500 border-slate-700 hover:text-slate-300'}`}>MULTISTREAM {mergedView ? 'ON' : 'OFF'}</button><div className="relative"><Filter size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600" /><input value={filterInput} onChange={e => setFilterInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && filterInput.trim()) { if (!logFilters.includes(filterInput.trim())) setLogFilters([...logFilters, filterInput.trim()]); setFilterInput(''); } }} placeholder="Filtrar..." className="w-32 bg-slate-950 border border-slate-700/50 rounded pl-7 pr-2 py-1 text-[10px] text-slate-300 focus:border-microtermix-accent outline-none" /></div><button onClick={() => { if (!logFilters.includes("ERROR")) setLogFilters([...logFilters, "ERROR"]); }} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded border border-transparent hover:border-red-500/20 transition-all"><AlertTriangle size={14} /></button><button onClick={() => setEvents([])} className="text-[10px] text-slate-500 hover:text-slate-300 px-2">Limpiar</button></div></div>{selectedGroup?.startsWith('/aws/lambda/') && (<div className="px-3 py-1.5 border-b border-slate-800 bg-slate-900/20 flex items-center gap-2"><BarChart3 size={12} className="text-microtermix-neon" /><span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Lambda detectada:</span><button onClick={() => { const lambdaName = selectedGroup.replace('/aws/lambda/', ''); goToMetrics('AWS/Lambda', 'Invocations', [{ name: 'FunctionName', value: lambdaName }]); }} className="text-[10px] font-bold text-microtermix-neon hover:underline bg-microtermix-neon/5 px-2 py-0.5 rounded border border-microtermix-neon/20 transition-all">ANALIZAR MÉTRICAS</button></div>)}{logFilters.length > 0 && (<div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/50">{logFilters.map(f => (<span key={f} className="flex items-center gap-1 bg-microtermix-accent/10 text-microtermix-accent border border-microtermix-accent/20 px-1.5 py-0.5 rounded text-[10px] font-mono">{f}<button onClick={() => setLogFilters(logFilters.filter(x => x !== f))}><X size={10} /></button></span>))}<button onClick={() => setLogFilters([])} className="text-[9px] text-slate-600 hover:text-slate-400 ml-1 underline">Limpiar filtros</button></div>)}</div>{workerError && (<div className="p-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-[10px] font-mono flex items-center gap-2"><AlertTriangle size={12} /> {workerError}</div>)}<div className="flex-1 min-h-0 font-mono text-[11px] text-slate-300 relative"><Virtuoso ref={virtuosoRef} data={filteredEvents} initialTopMostItemIndex={0} itemContent={(index, event) => (<LogLine key={`${event.timestamp}-${index}`} event={event} index={index} onRequestIdClick={onRequestIdClick} copiedId={copiedId} onCopy={copyLine} filters={logFilters} />)} components={{ Footer: () => (<div className="py-4 border-t border-slate-900 mt-2">{backToken ? (<button onClick={loadHistory} disabled={loadingHistory} className="w-full py-2 text-[10px] text-slate-500 hover:text-microtermix-neon transition-colors">{loadingHistory ? 'Cargando historia...' : 'Cargar logs antiguos ↓'}</button>) : (<div className="text-center text-[9px] text-slate-700 italic">Fin de la historia</div>)}</div>) }} /></div></>)}
+                    <><div className="flex flex-col border-b border-slate-800 shrink-0 bg-slate-900/40 min-w-0"><div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/50 min-w-0"><div className="flex flex-col min-w-0 flex-1"><span className="text-[10px] text-slate-500 font-mono truncate">{selectedGroup}</span><span className="text-[9px] text-microtermix-neon/70 font-mono truncate">{mergedView ? '› Multistream' : `› ${selectedStream}`}</span></div><div className="flex items-center gap-1.5 shrink-0"><select value={timeRange} onChange={(e) => setTimeRange(Number(e.target.value))} className="bg-slate-800 border border-slate-700 text-[10px] text-slate-300 rounded px-1.5 py-1 focus:outline-none"><option value={5}>5m</option><option value={15}>15m</option><option value={60}>1h</option><option value={360}>6h</option><option value={1440}>24h</option></select><button onClick={() => setTailing(!tailing)} className={`flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded border transition-all ${tailing ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}`}><div className={`w-1.5 h-1.5 rounded-full ${tailing ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />LIVE</button><button onClick={() => { setMergedView(!mergedView); if (!mergedView) setSelectedStream(null); }} className={`px-2 py-1 text-[10px] font-bold rounded border transition-all ${mergedView ? 'bg-microtermix-neon/10 text-microtermix-neon border-microtermix-neon/30' : 'bg-slate-800 text-slate-500 border-slate-700 hover:text-slate-300'}`}>MULTISTREAM {mergedView ? 'ON' : 'OFF'}</button><div className="relative"><Filter size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600" /><input value={filterInput} onChange={e => setFilterInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && filterInput.trim()) { if (!logFilters.includes(filterInput.trim())) setLogFilters([...logFilters, filterInput.trim()]); setFilterInput(''); } }} placeholder="Filtrar..." className="w-32 bg-slate-950 border border-slate-700/50 rounded pl-7 pr-2 py-1 text-[10px] text-slate-300 focus:border-microtermix-accent outline-none" /></div><button onClick={() => { if (!logFilters.includes("ERROR")) setLogFilters([...logFilters, "ERROR"]); }} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded border border-transparent hover:border-red-500/20 transition-all"><AlertTriangle size={14} /></button><button onClick={() => setEvents([])} className="text-[10px] text-slate-500 hover:text-slate-300 px-2">Limpiar</button></div></div>{selectedGroup && <ResourceBanner logGroup={selectedGroup} onNavigate={handleResourceNavigate} onMetrics={(name) => goToMetrics('AWS/Lambda', 'Invocations', [{ name: 'FunctionName', value: name }])} />}{logFilters.length > 0 && (<div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/50">{logFilters.map(f => (<span key={f} className="flex items-center gap-1 bg-microtermix-accent/10 text-microtermix-accent border border-microtermix-accent/20 px-1.5 py-0.5 rounded text-[10px] font-mono">{f}<button onClick={() => setLogFilters(logFilters.filter(x => x !== f))}><X size={10} /></button></span>))}<button onClick={() => setLogFilters([])} className="text-[9px] text-slate-600 hover:text-slate-400 ml-1 underline">Limpiar filtros</button></div>)}</div>{workerError && (<div className="p-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-[10px] font-mono flex items-center gap-2"><AlertTriangle size={12} /> {workerError}</div>)}<div className="flex-1 min-h-0 font-mono text-[11px] text-slate-300 relative"><Virtuoso ref={virtuosoRef} data={filteredEvents} initialTopMostItemIndex={0} itemContent={(index, event) => (<LogLine key={`${event.timestamp}-${index}`} event={event} index={index} onRequestIdClick={onRequestIdClick} copiedId={copiedId} onCopy={copyLine} filters={logFilters} />)} components={{ Footer: () => (<div className="py-4 border-t border-slate-900 mt-2">{backToken ? (<button onClick={loadHistory} disabled={loadingHistory} className="w-full py-2 text-[10px] text-slate-500 hover:text-microtermix-neon transition-colors">{loadingHistory ? 'Cargando historia...' : 'Cargar logs antiguos ↓'}</button>) : (<div className="text-center text-[9px] text-slate-700 italic">Fin de la historia</div>)}</div>) }} /></div></>)}
             </div>
         </div>
     );

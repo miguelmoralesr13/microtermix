@@ -125,9 +125,14 @@ export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
 
         return () => {
             clearTimeout(timer);
-            if (xtermRef.current) {
-                const term = xtermRef.current;
-                (term as any)._unlisten?.then((unlisten: any) => unlisten());
+            const term = xtermRef.current;
+            if (term) {
+                // Correctly unlisten from both promises
+                (term as any)._unlisten?.then((unlisteners: any) => {
+                    if (Array.isArray(unlisteners)) {
+                        unlisteners.forEach(fn => typeof fn === 'function' && fn());
+                    }
+                });
                 term.dispose();
                 xtermRef.current = null;
             }

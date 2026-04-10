@@ -111,12 +111,24 @@ export const SonarPanel: React.FC = () => {
         if (!projectAccount) return '';
         const { token, organization, serverUrl } = projectAccount;
         let cmd = link.customCommand || 'sonar-scanner';
-        cmd += ` -Dsonar.projectKey=${projectKey}`;
-        if (serverUrl) cmd += ` -Dsonar.host.url=${normalizeSonarUrl(serverUrl)}`;
-        if (token) cmd += ` -Dsonar.token=${token}`;
-        if (organization) cmd += ` -Dsonar.organization=${organization}`;
-        if (link.includeBranch && currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
-        if (link.sources) cmd += ` -Dsonar.sources=${link.sources}`;
+
+        if (link.propertiesFileName) {
+            cmd += ` -Dproject.settings=${link.propertiesFileName}`;
+            // If using properties file, we only override from account if explicitly requested
+            // or if they are missing in the file (though here we don't know file content easily)
+            // For now, let's include the essentials if they are checked in settings
+            if (serverUrl && link.includeHostUrl) cmd += ` -Dsonar.host.url=${normalizeSonarUrl(serverUrl)}`;
+            if (token && link.includeToken) cmd += ` -Dsonar.token=${token}`;
+            if (organization && link.includeOrganization) cmd += ` -Dsonar.organization=${organization}`;
+        } else {
+            cmd += ` -Dsonar.projectKey=${projectKey}`;
+            if (serverUrl) cmd += ` -Dsonar.host.url=${normalizeSonarUrl(serverUrl)}`;
+            if (token) cmd += ` -Dsonar.token=${token}`;
+            if (organization) cmd += ` -Dsonar.organization=${organization}`;
+            if (link.includeBranch && currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
+            if (link.sources) cmd += ` -Dsonar.sources=${link.sources}`;
+        }
+        
         if (link.extraProps) cmd += ` ${link.extraProps}`;
         if (link.debug) cmd += ' -X';
         return cmd;
@@ -149,6 +161,9 @@ export const SonarPanel: React.FC = () => {
     const handleStop = async () => {
         try { await invoke('kill_service', { serviceId }); updateProcessStatus(serviceId, 'stopped'); } catch (_) { }
     };
+
+    const currentProject = useMemo(() => projects.find(p => p.path === selectedPath), [projects, selectedPath]);
+    const projectName = currentProject?.name || '';
 
     return (
         <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900 font-sans">
@@ -308,6 +323,8 @@ export const SonarPanel: React.FC = () => {
                 onOpenChange={setIsSettingsOpen} 
                 link={link} 
                 onLinkChange={(patch) => linkProject(selectedPath, { ...link, ...patch })} 
+                projectPath={selectedPath}
+                projectName={projectName}
             />
 
             <SonarActivityConsole 
