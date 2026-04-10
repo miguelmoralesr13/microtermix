@@ -15,7 +15,12 @@ import {
   Info,
   ListTree,
   Terminal,
-  GitBranch
+  GitBranch,
+  ArrowUpDown,
+  Copy,
+  Check,
+  Zap,
+  ScrollText
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -67,13 +72,15 @@ export const SfnExecutionInspector: React.FC = () => {
 
   const startExecutionMutation = useStartSfnExecution();
 
-  const { goToLogs } = useCwStore();
+  const { goToLogs, goToInvokeSfn } = useCwStore();
   const { setActiveView } = useWorkspace();
   const monacoTheme = useMonacoTheme();
 
   const [editMode, setEditMode] = useState(false);
   const [editedInput, setEditedInput] = useState('');
   const [activeTab, setActiveTab] = useState<'execution' | 'definition'>('execution');
+  const [showIoModal, setShowIoModal] = useState(false);
+  const [copiedIo, setCopiedIo] = useState<'request' | 'response' | null>(null);
   const [monacoEditor, setMonacoEditor] = useState<any>(null);
   const [selectedStateName, setSelectedStateName] = useState<string | null>(null);
   const decorationIds = React.useRef<string[]>([]);
@@ -234,6 +241,27 @@ export const SfnExecutionInspector: React.FC = () => {
 
   const selectedExecution = executions.find(e => e.executionArn === selectedExecutionArn);
 
+  const executionRequest  = steps.length > 0 ? steps[0].input : undefined;
+  const executionResponse = steps.length > 0 ? steps[steps.length - 1].output : undefined;
+
+  const prettyJson = (raw?: string): string => {
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return raw;
+    }
+  };
+
+  const handleCopyIo = (which: 'request' | 'response') => {
+    const text = which === 'request' ? prettyJson(executionRequest) : prettyJson(executionResponse);
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedIo(which);
+    setTimeout(() => setCopiedIo(null), 2000);
+  };
+
   if (!selectedMachineArn) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-slate-500 bg-slate-950">
@@ -269,6 +297,30 @@ export const SfnExecutionInspector: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {selectedMachine && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-amber-300 border-amber-500/30 hover:bg-amber-500/10"
+                onClick={() => goToInvokeSfn(selectedMachine.name)}
+                title="Test en Invoke Tester"
+              >
+                <Zap className="h-3 w-3 mr-1.5" />
+                Test
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs text-slate-300 border-slate-700"
+                onClick={handleGoToLogs}
+                title="Ver logs en CloudWatch"
+              >
+                <ScrollText className="h-3 w-3 mr-1.5" />
+                Logs
+              </Button>
+            </>
+          )}
           <Button
             variant={editMode ? 'default' : 'outline'}
             size="sm"
@@ -306,6 +358,17 @@ export const SfnExecutionInspector: React.FC = () => {
               <Badge variant="outline" className="text-[10px] h-5 px-1.5 tabular-nums text-slate-400 border-slate-800">
                 {steps.length} steps
               </Badge>
+              {steps.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  className="h-5 px-2 text-[9px] border-slate-700 text-slate-400 hover:text-white gap-1"
+                  onClick={() => setShowIoModal(true)}
+                >
+                  <ArrowUpDown size={9} />
+                  I/O
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -355,7 +418,13 @@ export const SfnExecutionInspector: React.FC = () => {
               ) : (
                 <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
                   {steps.map((step, idx) => (
-                    <SfnStepCard key={`${step.name}-${idx}`} step={step} isFirst={idx === 0} isLast={idx === steps.length - 1} />
+                    <SfnStepCard
+                      key={`${step.name}-${idx}`}
+                      step={step}
+                      isFirst={idx === 0}
+                      isLast={idx === steps.length - 1}
+                      prevOutput={steps[idx - 1]?.output}
+                    />
                   ))}
                   {steps.length === 0 && (
                     <div className="flex flex-col items-center justify-center p-12 text-slate-500 bg-slate-900/10 rounded-lg border border-dashed border-slate-800">
@@ -371,6 +440,61 @@ export const SfnExecutionInspector: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Execution I/O Modal */}
+            <Dialog open={showIoModal} onOpenChange={setShowIoModal}>
+              <DialogContent className="sm:max-w-5xl w-[92vw] h-[80vh] flex flex-col gap-0 p-0 overflow-hidden bg-slate-950 border-slate-800">
+                <DialogHeader className="p-4 border-b border-slate-800 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700">
+                      <ArrowUpDown size={16} className="text-microtermix-neon" />
+                    </div>
+                    <div>
+                      <DialogTitle className="text-slate-100 text-sm">Execution I/O</DialogTitle>
+                      <DialogDescription className="text-slate-500 text-[11px] mt-0.5 font-mono truncate max-w-[400px]">
+                        {selectedExecution?.name}
+                      </DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+
+                <div className="flex-1 min-h-0 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-slate-800">
+                  {/* Request */}
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/40">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Request (Input)</span>
+                      <button
+                        onClick={() => handleCopyIo('request')}
+                        className="p-1 hover:bg-slate-800 rounded transition-all text-slate-500 hover:text-microtermix-neon"
+                        title="Copy request"
+                      >
+                        {copiedIo === 'request' ? <Check size={12} /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                    <pre className="flex-1 overflow-auto p-4 font-mono text-[11px] text-slate-300 whitespace-pre-wrap break-all scrollbar-thin scrollbar-thumb-slate-800">
+                      {prettyJson(executionRequest) || <span className="text-slate-600 italic">No input available</span>}
+                    </pre>
+                  </div>
+
+                  {/* Response */}
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <div className="px-4 py-2 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-900/40">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Response (Output)</span>
+                      <button
+                        onClick={() => handleCopyIo('response')}
+                        className="p-1 hover:bg-slate-800 rounded transition-all text-slate-500 hover:text-microtermix-neon"
+                        title="Copy response"
+                      >
+                        {copiedIo === 'response' ? <Check size={12} /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                    <pre className="flex-1 overflow-auto p-4 font-mono text-[11px] text-emerald-300/80 whitespace-pre-wrap break-all scrollbar-thin scrollbar-thumb-slate-800">
+                      {prettyJson(executionResponse) || <span className="text-slate-600 italic">No output available</span>}
+                    </pre>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* New Execution Dialog */}
             <Dialog open={editMode} onOpenChange={setEditMode}>

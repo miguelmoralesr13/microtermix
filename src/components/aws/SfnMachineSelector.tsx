@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSfnStore } from '../../stores/sfnStore';
 import {
   Select,
@@ -13,18 +13,41 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useSfnMachines, sfnKeys } from '../../hooks/queries/useSfnQueries';
 import { useQueryClient } from '@tanstack/react-query';
+import { useCwStore } from '../../stores/cwStore';
 
 export const SfnMachineSelector: React.FC = () => {
-  const { 
-    selectedMachineArn, 
+  const {
+    selectedMachineArn,
     setSelectedMachineArn
   } = useSfnStore();
+
+  const { preloadedSfnName, clearPreloadedSfnName } = useCwStore();
 
   const queryClient = useQueryClient();
   const { data: machines = [], isLoading: loadingMachines, error: errorMachines } = useSfnMachines();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState('');
+
+  // Consume preloaded name from Logs tab navigation
+  useEffect(() => {
+    if (!preloadedSfnName) return;
+    setSearchTerm(preloadedSfnName);
+    setFilter(preloadedSfnName);
+    clearPreloadedSfnName();
+  }, [preloadedSfnName, clearPreloadedSfnName]);
+
+  // Auto-select if exactly one machine matches the filter
+  useEffect(() => {
+    if (!filter || machines.length === 0) return;
+    const matches = machines.filter(m =>
+      m.name.toLowerCase().includes(filter.toLowerCase()) ||
+      m.arn.toLowerCase().includes(filter.toLowerCase())
+    );
+    if (matches.length === 1) {
+      setSelectedMachineArn(matches[0].arn);
+    }
+  }, [filter, machines, setSelectedMachineArn]);
 
   const filteredMachines = useMemo(() => {
     if (!filter) return machines;

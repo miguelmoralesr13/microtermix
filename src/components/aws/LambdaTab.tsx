@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
     Search, Loader, RefreshCw, Zap, X,
     Clock, Database, Code,
@@ -22,8 +22,8 @@ const toRust = (cfg: any) => ({
 export function LambdaTab() {
     const cfg = useAwsStore(s => s.credentials);
     const queryClient = useQueryClient();
-    const { goToLogs } = useCwStore();
-    
+    const { goToLogs, goToInvokeLambda, preloadedLambdaName, clearPreloadedLambdaName } = useCwStore();
+
     const [searchBuffer, setSearchBuffer] = useState('');
     const [appliedSearch, setAppliedSearch] = useState<string | null>(null);
     const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -59,6 +59,23 @@ export function LambdaTab() {
         details || functions.find(f => f.function_name === selectedName),
         [functions, selectedName, details]
     );
+
+    // Consume preloaded function name from Logs tab navigation
+    useEffect(() => {
+        if (!preloadedLambdaName) return;
+        setSearchBuffer(preloadedLambdaName);
+        setAppliedSearch(preloadedLambdaName);
+        clearPreloadedLambdaName();
+    }, [preloadedLambdaName, clearPreloadedLambdaName]);
+
+    // Auto-select when functions load and exactly one matches
+    useEffect(() => {
+        if (!appliedSearch || functions.length === 0 || selectedName) return;
+        const matches = functions.filter(f =>
+            f.function_name.toLowerCase().includes(appliedSearch.toLowerCase())
+        );
+        if (matches.length === 1) setSelectedName(matches[0].function_name);
+    }, [functions, appliedSearch, selectedName]);
 
     const handleRefresh = () => {
         queryClient.invalidateQueries({ queryKey: ['lambda-list'] });
@@ -203,12 +220,20 @@ export function LambdaTab() {
                                         {selected.function_arn}
                                     </code>
                                 </div>
-                                <button 
-                                    onClick={handleGoToLogs}
-                                    className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-all flex items-center gap-2 border border-slate-700/50 shadow-lg active:scale-95"
-                                >
-                                    <Activity size={14} className="text-amber-400" /> Ver Logs CloudWatch
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => goToInvokeLambda(selected.function_name)}
+                                        className="px-4 py-2 rounded bg-amber-500/10 hover:bg-amber-500/20 text-xs font-bold text-amber-300 transition-all flex items-center gap-2 border border-amber-500/30 shadow-lg active:scale-95"
+                                    >
+                                        <Zap size={14} /> Test Invoke
+                                    </button>
+                                    <button
+                                        onClick={handleGoToLogs}
+                                        className="px-4 py-2 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-all flex items-center gap-2 border border-slate-700/50 shadow-lg active:scale-95"
+                                    >
+                                        <Activity size={14} className="text-amber-400" /> Ver Logs
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-4 gap-4 mb-8">

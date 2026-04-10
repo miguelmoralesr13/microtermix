@@ -67,6 +67,7 @@ async fn directory_listing_handler(dir_path: PathBuf, url_path: String) -> Respo
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "text/html; charset=utf-8")
+        .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(html))
         .unwrap()
 }
@@ -76,6 +77,18 @@ async fn file_server_handler(
     base_dir: Option<PathBuf>,
     req: Request,
 ) -> Response {
+    // 0. Handle CORS Preflight (OPTIONS)
+    if req.method() == axum::http::Method::OPTIONS {
+        return Response::builder()
+            .status(StatusCode::NO_CONTENT)
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+            .header("Access-Control-Allow-Headers", "*")
+            .header("Access-Control-Max-Age", "86400")
+            .body(Body::empty())
+            .unwrap();
+    }
+
     let url_path = normalize_url_path(req.uri().path());
     
     // 1. Try virtual routes first
@@ -119,6 +132,7 @@ async fn file_server_handler(
     Response::builder()
         .status(StatusCode::NOT_FOUND)
         .header("Content-Type", "text/plain")
+        .header("Access-Control-Allow-Origin", "*")
         .body(Body::from(format!("404 Not Found: {}", url_path)))
         .unwrap()
 }

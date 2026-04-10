@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn, formatAwsError } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { useCwStore } from '../../stores/cwStore';
 import { LambdaHistory, LambdaHistoryItem, LambdaInvokeResult } from './lambdaTypes';
 import {
     Dialog,
@@ -30,7 +31,7 @@ import {
     DialogDescription,
     DialogFooter,
 } from '@/components/ui/dialog';
-import { Copy, ArrowRightLeft } from 'lucide-react';
+import { Copy, ArrowRightLeft, ScrollText, Settings2 } from 'lucide-react';
 
 type InvokeTarget = 'aws' | 'local';
 type InvocationType = 'RequestResponse' | 'Event' | 'DryRun';
@@ -45,6 +46,7 @@ const toRust = (cfg: any) => ({
 
 export function LambdaInvoker() {
     const cfg = useAwsStore(s => s.credentials);
+    const { preloadedInvokerType, preloadedInvokerName, clearPreloadedInvoker, goToLogs, goToLambda } = useCwStore();
 
     // Function list state
     const [searchBuffer, setSearchBuffer] = useState('');
@@ -78,6 +80,23 @@ export function LambdaInvoker() {
         staleTime: 5 * 60 * 1000,
         enabled: !!cfg?.accessKeyId && !!cfg?.region,
     });
+
+    // Apply preloaded function name from Lambda/Logs navigation
+    useEffect(() => {
+        if (preloadedInvokerType !== 'lambda' || !preloadedInvokerName) return;
+        setSearchBuffer(preloadedInvokerName);
+        setAppliedSearch(preloadedInvokerName);
+        clearPreloadedInvoker();
+    }, [preloadedInvokerType, preloadedInvokerName, clearPreloadedInvoker]);
+
+    // Auto-select when exactly one function matches the applied search
+    useEffect(() => {
+        if (!appliedSearch || functions.length === 0 || selectedName) return;
+        const matches = functions.filter(f =>
+            f.function_name.toLowerCase().includes(appliedSearch.toLowerCase())
+        );
+        if (matches.length === 1) setSelectedName(matches[0].function_name);
+    }, [functions, appliedSearch, selectedName]);
 
     const invokeMutation = useMutation({
         mutationFn: async () => {
@@ -327,6 +346,26 @@ export function LambdaInvoker() {
                             <div>
                                 <h3 className="text-sm font-bold text-white">{selectedName}</h3>
                                 <span className="text-[10px] text-slate-500">Lambda Invoker</span>
+                            </div>
+                            <div className="ml-auto flex items-center gap-1.5">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] border-slate-700 text-slate-400 hover:text-white gap-1.5"
+                                    onClick={() => goToLogs(`/aws/lambda/${selectedName}`)}
+                                    title="Ver logs en CloudWatch"
+                                >
+                                    <ScrollText size={11} /> Logs
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] border-amber-500/30 text-amber-400 hover:bg-amber-500/10 gap-1.5"
+                                    onClick={() => goToLambda(selectedName!)}
+                                    title="Ver configuración de la función"
+                                >
+                                    <Settings2 size={11} /> Config
+                                </Button>
                             </div>
                         </div>
 
