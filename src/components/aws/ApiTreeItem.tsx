@@ -3,7 +3,7 @@ import { useApiGatewayStore, RestMethodDetails, HttpRouteIntegrationDetails } fr
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, Play, ExternalLink, FileCode2, X } from 'lucide-react';
+import { Loader2, ArrowRight, ChevronRight, ChevronDown, KeyRound, Lock, Link as LinkIcon, ExternalLink, FileCode2, X } from 'lucide-react';
 import { useCwStore } from '../../stores/cwStore';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useMethodDetails } from '../../hooks/queries/useApiGatewayQueries';
@@ -17,49 +17,40 @@ interface ApiTreeNode {
     target?: string | null;
 }
 
-const renderMethodBadge = (method: string, onClick?: () => void, isSelected?: boolean, onTest?: () => void) => {
+const renderMethodBadge = (method: string, onClick?: () => void, isSelected?: boolean) => {
     let colorClass = "bg-slate-700 text-white border-slate-600";
     switch (method.toUpperCase()) {
-        case 'GET': colorClass = "bg-blue-900/40 text-blue-300 border-blue-700 hover:bg-blue-900/80 hover:text-blue-200"; break;
-        case 'POST': colorClass = "bg-green-900/40 text-green-300 border-green-700 hover:bg-green-900/80 hover:text-green-200"; break;
-        case 'PUT': colorClass = "bg-orange-900/40 text-orange-300 border-orange-700 hover:bg-orange-900/80 hover:text-orange-200"; break;
-        case 'DELETE': colorClass = "bg-red-900/40 text-red-300 border-red-700 hover:bg-red-900/80 hover:text-red-200"; break;
-        case 'PATCH': colorClass = "bg-yellow-900/40 text-yellow-300 border-yellow-700 hover:bg-yellow-900/80 hover:text-yellow-200"; break;
-        case 'ANY': colorClass = "bg-purple-900/40 text-purple-300 border-purple-700 hover:bg-purple-900/80 hover:text-purple-200"; break;
+        case 'GET': colorClass = "bg-blue-900/40 text-blue-300 border-blue-700 hover:bg-blue-800 hover:text-blue-100"; break;
+        case 'POST': colorClass = "bg-green-900/40 text-green-300 border-green-700 hover:bg-green-800 hover:text-green-100"; break;
+        case 'PUT': colorClass = "bg-orange-900/40 text-orange-300 border-orange-700 hover:bg-orange-800 hover:text-orange-100"; break;
+        case 'DELETE': colorClass = "bg-red-900/40 text-red-300 border-red-700 hover:bg-red-800 hover:text-red-100"; break;
+        case 'PATCH': colorClass = "bg-yellow-900/40 text-yellow-300 border-yellow-700 hover:bg-yellow-800 hover:text-yellow-100"; break;
+        case 'ANY': colorClass = "bg-purple-900/40 text-purple-300 border-purple-700 hover:bg-purple-800 hover:text-purple-100"; break;
         case 'OPTIONS': colorClass = "bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-300"; break;
     }
 
     return (
-        <div key={method} className="flex items-center gap-1 group/badge">
-            <Badge
-                variant="outline"
-                className={`font-mono text-[10px] px-2 py-0.5 h-6 cursor-pointer transition-all ${colorClass} ${isSelected ? 'ring-2 ring-white/20 scale-105' : ''}`}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    if (onClick) onClick();
-                }}
-            >
-                {method}
-            </Badge>
-            {isSelected && onTest && (
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onTest(); }}
-                    className="p-1 rounded bg-slate-800 border border-slate-700 hover:bg-microtermix-neon hover:text-slate-950 transition-all shadow-lg"
-                    title="Probar este endpoint"
-                >
-                    <Play size={10} fill="currentColor" />
-                </button>
-            )}
-        </div>
+        <Badge
+            key={method}
+            variant="outline"
+            className={`font-mono text-[10px] px-2 py-0.5 h-6 cursor-pointer transition-all ${colorClass} ${isSelected ? 'ring-2 ring-microtermix-neon/40 border-microtermix-neon/50 bg-microtermix-neon/10' : ''}`}
+            onClick={(e) => {
+                e.stopPropagation();
+                if (onClick) onClick();
+            }}
+        >
+            {method}
+        </Badge>
     );
 };
 
-export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ node, level = 0 }) => {
+export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number; simple?: boolean }> = ({ node, level = 0, simple = false }) => {
     const [expanded, setExpanded] = useState(true);
     const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
     const [templatesModal, setTemplatesModal] = useState<Record<string, string> | null>(null);
 
     const { selectedApi, openTester, httpApis } = useApiGatewayStore();
+    const { state: { projects } } = useWorkspace();
     const { goToLogs } = useCwStore();
     const { setActiveView } = useWorkspace();
 
@@ -80,11 +71,11 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
     const hasChildren = childNodes.length > 0;
 
     const handleMethodClick = (method: string) => {
-        if (selectedMethod === method) {
-            setSelectedMethod(null);
-            return;
-        }
         setSelectedMethod(method);
+        // Trigger test directly if in simple mode
+        if (simple) {
+            handleTest();
+        }
     };
 
     const extractLambdaName = (uri: string) => {
@@ -126,7 +117,7 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
     };
 
     const renderDetailsPanel = () => {
-        if (!selectedMethod || !selectedApi || !node.resourceId) return null;
+        if (simple || !selectedMethod || !selectedApi || !node.resourceId) return null;
 
         if (isLoading) {
             return (
@@ -136,9 +127,21 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
             );
         }
 
-        if (!details) return null;
-
         const isRest = selectedApi.type === 'rest';
+
+        // Local Match check
+        const getLambdaName = () => {
+            if (isRest) {
+                const restDetails = details as RestMethodDetails;
+                return restDetails.integration_uri ? extractLambdaName(restDetails.integration_uri) : null;
+            } else {
+                const httpDetails = details as HttpRouteIntegrationDetails;
+                return httpDetails.integration_uri ? extractLambdaName(httpDetails.integration_uri) : null;
+            }
+        };
+
+        const lambdaName = getLambdaName();
+        const localMatch = lambdaName ? projects.find(p => p.name.toLowerCase() === lambdaName.toLowerCase()) : null;
 
         if (isRest) {
             const restDetails = details as RestMethodDetails;
@@ -247,6 +250,15 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
                             </div>
                         </div>
                     )}
+                    {localMatch && (
+                        <div className="border-t border-slate-800 pt-2 flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                                <Badge className="bg-microtermix-neon text-slate-950 text-[9px] font-bold h-4">LOCAL</Badge>
+                                <span className="text-[10px] text-slate-400">Vinculado a: </span>
+                                <span className="text-[10px] text-microtermix-neon font-mono">{localMatch.name}</span>
+                             </div>
+                        </div>
+                    )}
                 </div>
             );
         } else {
@@ -299,6 +311,15 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
                                     <FileCode2 size={11} /> Ver Integration Templates
                                 </Button>
                             )}
+                        </div>
+                    )}
+                    {localMatch && (
+                        <div className="border-t border-slate-800 pt-2 flex items-center justify-between">
+                             <div className="flex items-center gap-2">
+                                <Badge className="bg-microtermix-neon text-slate-950 text-[9px] font-bold h-4">LOCAL</Badge>
+                                <span className="text-[10px] text-slate-400">Vinculado a: </span>
+                                <span className="text-[10px] text-microtermix-neon font-mono">{localMatch.name}</span>
+                             </div>
                         </div>
                     )}
                 </div>
@@ -362,8 +383,7 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
                                 renderMethodBadge(
                                     m,
                                     () => handleMethodClick(m),
-                                    selectedMethod === m,
-                                    () => handleTest()
+                                    selectedMethod === m
                                 )
                             )}
                         </div>
@@ -386,7 +406,7 @@ export const ApiTreeItem: React.FC<{ node: ApiTreeNode; level?: number }> = ({ n
             {hasChildren && expanded && (
                 <div className="flex flex-col w-full border-l border-slate-800/30 ml-[15px]">
                     {childNodes.map(child => (
-                        <ApiTreeItem key={child.fullPath} node={child} level={level + 1} />
+                        <ApiTreeItem key={child.fullPath} node={child} level={level + 1} simple={simple} />
                     ))}
                 </div>
             )}

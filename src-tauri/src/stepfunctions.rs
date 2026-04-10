@@ -493,3 +493,100 @@ pub async fn sfn_start_execution(credentials: CwCredentials, machine_arn: String
 
     Ok(res.execution_arn)
 }
+
+/// Creates or updates a state machine in SFN Local Docker.
+/// Tries to find an existing machine by name first; if found it updates it, otherwise creates it.
+#[tauri::command]
+pub async fn sfn_upsert_local_machine(
+    machine_name: String,
+    definition: String,
+    endpoint_url: Option<String>,
+) -> Result<String, String> {
+    use aws_config::Region;
+    use aws_credential_types::Credentials;
+    use aws_sdk_sfn::types::StateMachineType;
+
+    let endpoint = endpoint_url.unwrap_or_else(|| "http://localhost:8083".to_string());
+    let creds = Credentials::new("test", "test", None, None, "local");
+    let cfg = aws_config::from_env()
+        .credentials_provider(creds)
+        .region(Region::new("us-east-1"))
+        .endpoint_url(&endpoint)
+        .behavior_version(aws_config::BehaviorVersion::latest())
+        .load()
+        .await;
+    let client = aws_sdk_sfn::Client::new(&cfg);
+
+    // Try to find existing machine by name
+    let list = client
+        .list_state_machines()
+        .send()
+        .await
+        .map_err(|e| format!("SFN Local list error: {e:?}"))?;
+
+    let existing_arn = list
+        .state_machines()
+        .iter()
+        .find(|m| m.name() == machine_name)
+        .map(|m| m.state_machine_arn().to_string());
+
+    if let Some(arn) = existing_arn {
+        client
+            .update_state_machine()
+            .state_machine_arn(&arn)
+            .definition(&definition)
+            .send()
+            .await
+            .map_err(|e| format!("SFN Local update error: {e:?}"))?;
+        Ok(arn)
+    } else {
+        let res = client
+            .create_state_machine()
+            .name(&machine_name)
+            .definition(&definition)
+            .role_arn("arn:aws:iam::123456789012:role/DummyRole")
+            .r#type(StateMachineType::Standard)
+            .send()
+            .await
+            .map_err(|e| format!("SFN Local create error: {e:?}"))?;
+        Ok(res.state_machine_arn)
+    }
+}
+
+/// Starts a Step Functions execution against a local endpoint
+/// (e.g. Step Functions Local via Docker: http://localhost:8083)
+#[tauri::command]
+pub async fn sfn_start_execution_local(
+    machine_arn: String,
+    input: String,
+    execution_name: Option<String>,
+    endpoint_url: Option<String>,
+) -> Result<String, String> {
+    use aws_config::Region;
+    use aws_credential_types::Credentials;
+
+    let endpoint = endpoint_url.unwrap_or_else(|| "http://localhost:8083".to_string());
+
+    let creds = Credentials::new("test", "test", None, None, "local");
+    let cfg = aws_config::from_env()
+        .credentials_provider(creds)
+        .region(Region::new("us-east-1"))
+        .endpoint_url(&endpoint)
+        .behavior_version(aws_config::BehaviorVersion::latest())
+        .load()
+        .await;
+    let client = aws_sdk_sfn::Client::new(&cfg);
+
+    let mut req = client.start_execution()
+        .state_machine_arn(&machine_arn)
+        .input(&input);
+
+    if let Some(name) = execution_name {
+        if !name.is_empty() {
+            req = req.name(name);
+        }
+    }
+
+    let res = req.send().await.map_err(|e| format!("SFN local start error: {e:?}"))?;
+    Ok(res.execution_arn)
+}

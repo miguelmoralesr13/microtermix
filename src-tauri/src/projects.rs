@@ -473,6 +473,9 @@ pub fn detect_project_in_path(path: &Path) -> Option<Project> {
         framework = detect_java_framework(path);
         let cmd = if cfg!(target_os = "windows") { "gradlew.bat" } else { "./gradlew" };
         scripts.push(format!("{} build", if path.join(cmd).exists() { cmd } else { "gradle" }));
+    } else if path.join(".git").exists() {
+        p_type = "git-repo".to_string(); 
+        build_system = Some("git".to_string());
     }
 
     if p_type != "unknown" {
@@ -483,8 +486,14 @@ pub fn detect_project_in_path(path: &Path) -> Option<Project> {
 #[tauri::command]
 pub fn scan_path(path: String) -> Result<Vec<Project>, String> {
     let root = Path::new(&path);
-    if let Some(p) = detect_project_in_path(root) { return Ok(vec![p]); }
     let mut projects = Vec::new();
+
+    // Check root
+    if let Some(p) = detect_project_in_path(root) { 
+        projects.push(p); 
+    }
+
+    // Always scan children for sub-projects
     if let Ok(entries) = fs::read_dir(root) {
         for entry in entries.flatten() {
             if let Some(p) = detect_project_in_path(&entry.path()) { projects.push(p); }

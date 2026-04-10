@@ -71,6 +71,7 @@ const BranchSelect: React.FC<BranchSelectProps> = ({ value, options, onChange, p
 import { createGithubPR } from '../../services/githubApi';
 import { createGitlabMR } from '../../services/gitlabApi';
 import type { GitAccount } from '../../stores/gitStore';
+import { NormalizedPR, normalizeGithubPR, normalizeGitlabMR } from './PRSection';
 
 interface CreatePRModalProps {
     projectPath: string;
@@ -78,7 +79,7 @@ interface CreatePRModalProps {
     activeBranch: string;
     branches: string[];
     onClose: () => void;
-    onCreated: () => void;
+    onCreated: (pr: NormalizedPR) => void;
 }
 
 export const CreatePRModal: React.FC<CreatePRModalProps> = ({
@@ -88,13 +89,21 @@ export const CreatePRModal: React.FC<CreatePRModalProps> = ({
     const label = isGitlab ? 'Merge Request' : 'Pull Request';
 
     const [title, setTitle] = useState('');
+    const [isUserEditing, setIsUserEditing] = useState(false);
     const [head, setHead] = useState(activeBranch);
     const [base, setBase] = useState(() => {
-        const preferred = ['main', 'master', 'develop'];
+        const preferred = ['main', 'master', 'develop', 'dev'];
         return preferred.find(b => branches.includes(b) && b !== activeBranch)
             ?? branches.find(b => b !== activeBranch)
             ?? '';
     });
+
+    // Update title automatically if user hasn't edited it manually
+    React.useEffect(() => {
+        if (!isUserEditing) {
+            setTitle(`${head} into ${base}`);
+        }
+    }, [head, base, isUserEditing]);
     const [description, setDescription] = useState('');
     const [draft, setDraft] = useState(false);
     const [reviewers, setReviewers] = useState('');
@@ -116,12 +125,14 @@ export const CreatePRModal: React.FC<CreatePRModalProps> = ({
         setError(null);
         try {
             let url: string;
+            let normalized: NormalizedPR;
             if (isGitlab) {
                 const mr = await createGitlabMR(
                     projectPath, account.token, title.trim(),
                     head, base, description, draft, account.url || undefined,
                 );
                 url = mr.web_url;
+                normalized = normalizeGitlabMR(mr);
             } else {
                 const reviewerList = reviewers.split(',').map(r => r.trim()).filter(Boolean);
                 const pr = await createGithubPR(
@@ -129,9 +140,10 @@ export const CreatePRModal: React.FC<CreatePRModalProps> = ({
                     head, base, description, draft, reviewerList, account.url || undefined,
                 );
                 url = pr.html_url;
+                normalized = normalizeGithubPR(pr);
             }
+            onCreated(normalized);
             setCreatedUrl(url);
-            onCreated();
         } catch (e: any) {
             setError(e.message || 'Error al crear el PR');
         } finally {
@@ -186,7 +198,7 @@ export const CreatePRModal: React.FC<CreatePRModalProps> = ({
                             <input
                                 autoFocus
                                 value={title}
-                                onChange={e => setTitle(e.target.value)}
+                                onChange={e => { setTitle(e.target.value); setIsUserEditing(true); }}
                                 placeholder={`Título del ${label}...`}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-purple-500 transition-colors"
                             />

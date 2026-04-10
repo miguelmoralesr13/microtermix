@@ -477,7 +477,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto py-2 scrollbar-hide">
+                <div className="flex-1 overflow-y-auto py-2">
                     {(branchFilter === 'all' || branchFilter === 'local') && (
                         <>
                             <SectionHeader title="Local" count={filteredLocal.length} isExpanded={showLocal} onToggle={() => setShowLocal(!showLocal)} />

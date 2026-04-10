@@ -41,7 +41,7 @@ export interface JiraConfig {
     defaultPriority: string;
     defaultLabels: string[];
     customFields: Record<string, any>;
-    
+
     // Extensible Hierarchy Config
     level1Project: string; level1Type: string; level1Label: string;
     level2Project: string; level2Type: string; level2Label: string;
@@ -355,7 +355,7 @@ export async function getActivityOptions(projectKey: string): Promise<{ id: stri
         // First find the best issue type to use for createmeta
         const types = await getIssueTypes(projectKey);
         const targetType = cfg.level4Type || cfg.taskType || 'Task';
-        
+
         // Find by exact name, or fallback to first sub-task if our target isn't found
         let bestType = types.find(t => t.name.toLowerCase() === targetType.toLowerCase());
         if (!bestType) bestType = types.find(t => t.subtask); // Try any sub-task type
@@ -479,9 +479,9 @@ export async function getEpics(projectKey: string, search?: string): Promise<Jir
 
 export async function getStoriesByEpic(epicKey: string): Promise<JiraIssue[]> {
     const cfg = loadConfig();
-    const storyType = cfg.storyType || 'Story';
-    const proj = cfg.storiesProject || cfg.defaultProject;
-    const jql = `project = "${proj}" AND issuetype = "${storyType}" AND (parent = "${epicKey}" OR "Epic Link" = "${epicKey}") ORDER BY updated DESC`;
+    const storyType = cfg.level3Type || cfg.storyType || 'Story';
+    const proj = cfg.level3Project || cfg.storiesProject || cfg.defaultProject;
+    const jql = `project = "${proj}" AND issuetype = "${storyType}" AND (parent = "${epicKey}" OR "Epic Link" = "${epicKey}" OR issue in linkedIssues("${epicKey}")) ORDER BY updated DESC`;
     return searchIssues(jql, 100);
 }
 

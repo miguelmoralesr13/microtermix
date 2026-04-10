@@ -58,6 +58,7 @@ export const ProcessesPanel: React.FC = () => {
             refetch();
         } catch (e) {
             console.error('Failed to kill process:', e);
+            alert(`No se pudo terminar el proceso ${pid}: ${e}`);
         } finally {
             setKilling(null);
             setConfirmConfirmKill(null);

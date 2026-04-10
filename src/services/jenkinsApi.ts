@@ -48,6 +48,9 @@ export interface JenkinsBuildSummary {
 
 export interface JenkinsJobSummary {
     name: string;
+    displayName?: string;
+    fullName?: string;
+    fullDisplayName?: string;
     url: string;
     color: JenkinsJobColor;
     _class: JenkinsJobClass;
@@ -125,6 +128,11 @@ export interface JenkinsApiLogEntry {
     durationMs?: number;
     ok: boolean;
     error?: string;
+    requestHeaders?: Record<string, string>;
+    requestBody?: any;
+    responseHeaders?: Record<string, string>;
+    responseBody?: any;
+    curl?: string;
 }
 
 type JenkinsLogListener = (e: JenkinsApiLogEntry) => void;
@@ -163,70 +171,139 @@ function baseUrl(cfg: JenkinsConfig): string {
     return cfg.baseUrl.replace(/\/$/, '');
 }
 
+function toCurl(method: string, url: string, headers: Record<string, string>, body?: any): string {
+    let curl = `curl -X ${method} "${url}"`;
+    Object.entries(headers).forEach(([k, v]) => {
+        curl += ` -H "${k}: ${v}"`;
+    });
+    if (body) {
+        const d = typeof body === 'string' ? body : JSON.stringify(body);
+        curl += ` -d '${d.replace(/'/g, "'\\''")}'`;
+    }
+    return curl;
+}
+
 async function jGet<T>(cfg: JenkinsConfig, path: string): Promise<T> {
     const url = `${baseUrl(cfg)}${path}`;
     const id = ++_seq;
     const time = new Date().toLocaleTimeString('en-GB');
     const t0 = Date.now();
+    const reqHeaders = { Authorization: authHeader(cfg), 'Content-Type': 'application/json' };
+    const curl = toCurl('GET', url, reqHeaders);
+
     let res: Awaited<ReturnType<typeof tauriFetch>>;
     try {
         res = await tauriFetch(url, {
             method: 'GET',
-            headers: { Authorization: authHeader(cfg), 'Content-Type': 'application/json' },
+            headers: reqHeaders,
         });
     } catch (e: any) {
-        jenkinsApiLog.emit({ id, time, method: 'GET', path, url, durationMs: Date.now() - t0, ok: false, error: e?.message });
+        jenkinsApiLog.emit({ id, time, method: 'GET', path, url, durationMs: Date.now() - t0, ok: false, error: e?.message, requestHeaders: reqHeaders, curl });
         throw e;
     }
+
     const durationMs = Date.now() - t0;
+    const resHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { resHeaders[k] = v; });
+
+    let data: any;
+    try {
+        data = await res.json();
+    } catch (e) {
+        data = { error: 'Failed to parse JSON response' };
+    }
+
     if (!res.ok) {
-        jenkinsApiLog.emit({ id, time, method: 'GET', path, url, status: res.status, durationMs, ok: false, error: `HTTP ${res.status}` });
+        jenkinsApiLog.emit({
+            id, time, method: 'GET', path, url, status: res.status, durationMs, ok: false,
+            error: `HTTP ${res.status}`,
+            requestHeaders: reqHeaders,
+            responseHeaders: resHeaders,
+            responseBody: data,
+            curl
+        });
         throw new Error(`Jenkins ${res.status}: ${path}`);
     }
-    jenkinsApiLog.emit({ id, time, method: 'GET', path, url, status: res.status, durationMs, ok: true });
-    return res.json() as Promise<T>;
+
+    jenkinsApiLog.emit({
+        id, time, method: 'GET', path, url, status: res.status, durationMs, ok: true,
+        requestHeaders: reqHeaders,
+        responseHeaders: resHeaders,
+        responseBody: data,
+        curl
+    });
+    return data as T;
 }
 
 async function jPost(cfg: JenkinsConfig, path: string): Promise<void> {
     const url = `${baseUrl(cfg)}${path}`;
     const id = ++_seq;
     const time = new Date().toLocaleTimeString('en-GB');
+
+    // Attempt to get crumb
     const crumbRes = await tauriFetch(`${baseUrl(cfg)}/crumbIssuer/api/json`, {
         method: 'GET',
         headers: { Authorization: authHeader(cfg) },
     });
+
     const headers: Record<string, string> = { Authorization: authHeader(cfg) };
     if (crumbRes.ok) {
         const crumb = await crumbRes.json() as { crumbRequestField: string; crumb: string };
         headers[crumb.crumbRequestField] = crumb.crumb;
     }
+
+    const curl = toCurl('POST', url, headers);
     const t0 = Date.now();
     let res: Awaited<ReturnType<typeof tauriFetch>>;
     try {
         res = await tauriFetch(url, { method: 'POST', headers });
     } catch (e: any) {
-        jenkinsApiLog.emit({ id, time, method: 'POST', path, url, durationMs: Date.now() - t0, ok: false, error: e?.message });
+        jenkinsApiLog.emit({ id, time, method: 'POST', path, url, durationMs: Date.now() - t0, ok: false, error: e?.message, requestHeaders: headers, curl });
         throw e;
     }
+
     const durationMs = Date.now() - t0;
+    const resHeaders: Record<string, string> = {};
+    res.headers.forEach((v, k) => { resHeaders[k] = v; });
+
     if (!res.ok && res.status !== 201 && res.status !== 302) {
-        jenkinsApiLog.emit({ id, time, method: 'POST', path, url, status: res.status, durationMs, ok: false, error: `HTTP ${res.status}` });
+        jenkinsApiLog.emit({
+            id, time, method: 'POST', path, url, status: res.status, durationMs, ok: false,
+            error: `HTTP ${res.status}`,
+            requestHeaders: headers,
+            responseHeaders: resHeaders,
+            curl
+        });
         throw new Error(`Jenkins POST ${res.status}: ${path}`);
     }
-    jenkinsApiLog.emit({ id, time, method: 'POST', path, url, status: res.status, durationMs, ok: true });
+
+    jenkinsApiLog.emit({
+        id, time, method: 'POST', path, url, status: res.status, durationMs, ok: true,
+        requestHeaders: headers,
+        responseHeaders: resHeaders,
+        curl
+    });
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
 
 const JOB_TREE =
-    'name,url,color,_class,' +
+    'name,displayName,fullName,fullDisplayName,url,color,_class,' +
     'lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
     'lastSuccessfulBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
     'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
-    'jobs[name,url,color,_class,' +
+    'jobs[name,displayName,fullName,fullDisplayName,url,color,_class,' +
     'lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
     'lastSuccessfulBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
-    'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration]]';
+    'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+    'jobs[name,displayName,fullName,fullDisplayName,url,color,_class,' +
+    'lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+    'lastSuccessfulBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+    'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+    'jobs[name,displayName,fullName,fullDisplayName,url,color,_class,' +
+    'lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+    'lastSuccessfulBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+    'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration]]]]';
 
 /** Lists all top-level jobs, expanding multibranch children one level. */
 export async function jenkinsGetJobs(cfg: JenkinsConfig): Promise<JenkinsJobSummary[]> {
@@ -235,6 +312,116 @@ export async function jenkinsGetJobs(cfg: JenkinsConfig): Promise<JenkinsJobSumm
         `/api/json?tree=jobs[${JOB_TREE}]`,
     );
     return data.jobs ?? [];
+}
+
+/** 
+ * Searches across the entire Jenkins instance using the native search engine.
+ * This is the ONLY reliable way to find jobs nested deep in folders.
+ */
+export async function jenkinsGlobalSearch(cfg: JenkinsConfig, query: string): Promise<JenkinsJobSummary[]> {
+    if (!query?.trim()) return jenkinsGetJobs(cfg);
+
+    console.log(`[JenkinsSearch] Query: "${query}"`);
+
+    try {
+        // First try the standard search suggestions API
+        const data = await jGet<{ suggestions: Array<{ name: string; url: string }> }>(
+            cfg,
+            `/search/api/json?q=${encodeURIComponent(query.trim())}`
+        ).catch(err => {
+            if (err.message?.includes('404')) {
+                console.warn('[JenkinsSearch] Native search API (404) not available. Falling back to recursive tree search.');
+                return null;
+            }
+            throw err;
+        });
+
+        // ── FALLBACK: Recursive Tree Search ──────────────────────────
+        // Used when /search/api/json is missing (common in CloudBees/Restricted setups)
+        if (!data) {
+            console.log('[JenkinsSearch] Recursive falling back...');
+            return await jenkinsRecursiveSearch(cfg, query);
+        }
+
+        // ── Standard logic if suggestions API exists ──────────────────
+        if (!data?.suggestions || !Array.isArray(data.suggestions)) return [];
+        const jobSuggestions = data.suggestions.filter(s => s.url.includes('/job/'));
+        const topSuggestions = jobSuggestions.slice(0, 30);
+        const results: JenkinsJobSummary[] = [];
+        const SEARCH_DETAILS_TREE = 'name,displayName,fullName,fullDisplayName,url,color,_class,lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],jobs[name,url,color,_class]';
+
+        for (let i = 0; i < topSuggestions.length; i += 5) {
+            const chunk = topSuggestions.slice(i, i + 5);
+            const chunkResults = await Promise.all(
+                chunk.map(async (s) => {
+                    try {
+                        const base = baseUrl(cfg).replace(/\/$/, '');
+                        const fullUrl = s.url.startsWith('http') ? s.url : `${base}${s.url}`;
+                        const apiURL = `${fullUrl.replace(/\/?$/, '')}/api/json?tree=${SEARCH_DETAILS_TREE}`;
+                        const res = await tauriFetch(apiURL, {
+                            method: 'GET',
+                            headers: { Authorization: authHeader(cfg), 'Accept': 'application/json' },
+                        });
+                        if (!res.ok) return null;
+                        const job = await res.json() as JenkinsJobSummary;
+                        if (isFolder(job)) return null;
+                        return job;
+                    } catch { return null; }
+                })
+            );
+            results.push(...chunkResults.filter((r): r is JenkinsJobSummary => r !== null));
+        }
+        return results;
+
+    } catch (err) {
+        console.error('[JenkinsSearch] Global search error:', err);
+        return [];
+    }
+}
+
+/** 
+ * Fallback search that asks Jenkins for a deep nested tree of job names/URLs 
+ * and filters them locally. Slower but more reliable if /search is 404.
+ */
+async function jenkinsRecursiveSearch(cfg: JenkinsConfig, query: string): Promise<JenkinsJobSummary[]> {
+    const q = query.toLowerCase();
+    // Build a deep tree request (up to 10 folders deep)
+    let jobsTree = 'name,displayName,fullName,fullDisplayName,url,color,_class,lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration]';
+    for (let i = 0; i < 10; i++) {
+        jobsTree = `name,displayName,fullName,fullDisplayName,url,color,_class,lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],jobs[${jobsTree}]`;
+    }
+
+    const data = await jGet<{ jobs: JenkinsJobSummary[] }>(
+        cfg,
+        `/api/json?tree=jobs[${jobsTree}]`
+    );
+
+    const matches: JenkinsJobSummary[] = [];
+    const walk = (items: JenkinsJobSummary[]) => {
+        items?.forEach(j => {
+            const isMBranch = j._class?.toLowerCase().includes('multibranch');
+            
+            if (jobMatchesSearch(j, q)) {
+                if (!isFolder(j)) {
+                    matches.push(j);
+                }
+            }
+            
+            // If it's a generic folder, always recurse.
+            // If it's a Multibranch job, we've already added it if it matched, 
+            // so we STOP recursing here because we don't want to show branch/environment results separately.
+            if (Array.isArray(j.jobs)) {
+                 const isGenericFolder = j._class?.toLowerCase().includes('folder') && !isMBranch;
+                 if (isGenericFolder) {
+                     walk(j.jobs);
+                 }
+            }
+        });
+    };
+
+    walk(data.jobs ?? []);
+    console.log(`[JenkinsSearch] Recursive found ${matches.length} matches.`);
+    return matches.slice(0, 50); // Limit to 50 found items
 }
 
 /**
@@ -342,6 +529,9 @@ const FAV_KEY = 'microtermix-jenkins-favs';
 export interface JenkinsFavorite {
     url: string;
     name: string;
+    displayName?: string;
+    fullName?: string;
+    fullDisplayName?: string;
     color: string;
     _class: string;
     lastBuild: JenkinsBuildSummary | null;
@@ -353,6 +543,9 @@ export function jobToFavorite(job: JenkinsJobSummary): JenkinsFavorite {
     return {
         url: normalizeUrl(job.url),
         name: job.name,
+        displayName: job.displayName,
+        fullName: job.fullName,
+        fullDisplayName: job.fullDisplayName,
         color: job.color,
         _class: job._class,
         lastBuild: job.lastBuild,
@@ -390,10 +583,11 @@ export async function jenkinsGetJobStatus(
     jobPath: string,
 ): Promise<JenkinsJobSummary | null> {
     const tree =
-        'name,url,color,_class,' +
+        'name,displayName,fullName,fullDisplayName,url,color,_class,' +
         'lastBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
         'lastSuccessfulBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
-        'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration]';
+        'lastFailedBuild[number,url,result,duration,timestamp,building,displayName,estimatedDuration],' +
+        'jobs[name,displayName,url,color,_class,lastBuild[number,result,timestamp]]';
     try {
         return await jGet<JenkinsJobSummary>(cfg, `${jobPath}api/json?tree=${tree}`);
     } catch {
@@ -481,6 +675,7 @@ export function isFolder(job: JenkinsJobSummary): boolean {
 }
 
 export function isBuilding(job: JenkinsJobSummary): boolean {
+    if (!job) return false;
     return (
         job.color?.endsWith('_anime') === true ||
         job.lastBuild?.building === true
@@ -535,14 +730,46 @@ export function jobApiPath(url: string, baseUrl: string): string {
     return url.startsWith(base) ? url.slice(base.length) : url;
 }
 
+/** 
+ * Flat list of leaf jobs (excludes folder/multibranch containers).
+ * User says: "solo deve buscar en los jobs no en las carpetas".
+ */
+export function flattenJobs(list: JenkinsJobSummary[]): JenkinsJobSummary[] {
+    const flat: JenkinsJobSummary[] = [];
+    if (!Array.isArray(list)) return flat;
+
+    list.forEach(j => {
+        const isMBranch = j._class?.toLowerCase().includes('multibranch');
+        const isFold = j._class?.toLowerCase().includes('folder') && !isMBranch;
+
+        if (!isFold) {
+            flat.push(j);
+        }
+
+        if (Array.isArray(j.jobs)) {
+            // Solo recurrimos para aplanar carpetas genéricas. 
+            // Para proyectos Multibranch, el usuario quiere ver el padre (el nivel arriba).
+            if (isFold) {
+                flat.push(...flattenJobs(j.jobs));
+            }
+        }
+    });
+    return flat;
+}
+
 /**
- * Returns true if `job` (or any of its already-fetched children) matches the query.
- * Used for client-side deep search against the 2-level tree loaded on startup.
+ * Basic name/URL matcher for jobs.
  */
 export function jobMatchesSearch(job: JenkinsJobSummary, query: string): boolean {
-    if (!query) return true;
-    const q = query.toLowerCase();
-    if (job.name.toLowerCase().includes(q)) return true;
-    if (job.jobs?.some(child => jobMatchesSearch(child, q))) return true;
-    return false;
+    const q = (query || '').trim().toLowerCase();
+    if (!q) return true;
+    if (!job) return false;
+
+    return (
+        (job.name?.toLowerCase().includes(q)) ||
+        (job.displayName?.toLowerCase().includes(q)) ||
+        (job.fullName?.toLowerCase().includes(q)) ||
+        (job.fullDisplayName?.toLowerCase().includes(q)) ||
+        (job.url?.toLowerCase().includes(q))
+    );
 }

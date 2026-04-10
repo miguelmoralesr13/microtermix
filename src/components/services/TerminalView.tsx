@@ -6,6 +6,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useProcessStore } from '../../stores/processStore';
 import { Search, X, ChevronUp, ChevronDown, Lightbulb, Zap, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { useLogActions, LogAction } from '../../hooks/useLogActions';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
@@ -88,6 +89,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             fontSize: 14,
             scrollback: 5000,
             allowProposedApi: true,
+            convertEol: true,
+            cursorBlink: true,
+            cursorStyle: 'underline',
         });
 
         const fitAddon = new FitAddon();
@@ -129,10 +133,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             }
         });
 
+        let isDisposed = false;
+
         searchAddon.activate(term as Parameters<SearchAddon['activate']>[0]);
         searchAddonRef.current = searchAddon;
         term.open(terminalRef.current);
-        fitAddon.fit();
+        
+        // Use requestAnimationFrame for the initial fit to ensure renderer is ready
+        requestAnimationFrame(() => {
+            if (!isDisposed && terminalRef.current && terminalRef.current.offsetWidth > 0) {
+                try { fitAddon.fit(); } catch (_) { }
+            }
+        });
+
+        xtermRef.current = term;
 
         term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
             if (e.type !== 'keydown') return true;
@@ -145,7 +159,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
                 navigator.clipboard?.readText().then(text => {
-                    if (text) term.write(text);
+                    if (text) {
+                        term.write(text);
+                        invoke('write_stdin_line', { serviceId, line: text }).catch(console.error);
+                    }
                 }).catch(() => { });
                 return false;
             }
@@ -154,12 +171,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
                 setSearchOpen(open => !open);
                 return false;
             }
-            if (e.ctrlKey && e.key === 'Tab') {
-                return false;
-            }
             return true;
         });
-        xtermRef.current = term;
+
+        // Interactive Input: captured by xterm and sent to PTY in the backend
+        term.onData(data => {
+            invoke('write_stdin_line', { serviceId, line: data }).catch(console.error);
+        });
+
+        term.onResize(({ rows, cols }) => {
+            invoke('resize_pty', { serviceId, rows, cols }).catch(console.error);
+        });
 
         // Solo pedimos el historial si el proceso NO está corriendo o si no hay logs en absoluto.
         // Si el proceso está corriendo, confiamos en el stream de tiempo real para evitar duplicidad visual (CMD duplicado).
@@ -181,16 +203,39 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         }
 
         const resizeObserver = new ResizeObserver(() => {
-            if (terminalRef.current && terminalRef.current.offsetWidth > 0) {
-                try { fitAddon.fit(); } catch (_) { }
+            // Only fit if the element is visible and we haven't disposed yet
+            if (!isDisposed && terminalRef.current && terminalRef.current.offsetParent !== null) {
+                try { 
+                    fitAddon.fit();
+                    // Sync backend PTY after fit
+                    invoke('resize_pty', { 
+                        serviceId, 
+                        rows: term.rows, 
+                        cols: term.cols 
+                    }).catch(() => {});
+                } catch (_) { }
             }
         });
         resizeObserver.observe(terminalRef.current);
 
+        const ptyUnlistenPromise = serviceId.includes('docker-pty') 
+            ? listen('pty-output', (event: any) => {
+                const { serviceId: incomingId, data } = event.payload;
+                if (incomingId === serviceId && term) {
+                    term.write(data);
+                }
+            })
+            : Promise.resolve(() => {});
+
+        // Auto-focus terminal
+        setTimeout(() => term.focus(), 100);
+
         return () => {
+            isDisposed = true;
             resizeObserver.disconnect();
             searchAddonRef.current = null;
             xtermRef.current = null;
+            ptyUnlistenPromise.then(unlisten => unlisten());
             term.dispose();
         };
     }, [serviceId]);
@@ -222,15 +267,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
             return;
         }
         if (logs.length > lastWrittenLogCountRef.current) {
-            for (let i = lastWrittenLogCountRef.current; i < logs.length; i++) {
-                term.writeln(logs[i]);
+            // Only write to terminal if it's NOT a PTY session (PTY uses pty-output event instead)
+            if (!serviceId.includes('docker-pty')) {
+                for (let i = lastWrittenLogCountRef.current; i < logs.length; i++) {
+                    term.writeln(logs[i]);
+                }
             }
             lastWrittenLogCountRef.current = logs.length;
         }
     }, [logs]);
 
     return (
-        <div className="w-full h-full min-h-[300px] rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col relative group">
+        <div className="w-full h-full rounded-lg overflow-hidden border border-slate-800 bg-[#020617] p-2 flex flex-col relative group">
             {/* Floating Clear Button */}
             <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
                 <Button
@@ -301,7 +349,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
                     </div>
                 </div>
             )}
-            <div className="flex-1 w-full min-h-0 relative">
+            <div 
+                className="flex-1 w-full min-h-0 relative"
+                onClick={() => xtermRef.current?.focus()}
+            >
                 <div ref={terminalRef} className="w-full h-full flex-1 min-h-0" />
             </div>
         </div>

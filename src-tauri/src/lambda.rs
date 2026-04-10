@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+use aws_sdk_lambda::primitives::Blob;
+use aws_sdk_lambda::types::{InvocationType, LogType};
+use base64::{engine::general_purpose, Engine};
 use crate::ec2::Ec2Credentials;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -23,76 +26,20 @@ async fn lambda_client(c: &Ec2Credentials) -> aws_sdk_lambda::Client {
     aws_sdk_lambda::Client::new(&config)
 }
 
-async fn search_lambdas_via_explorer(
-    c: &Ec2Credentials,
-    search_term: &str,
-) -> Result<Vec<LambdaFunction>, String> {
-    let config = crate::ec2::aws_config(c).await;
-    let client = aws_sdk_resourceexplorer2::Client::new(&config);
-    
-    // Pattern: mi-func* or automatically add wildcards if none present
-    let query = if search_term.contains('*') {
-        format!("service:lambda name:{}", search_term)
-    } else {
-        format!("service:lambda name:*{}*", search_term)
-    };
-    
-    let resp = client.search()
-        .query_string(query)
-        .max_results(100)
-        .send()
-        .await
-        .map_err(|e| format!("ResourceExplorer no disponible o error: {}", e))?;
-
-    let functions = if let Some(resources) = resp.resources {
-        resources.iter().map(|r| {
-            let arn = r.arn().unwrap_or_default();
-            let name = arn.split(':').last().unwrap_or(arn).to_string();
-            
-            LambdaFunction {
-                function_name: name,
-                function_arn: arn.to_string(),
-                runtime: None,
-                role: "".to_string(),
-                handler: None,
-                code_size: 0,
-                description: None,
-                timeout: None,
-                memory_size: None,
-                last_modified: "".to_string(),
-                state: None,
-                version: "".to_string(),
-                environment: vec![],
-            }
-        }).collect()
-    } else {
-        vec![]
-    };
-
-    Ok(functions)
-}
+// Standard list functions with local filter
 
 #[tauri::command]
 pub async fn lambda_list_functions(
     credentials: Ec2Credentials,
     search_term: Option<String>,
 ) -> Result<Vec<LambdaFunction>, String> {
-    // Fast path: Try Resource Explorer if searching
-    if let Some(st) = &search_term {
-        if !st.is_empty() {
-            if let Ok(explorer_results) = search_lambdas_via_explorer(&credentials, st).await {
-                if !explorer_results.is_empty() {
-                    return Ok(explorer_results);
-                }
-            }
-        }
-    }
+    crate::app_logs::log_info("Lambda", "Listando funciones de AWS...");
 
     // Fallback path: Standard paginated list (Optimized without heavy fields) 
     let client = lambda_client(&credentials).await;
     
     let mut functions = Vec::new();
-    let max_to_fetch = if search_term.is_some() { 500 } else { 50 };
+    let max_to_fetch = if search_term.is_some() { 1000 } else { 50 };
     let st_lower = search_term.as_ref().map(|s| s.to_lowercase());
 
     let mut pager = client.list_functions()
@@ -174,5 +121,145 @@ pub async fn lambda_get_function(
         state: f.state().map(|s| s.as_str().to_string()),
         version: f.version().unwrap_or_default().to_string(),
         environment: env_vars,
+    })
+}
+
+// ─── Invoke ───────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LambdaInvokeResult {
+    pub status_code: i32,
+    pub function_error: Option<String>,
+    pub log_tail: Option<String>,
+    pub payload: String,
+    pub executed_version: Option<String>,
+    /// Parsed from log tail REPORT line
+    pub duration_ms: Option<f64>,
+    pub billed_duration_ms: Option<f64>,
+    pub max_memory_used_mb: Option<f64>,
+}
+
+fn parse_report_metrics(log: &str) -> (Option<f64>, Option<f64>, Option<f64>) {
+    // REPORT RequestId: xxx  Duration: 12.34 ms  Billed Duration: 13 ms  Memory Size: 128 MB  Max Memory Used: 67 MB
+    let get = |key: &str, suffix: &str| -> Option<f64> {
+        let start = log.find(key)? + key.len();
+        let rest = log[start..].trim_start();
+        let end = rest.find(suffix)?.min(rest.find('\t').unwrap_or(usize::MAX));
+        rest[..end].trim().parse::<f64>().ok()
+    };
+    (
+        get("Duration: ", " ms"),
+        get("Billed Duration: ", " ms"),
+        get("Max Memory Used: ", " MB"),
+    )
+}
+
+#[tauri::command]
+pub async fn lambda_invoke(
+    credentials: Ec2Credentials,
+    function_name: String,
+    payload: String,
+    invocation_type: Option<String>,
+) -> Result<LambdaInvokeResult, String> {
+    let client = lambda_client(&credentials).await;
+
+    let inv_type = match invocation_type.as_deref().unwrap_or("RequestResponse") {
+        "Event"  => InvocationType::Event,
+        "DryRun" => InvocationType::DryRun,
+        _        => InvocationType::RequestResponse,
+    };
+
+    let resp = client.invoke()
+        .function_name(&function_name)
+        .payload(Blob::new(payload.as_bytes()))
+        .invocation_type(inv_type)
+        .log_type(LogType::Tail)
+        .send()
+        .await
+        .map_err(|e| format!("Lambda invoke error: {e:?}"))?;
+
+    let payload_bytes = resp.payload().map(|b| b.as_ref().to_vec()).unwrap_or_default();
+    let payload_str   = String::from_utf8_lossy(&payload_bytes).to_string();
+
+    let log_tail = resp.log_result()
+        .and_then(|b64| general_purpose::STANDARD.decode(b64).ok())
+        .and_then(|bytes| String::from_utf8(bytes).ok());
+
+    let (duration_ms, billed_duration_ms, max_memory_used_mb) = log_tail
+        .as_deref()
+        .map(parse_report_metrics)
+        .unwrap_or((None, None, None));
+
+    Ok(LambdaInvokeResult {
+        status_code: resp.status_code(),
+        function_error: resp.function_error().map(String::from),
+        log_tail,
+        payload: payload_str,
+        executed_version: resp.executed_version().map(String::from),
+        duration_ms,
+        billed_duration_ms,
+        max_memory_used_mb,
+    })
+}
+
+/// Invokes a Lambda through a local endpoint (SAM local / LocalStack / any AWS-compatible endpoint).
+#[tauri::command]
+pub async fn lambda_invoke_local(
+    function_name: String,
+    payload: String,
+    endpoint_url: Option<String>,
+    invocation_type: Option<String>,
+) -> Result<LambdaInvokeResult, String> {
+    use aws_config::Region;
+    use aws_credential_types::Credentials;
+
+    let endpoint = endpoint_url.unwrap_or_else(|| "http://localhost:3001".to_string());
+
+    let creds = Credentials::new("test", "test", None, None, "local");
+    let cfg = aws_config::from_env()
+        .credentials_provider(creds)
+        .region(Region::new("us-east-1"))
+        .endpoint_url(&endpoint)
+        .behavior_version(aws_config::BehaviorVersion::latest())
+        .load()
+        .await;
+    let client = aws_sdk_lambda::Client::new(&cfg);
+
+    let inv_type = match invocation_type.as_deref().unwrap_or("RequestResponse") {
+        "Event"  => InvocationType::Event,
+        "DryRun" => InvocationType::DryRun,
+        _        => InvocationType::RequestResponse,
+    };
+
+    let resp = client.invoke()
+        .function_name(&function_name)
+        .payload(Blob::new(payload.as_bytes()))
+        .invocation_type(inv_type)
+        .log_type(LogType::Tail)
+        .send()
+        .await
+        .map_err(|e| format!("Lambda local invoke error: {e:?}"))?;
+
+    let payload_bytes = resp.payload().map(|b| b.as_ref().to_vec()).unwrap_or_default();
+    let payload_str   = String::from_utf8_lossy(&payload_bytes).to_string();
+
+    let log_tail = resp.log_result()
+        .and_then(|b64| general_purpose::STANDARD.decode(b64).ok())
+        .and_then(|bytes| String::from_utf8(bytes).ok());
+
+    let (duration_ms, billed_duration_ms, max_memory_used_mb) = log_tail
+        .as_deref()
+        .map(parse_report_metrics)
+        .unwrap_or((None, None, None));
+
+    Ok(LambdaInvokeResult {
+        status_code: resp.status_code(),
+        function_error: resp.function_error().map(String::from),
+        log_tail,
+        payload: payload_str,
+        executed_version: resp.executed_version().map(String::from),
+        duration_ms,
+        billed_duration_ms,
+        max_memory_used_mb,
     })
 }

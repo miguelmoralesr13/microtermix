@@ -29,6 +29,8 @@ const UTILITIES = [
     { id: 'semgrep', label: 'Semgrep' },
     { id: 'system', label: 'Monitor de Sistema' },
     { id: 'zeplin', label: 'Zeplin' },
+    { id: 'template-compiler', label: 'Template Compiler' },
+    { id: 'docker', label: 'Docker' },
 ];
 
 export const SettingsModal: React.FC<{ trigger?: React.ReactNode }> = ({ trigger }) => {

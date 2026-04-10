@@ -1,10 +1,10 @@
 import React from 'react';
-import { 
+import {
     Settings, MoreVertical
 } from 'lucide-react';
 import { useWorkspace, Project } from '../../context/WorkspaceContext';
 import { cn } from '../../lib/utils';
-import { 
+import {
     Tooltip,
     TooltipContent,
     TooltipProvider,
@@ -27,22 +27,23 @@ interface ProjectRowProps {
 
 const TYPE_BADGE: Record<string, string> = {
     node: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-    go:   'bg-sky-500/15 text-sky-400 border-sky-500/30',
+    go: 'bg-sky-500/15 text-sky-400 border-sky-500/30',
     rust: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
     java: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
-    bun:  'bg-pink-500/15 text-pink-400 border-pink-500/30',
+    bun: 'bg-pink-500/15 text-pink-400 border-pink-500/30',
+    'git-repo': 'bg-slate-500/15 text-slate-400 border-slate-500/30',
 };
 
 const STATUS_BAR: Record<string, string> = {
     running: 'bg-emerald-400 shadow-[0_0_8px_theme(colors.emerald.400)]',
-    error:   'bg-red-400 shadow-[0_0_8px_theme(colors.red.400)]',
+    error: 'bg-red-400 shadow-[0_0_8px_theme(colors.red.400)]',
     stopped: 'bg-slate-500',
-    idle:    'bg-transparent',
+    idle: 'bg-transparent',
 };
 
-const ProjectRow = React.memo(({ 
-    project, status, isSelected, onToggleSelect, 
-    onOpenSettings 
+const ProjectRow = React.memo(({
+    project, status, isSelected, onToggleSelect,
+    onOpenSettings
 }: ProjectRowProps) => {
     const { setActiveView } = useWorkspace();
     const projectPath = project.path as string;
@@ -73,7 +74,7 @@ const ProjectRow = React.memo(({
 
     return (
         <TooltipProvider delay={400}>
-            <div 
+            <div
                 className={cn(
                     "group flex items-center gap-2 px-3 py-2 border-b border-slate-800/60 transition-all relative select-none",
                     isSelected ? "bg-blue-600/10 border-blue-500/30" : "hover:bg-slate-800/40"
@@ -133,7 +134,7 @@ const ProjectRow = React.memo(({
                             <span className={cn(
                                 'text-[9px] font-bold uppercase tracking-tighter',
                                 status === 'running' && 'text-emerald-400',
-                                status === 'error'   && 'text-red-400',
+                                status === 'error' && 'text-red-400',
                                 status === 'stopped' && 'text-slate-500',
                             )}>
                                 • {status === 'stopped' ? 'parado' : status}
@@ -146,10 +147,10 @@ const ProjectRow = React.memo(({
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all ml-2">
                     <Tooltip>
                         <TooltipTrigger render={
-                            <Button 
-                                variant="ghost" 
-                                size="icon-xs" 
-                                onClick={(e) => { e.stopPropagation(); onOpenSettings(); }} 
+                            <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                onClick={(e) => { e.stopPropagation(); onOpenSettings(); }}
                                 className="text-slate-500 hover:text-microtermix-neon relative"
                             >
                                 <Settings size={13} />
@@ -163,12 +164,12 @@ const ProjectRow = React.memo(({
                         <TooltipContent>Configuración Completa</TooltipContent>
                     </Tooltip>
 
-                    <Button 
-                        variant="ghost" 
-                        size="icon-xs" 
+                    <Button
+                        variant="ghost"
+                        size="icon-xs"
                         className="text-slate-600 hover:text-microtermix-neon hover:bg-microtermix-neon/10 transition-colors cursor-context-menu"
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
+                        onClick={(e) => {
+                            e.stopPropagation();
                             // Dispatch a contextmenu event to trigger the shadcn menu programmatically if needed,
                             // but usually being inside ContextMenuTrigger is enough.
                             const event = new MouseEvent('contextmenu', {

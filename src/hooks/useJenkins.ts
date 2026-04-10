@@ -4,55 +4,46 @@ import * as api from '../services/jenkinsApi';
 
 /** Hook to fetch all top-level Jenkins jobs */
 export function useJenkinsJobs() {
-  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === s.activeAccountId) || { baseUrl: '', user: '', token: '' });
+  const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
+  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
-    queryKey: ['jenkins', 'jobs', config.baseUrl],
+    queryKey: ['jenkins', 'jobs', activeAccountId],
     queryFn: () => api.jenkinsGetJobs(config),
     enabled: !!config.baseUrl,
-    refetchInterval: (query) => {
-        const data = query.state.data;
-        const anyBuilding = Array.isArray(data) && data.some(api.isBuilding);
-        // If something is building, refresh every 10s. Otherwise every 30s.
-        return anyBuilding ? 10_000 : 30_000;
-    },
+    refetchInterval: false, // Disabling global polling for todos as per request
   });
 }
 
 /** Hook to fetch children of a folder/multibranch */
 export function useJenkinsChildren(jobPath: string, enabled = false) {
-  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === s.activeAccountId) || { baseUrl: '', user: '', token: '' });
+  const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
+  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
-    queryKey: ['jenkins', 'children', config.baseUrl, jobPath],
+    queryKey: ['jenkins', 'children', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetChildren(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: (query) => {
-        const data = query.state.data;
-        const building = Array.isArray(data) && data.some(api.isBuilding);
-        // If child is building, 10s. Otherwise 30s.
-        return building ? 10_000 : 30_000;
-    }
+    refetchInterval: false,
   });
 }
 
 /** Hook to fetch specific job status */
-export function useJenkinsJobStatus(jobPath: string, enabled = false) {
-  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === s.activeAccountId) || { baseUrl: '', user: '', token: '' });
+export function useJenkinsJobStatus(jobPath: string, enabled = false, live = false) {
+  const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
+  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
-    queryKey: ['jenkins', 'job-status', config.baseUrl, jobPath],
+    queryKey: ['jenkins', 'job-status', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetJobStatus(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: (query) => {
-        const data = query.state.data;
-        return (data && api.isBuilding(data)) ? 10_000 : 30_000;
-    },
+    refetchInterval: live ? 10_000 : false,
   });
 }
 
 /** Hook to fetch build history */
 export function useJenkinsBuilds(jobPath: string, enabled = false) {
-  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === s.activeAccountId) || { baseUrl: '', user: '', token: '' });
+  const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
+  const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
-    queryKey: ['jenkins', 'builds', config.baseUrl, jobPath],
+    queryKey: ['jenkins', 'builds', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetBuilds(config, jobPath),
     enabled: enabled && !!config.baseUrl,
     refetchInterval: (query) => {

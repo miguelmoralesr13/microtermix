@@ -22,7 +22,7 @@ export interface NormalizedPR {
     provider: 'github' | 'gitlab';
 }
 
-function normalizeGithubPR(pr: GithubPR): NormalizedPR {
+export function normalizeGithubPR(pr: GithubPR): NormalizedPR {
     // ciStatus is derived from mergeable_state (merge readiness), not CI check runs.
     // Actual CI status would require a separate call to the Check Runs API.
     let ciStatus: NormalizedPR['ciStatus'] = 'none';
@@ -45,7 +45,7 @@ function normalizeGithubPR(pr: GithubPR): NormalizedPR {
     };
 }
 
-function normalizeGitlabMR(mr: GitlabMR): NormalizedPR {
+export function normalizeGitlabMR(mr: GitlabMR): NormalizedPR {
     let ciStatus: NormalizedPR['ciStatus'] = 'none';
     if (mr.head_pipeline?.status === 'success') ciStatus = 'success';
     else if (mr.head_pipeline?.status === 'failed') ciStatus = 'failure';
@@ -200,7 +200,11 @@ export const PRSection: React.FC<PRSectionProps> = ({ projectPath, account, acti
                     activeBranch={activeBranch}
                     branches={branches}
                     onClose={() => setShowCreate(false)}
-                    onCreated={() => { fetchPRs(); }}
+                    onCreated={(newPr: NormalizedPR) => { 
+                        fetchPRs(); 
+                        setShowCreate(false);
+                        setMergingPR(newPr);
+                    }}
                 />
             )}
 

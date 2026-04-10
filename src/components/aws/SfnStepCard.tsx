@@ -10,9 +10,12 @@ import {
   Circle,
   ExternalLink,
   Copy,
-  Check
+  Check,
+  GitBranch
 } from 'lucide-react';
 import { useCwStore } from '../../stores/cwStore';
+import { useSfnStore } from '../../stores/sfnStore';
+import { cn } from '@/lib/utils';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { toast } from 'sonner';
 
@@ -120,9 +123,23 @@ export const SfnStepCard: React.FC<SfnStepCardProps> = ({ step, isFirst, isLast 
 
   const handleGoToLogs = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!step.lambdaArn) return;
+    let arn = step.lambdaArn;
+
+    // Fallback: if backend didn't provide it, try to find it in input JSON (often in Parameters.FunctionName)
+    if (!arn && step.input) {
+        try {
+            const parsedInput = JSON.parse(step.input);
+            if (parsedInput.Parameters?.FunctionName) {
+                arn = parsedInput.Parameters.FunctionName;
+            } else if (parsedInput.FunctionName) {
+                arn = parsedInput.FunctionName;
+            }
+        } catch {}
+    }
+
+    if (!arn) return;
     
-    const functionName = step.lambdaArn.split(':').pop();
+    const functionName = arn.split(':').pop();
     if (functionName) {
         const logGroup = `/aws/lambda/${functionName}`;
         goToLogs(logGroup);
@@ -130,11 +147,35 @@ export const SfnStepCard: React.FC<SfnStepCardProps> = ({ step, isFirst, isLast 
     }
   };
 
+  const { setSelectedMachineArn } = useSfnStore();
+
+  const handleGoToSfn = (e: React.MouseEvent, sfnArn: string) => {
+    e.stopPropagation();
+    setSelectedMachineArn(sfnArn);
+  };
+
   const formatDuration = (ms?: number) => {
     if (ms === undefined) return '';
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(2)}s`;
   };
+
+  const detectedLambdaArn = React.useMemo(() => {
+    if (step.lambdaArn) return step.lambdaArn;
+    if (!step.input) return null;
+    try {
+        const p = JSON.parse(step.input);
+        return p.Parameters?.FunctionName || p.FunctionName || null;
+    } catch { return null; }
+  }, [step.lambdaArn, step.input]);
+
+  const detectedSfnArn = React.useMemo(() => {
+    if (!step.input) return null;
+    try {
+        const p = JSON.parse(step.input);
+        return p.Parameters?.StateMachineArn || p.StateMachineArn || null;
+    } catch { return null; }
+  }, [step.input]);
 
   return (
     <div className="flex gap-4">
@@ -147,9 +188,12 @@ export const SfnStepCard: React.FC<SfnStepCardProps> = ({ step, isFirst, isLast 
 
       {/* Card */}
       <div 
-        className={`flex-1 bg-slate-900/40 border border-slate-800 rounded-lg overflow-hidden transition-all hover:border-slate-700 cursor-pointer ${
-          isOpen ? 'ring-1 ring-slate-700 bg-slate-900/60' : ''
-        }`}
+        className={cn(
+            "flex-1 bg-slate-900/40 border-y border-r border-slate-800 rounded-lg overflow-hidden transition-all hover:border-slate-700 cursor-pointer border-l-3",
+            isOpen ? 'ring-1 ring-slate-700 bg-slate-900/60' : '',
+            detectedLambdaArn ? 'border-l-microtermix-neon/60 bg-microtermix-neon/2' : 
+            detectedSfnArn ? 'border-l-amber-500/60 bg-amber-500/2' : 'border-l-slate-800'
+        )}
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="p-3 flex items-center justify-between gap-3">
@@ -166,15 +210,28 @@ export const SfnStepCard: React.FC<SfnStepCardProps> = ({ step, isFirst, isLast 
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {step.lambdaArn && (
+            {detectedLambdaArn && (
               <button 
                 onClick={handleGoToLogs}
-                className="p-1.5 text-slate-500 hover:text-microtermix-neon hover:bg-slate-800 rounded transition-colors"
-                title="View Lambda Logs"
+                className="flex items-center gap-1.5 px-2 py-1 bg-microtermix-neon/10 border border-microtermix-neon/30 rounded text-[9px] font-bold text-microtermix-neon hover:bg-microtermix-neon hover:text-slate-950 transition-all shadow-sm"
+                title="Ir a Logs de CloudWatch"
               >
-                <Terminal size={14} />
+                <Terminal size={12} />
+                LOGS
               </button>
             )}
+            
+            {detectedSfnArn && (
+              <button 
+                onClick={(e) => handleGoToSfn(e, String(detectedSfnArn))}
+                className="flex items-center gap-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[9px] font-bold text-amber-500 hover:bg-amber-500 hover:text-slate-950 transition-all shadow-sm"
+                title="Ir a Step Function Anidada"
+              >
+                <GitBranch size={12} />
+                SUB-SFN
+              </button>
+            )}
+            
             {isOpen ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
           </div>
         </div>
@@ -202,10 +259,24 @@ export const SfnStepCard: React.FC<SfnStepCardProps> = ({ step, isFirst, isLast 
               />
             </div>
 
-            {step.lambdaArn && (
+            {detectedSfnArn && (
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800/30">
-                    <div className="text-[9px] text-slate-600 truncate max-w-[80%] font-mono" title={step.lambdaArn}>
-                        Resource: {step.lambdaArn}
+                    <div className="text-[9px] text-slate-600 truncate max-w-[80%] font-mono" title={String(detectedSfnArn)}>
+                        Nested SFN: {String(detectedSfnArn)}
+                    </div>
+                    <button 
+                        onClick={(e) => handleGoToSfn(e, String(detectedSfnArn))}
+                        className="flex items-center gap-1 text-[10px] text-amber-500 hover:text-amber-500/80 hover:underline transition-colors"
+                    >
+                        View Sub-StepFunction <ExternalLink size={10} />
+                    </button>
+                </div>
+            )}
+
+            {detectedLambdaArn && (
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800/30">
+                    <div className="text-[9px] text-slate-600 truncate max-w-[80%] font-mono" title={String(detectedLambdaArn)}>
+                        Resource: {String(detectedLambdaArn)}
                     </div>
                     <button 
                         onClick={handleGoToLogs}

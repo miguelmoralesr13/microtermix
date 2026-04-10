@@ -1,3 +1,8 @@
+import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { ShieldCheck, Loader } from 'lucide-react';
+import { toast } from 'sonner';
+import { useWorkspace } from '../../context/WorkspaceContext';
 import { SshDefaults, saveSshDefaults } from './ec2Types';
 
 interface Ec2SshSettingsProps {
@@ -6,10 +11,31 @@ interface Ec2SshSettingsProps {
 }
 
 export function Ec2SshSettings({ ssh, setSsh }: Ec2SshSettingsProps) {
+    const { state: { currentPath } } = useWorkspace();
+    const [downloading, setDownloading] = useState(false);
+
     const handleUpdate = (updates: Partial<SshDefaults>) => {
         const updated = { ...ssh, ...updates };
         setSsh(updated);
         saveSshDefaults(updated);
+    };
+
+    const downloadCert = async () => {
+        if (!currentPath) {
+            toast.error("No hay un workspace activo");
+            return;
+        }
+        setDownloading(true);
+        try {
+            const separator = currentPath.includes('\\') ? '\\' : '/';
+            const targetPath = `${currentPath}${separator}global-bundle.pem`;
+            await invoke('ec2_download_aws_ca', { targetPath });
+            toast.success("Certificado global-bundle.pem descargado en el workspace");
+        } catch (e) {
+            toast.error(`Error al descargar: ${e}`);
+        } finally {
+            setDownloading(false);
+        }
     };
 
     return (
@@ -39,6 +65,18 @@ export function Ec2SshSettings({ ssh, setSsh }: Ec2SshSettingsProps) {
                     onChange={e => handleUpdate({ port: parseInt(e.target.value) || 22 })}
                     className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-microtermix-neon w-20"
                 />
+            </div>
+            
+            <div className="flex items-center gap-2 mb-0.5">
+                <button 
+                    onClick={downloadCert} 
+                    disabled={downloading}
+                    title="Descargar global-bundle.pem de AWS"
+                    className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-[10px] font-bold transition-colors disabled:opacity-50"
+                >
+                    {downloading ? <Loader size={12} className="animate-spin" /> : <ShieldCheck size={12} className="text-microtermix-neon" />}
+                    {downloading ? "Descargando..." : "AWS Certificate"}
+                </button>
             </div>
         </div>
     );

@@ -36,6 +36,61 @@ const AlertModal: React.FC<{ isOpen: boolean; title: string; message: string; on
     </Dialog>
 );
 
+const RewordModal: React.FC<{ 
+    isOpen: boolean; 
+    currentMessage: string; 
+    onClose: () => void; 
+    onSave: (newMessage: string) => Promise<void>; 
+}> = ({ isOpen, currentMessage, onClose, onSave }) => {
+    const [message, setMessage] = useState(currentMessage);
+    const [working, setWorking] = useState(false);
+
+    useEffect(() => { if (isOpen) setMessage(currentMessage); }, [isOpen, currentMessage]);
+
+    const handleSave = async () => {
+        if (!message.trim() || message === currentMessage) { onClose(); return; }
+        setWorking(true);
+        await onSave(message);
+        setWorking(false);
+        onClose();
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-xl bg-slate-900 border-slate-800 shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-slate-100 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                        <Pencil size={14} className="text-microtermix-neon" />
+                        Editar Mensaje de Commit
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                    <textarea 
+                        className="w-full bg-black/40 border border-slate-800 rounded-md p-3 text-slate-200 text-sm font-sans min-h-[120px] focus:outline-none focus:border-microtermix-neon/40 transition-colors resize-none"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Escribe el nuevo mensaje..."
+                        autoFocus
+                    />
+                    <p className="text-[10px] text-slate-500 mt-2 italic font-mono">
+                         Nota: Esto reescribirá la historia del repositorio (rebase interactivo).
+                    </p>
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="ghost" onClick={onClose} disabled={working} className="text-slate-400 hover:text-white">Cancelar</Button>
+                    <Button 
+                        onClick={handleSave} 
+                        disabled={working || !message.trim() || message === currentMessage}
+                        className="bg-microtermix-neon text-microtermix-darker font-bold hover:bg-microtermix-neon/80 min-w-[100px]"
+                    >
+                        {working ? <RefreshCw size={14} className="animate-spin" /> : 'Guardar Cambios'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
 // ── Types ──
 interface GraphNode extends RawCommit {
     col: number;
@@ -154,6 +209,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
 
     const [alertState, setAlertState] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
     const [confirmState, setConfirmState] = useState<{ isOpen: boolean; title: string; description: string; confirmLabel?: string; type?: ConfirmType; onConfirm: () => void }>({ isOpen: false, title: '', description: '', onConfirm: () => { } });
+    const [rewordState, setRewordState] = useState<{ isOpen: boolean; commit: GraphNode | null }>({ isOpen: false, commit: null });
 
     useEffect(() => {
         if (!projectPath) return;
@@ -271,7 +327,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto scrollbar-hide">
+            <div className="flex-1 overflow-y-auto">
                 <div className="relative" style={{ height: nodes.length * ROW_H }}>
                     <svg width={svgW} height={nodes.length * ROW_H} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', zIndex: 1 }}>
                         {edges.map((e, i) => {
@@ -304,8 +360,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                                         <button 
                                             onClick={e => { 
                                                 e.stopPropagation(); 
-                                                const msg = prompt('Nuevo mensaje de commit:', n.message);
-                                                if (msg) handleEditSave(n, msg);
+                                                setRewordState({ isOpen: true, commit: n });
                                             }} 
                                             className="p-1 text-slate-500 hover:text-microtermix-neon"
                                         >
@@ -347,6 +402,14 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                 onCancel={() => setConfirmState(s => ({ ...s, isOpen: false }))}
                 isLoading={deleteWorking}
             />
+            {rewordState.commit && (
+                <RewordModal
+                    isOpen={rewordState.isOpen}
+                    currentMessage={rewordState.commit.message}
+                    onClose={() => setRewordState({ isOpen: false, commit: null })}
+                    onSave={(newMsg) => handleEditSave(rewordState.commit!, newMsg)}
+                />
+            )}
         </div>
     );
 };

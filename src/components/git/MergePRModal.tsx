@@ -70,7 +70,7 @@ export const MergePRModal: React.FC<MergePRModalProps> = ({ pr, projectPath, acc
     // Merge options
     const [method, setMethod] = useState<GithubMergeMethod>('merge');
     const [squash, setSquash] = useState(false);
-    const [removeBranch, setRemoveBranch] = useState(true);
+    const [removeBranch, setRemoveBranch] = useState(false);
     const [commitMessage, setCommitMessage] = useState('');
     const [showMessage, setShowMessage] = useState(false);
 

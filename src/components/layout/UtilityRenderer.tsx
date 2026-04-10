@@ -26,6 +26,7 @@ import { SystemMonitorPanel } from '../system/SystemMonitorPanel';
 import { ZeplinPanel } from '../zeplin/ZeplinPanel';
 import { FileServerPanel } from '../networking/FileServerPanel';
 import { TemplateCompilerPanel } from '../templates/TemplateCompilerPanel';
+import { DockerPanel } from '../docker/DockerPanel';
 
 interface UtilityRendererProps {
     view?: AppView;
@@ -80,6 +81,7 @@ export const UtilityRenderer: React.FC<UtilityRendererProps> = ({ view: forcedVi
         case 'system': return <SystemMonitorPanel />;
         case 'zeplin': return <ZeplinPanel />;
         case 'template-compiler': return <TemplateCompilerPanel />;
+        case 'docker': return <DockerPanel />;
         default:
             return (
                 <div className="flex items-center justify-center w-full h-full text-slate-500 italic">

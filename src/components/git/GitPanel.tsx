@@ -35,7 +35,7 @@ const MIN_PANEL = 150;
 const MAX_PANEL = 800;
 
 export const GitPanel: React.FC = () => {
-    const { state } = useWorkspace();
+    const { state, scanWorkspace } = useWorkspace();
     const queryClient = useQueryClient();
 
     // Selectores Zustand (Solo UI y Cuentas)
@@ -136,28 +136,30 @@ export const GitPanel: React.FC = () => {
     return (
         <div className="flex-1 relative flex flex-col h-full w-full min-h-0 bg-slate-900 overflow-hidden">
             {/* Header / Tabs */}
-            <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4 h-11">
-                <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="h-full flex flex-col justify-end">
-                    <TabsList className="bg-transparent h-10 gap-0 p-0 rounded-none border-b-0">
-                        {state.projects.length === 0 ? (
-                            <div className="px-4 py-2.5 text-[10px] text-slate-500 font-mono uppercase tracking-widest">No Repositories</div>
-                        ) : (
-                            state.projects.map(project => (
-                                <TabsTrigger
-                                    key={project.path as string}
-                                    value={project.path as string}
-                                    className={cn(
-                                        "h-10 px-4 rounded-none border-t-2 border-transparent transition-all",
-                                        "data-[state=active]:bg-slate-900 data-[state=active]:text-microtermix-accent data-[state=active]:border-t-microtermix-accent",
-                                        "data-[state=inactive]:text-slate-500 hover:data-[state=inactive]:bg-slate-900 hover:data-[state=inactive]:text-slate-300",
-                                        "text-xs font-bold"
-                                    )}
-                                >
-                                    {project.name}
-                                </TabsTrigger>
-                            ))
-                        )}
-                    </TabsList>
+            <div className="flex items-center justify-between bg-slate-950 border-b border-slate-800 shrink-0 pr-4 h-11 overflow-hidden">
+                <Tabs value={activeTab || ""} onValueChange={handleTabChange} className="h-full flex flex-col justify-end min-w-0 flex-1 overflow-hidden">
+                    <div className="overflow-x-auto overflow-y-hidden scrollbar-none flex-1 flex flex-col justify-end min-w-0">
+                        <TabsList className="bg-transparent h-10 gap-0 p-0 rounded-none border-b-0 w-max min-w-full flex-nowrap">
+                            {state.projects.length === 0 ? (
+                                <div className="px-4 py-2.5 text-[10px] text-slate-500 font-mono uppercase tracking-widest">No Repositories</div>
+                            ) : (
+                                state.projects.map(project => (
+                                    <TabsTrigger
+                                        key={project.path as string}
+                                        value={project.path as string}
+                                        className={cn(
+                                            "h-10 px-4 rounded-none border-t-2 border-transparent transition-all shrink-0",
+                                            "data-[state=active]:bg-slate-900 data-[state=active]:text-microtermix-accent data-[state=active]:border-t-microtermix-accent",
+                                            "data-[state=inactive]:text-slate-500 hover:data-[state=inactive]:bg-slate-900 hover:data-[state=inactive]:text-slate-300",
+                                            "text-xs font-bold"
+                                        )}
+                                    >
+                                        {project.name}
+                                    </TabsTrigger>
+                                ))
+                            )}
+                        </TabsList>
+                    </div>
                 </Tabs>
 
                 <div className="flex items-center space-x-1 pl-4 h-full">
@@ -282,8 +284,39 @@ export const GitPanel: React.FC = () => {
             {/* Main Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col relative">
                 {!activeTab ? (
-                    <div className="flex-1 flex items-center justify-center text-slate-500 p-8 text-center text-sm">
-                        Select a repository tab to manage Git operations.
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-700">
+                        <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-6 border border-slate-700/50">
+                            <Github className="text-slate-500" size={32} />
+                        </div>
+                        <h2 className="text-xl font-bold text-white mb-2">Workspace sin repositorios</h2>
+                        <p className="text-slate-400 max-w-sm mb-8">
+                            Añade tus proyectos locales o clona repositorios remotos para empezar a gestionar tus cambios Git.
+                        </p>
+                        
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <Button 
+                                onClick={() => state.currentPath && scanWorkspace(state.currentPath)}
+                                className="bg-microtermix-accent hover:bg-microtermix-accent/80 text-white font-bold px-6"
+                            >
+                                <RefreshCw size={14} className="mr-2" />
+                                Escanear Workspace
+                            </Button>
+                            <Button 
+                                variant="outline"
+                                onClick={() => setIsCloneModalOpen(true)}
+                                className="border-slate-700 hover:bg-slate-800 text-slate-300 font-bold px-6"
+                            >
+                                <Download size={14} className="mr-2" />
+                                Clonar Repositorio
+                            </Button>
+                        </div>
+                        
+                        <button 
+                            onClick={() => setIsAccountModalOpen(true)}
+                            className="mt-8 text-xs text-slate-500 hover:text-microtermix-neon transition-colors font-medium"
+                        >
+                            ¿Necesitas configurar tus credenciales primero?
+                        </button>
                     </div>
                 ) : (isGitRepo === undefined || loadingRepo) ? (
                     <div className="flex-1 flex items-center justify-center text-slate-500 text-sm gap-2">
@@ -367,9 +400,9 @@ export const GitPanel: React.FC = () => {
                 />
             )}
 
-            {isAccountModalOpen && activeTab && (
+            {isAccountModalOpen && (
                 <AccountManagerModal
-                    repoPath={activeTab}
+                    repoPath={activeTab || null}
                     onClose={() => setIsAccountModalOpen(false)}
                 />
             )}

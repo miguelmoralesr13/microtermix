@@ -194,9 +194,50 @@ pub fn get_service_logs(service_id: String, limit: Option<usize>) -> Result<Vec<
 }
 
 #[tauri::command]
-pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> Result<(), String> {
-    // Try to open with VS Code if available (supports line/column)
-    let mut cmd = if cfg!(target_os = "windows") {
+pub async fn open_in_editor(
+    path: String, 
+    editor_cmd: Option<String>,
+    line: Option<u32>, 
+    column: Option<u32>
+) -> Result<(), String> {
+    println!("[Editor] >>> ATTEMPTING TO OPEN: {}", path);
+    if let Some(ref ed) = editor_cmd {
+        println!("[Editor] >>> TARGET EDITOR: {}", ed);
+    } else {
+        println!("[Editor] >>> TARGET: Default/VSCode");
+    }
+
+    // Try specific editor if provided
+    if let Some(editor) = editor_cmd {
+        let mut cmd = if editor.contains(" ") {
+            if cfg!(target_os = "windows") {
+                let mut c = silent_command("cmd");
+                c.args(["/C", &editor, &path]);
+                c
+            } else {
+                let mut c = silent_command("sh");
+                c.args(["-c", &format!("{} \"{}\"", editor, path)]);
+                c
+            }
+        } else {
+            let mut c = silent_command(&editor);
+            c.arg(&path);
+            c
+        };
+
+        match cmd.status() {
+            Ok(status) if status.success() => {
+                println!("[Editor] SUCCESS: {}", editor);
+                return Ok(());
+            },
+            Ok(status) => println!("[Editor] FAIL: {} (status: {})", editor, status),
+            Err(e) => println!("[Editor] ERROR: {} (err: {})", editor, e),
+        }
+    }
+
+    // VSCode Fallback
+    println!("[Editor] Trying VS Code fallback...");
+    let mut cmd_code = if cfg!(target_os = "windows") {
         silent_command("cmd")
     } else {
         silent_command("sh")
@@ -211,21 +252,26 @@ pub fn open_in_editor(path: String, line: Option<u32>, column: Option<u32>) -> R
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        cmd.args(["/C", "code", "--goto", &goto_arg]).creation_flags(0x08000000);
+        cmd_code.args(["/C", "code", "--goto", &goto_arg]).creation_flags(0x08000000);
     }
     #[cfg(not(target_os = "windows"))]
     {
-        cmd.args(["-c", &format!("code --goto {}", goto_arg)]);
+        cmd_code.args(["-c", &format!("code --goto {}", goto_arg)]);
     }
 
-    if let Ok(status) = cmd.status() {
+    if let Ok(status) = cmd_code.status() {
         if status.success() {
+            println!("[Editor] SUCCESS: VSCode");
             return Ok(());
         }
     }
 
-    // Fallback to system default opener (no line/column support usually)
-    tauri_plugin_opener::open_path(path, None::<String>).map_err(|e| e.to_string())
+    // Default Fallback
+    println!("[Editor] Final fallback: system opener");
+    tauri_plugin_opener::open_path(path, None::<String>).map_err(|e| {
+        println!("[Editor] CRITICAL FAIL: {}", e);
+        e.to_string()
+    })
 }
 
 /// Public wrapper called from state.rs on app exit.
@@ -238,35 +284,41 @@ pub fn kill_tree_unix_pub(_pid: u32) {}
 
 /// Recursively kill a process tree on Linux by reading /proc PPid entries.
 /// Kills children first (depth-first), then the process itself.
+/// Recursively kill a process tree on Unix by sending signals to its process group (PGID).
+/// This is more reliable than manual walking because children of children are always in the group.
 #[cfg(not(target_os = "windows"))]
-fn kill_tree_unix(pid: u32, sig: nix::sys::signal::Signal) {
+pub fn kill_tree_unix(pid: u32, sig: nix::sys::signal::Signal) {
     use nix::sys::signal::kill;
     use nix::unistd::Pid;
-    // Find direct children via /proc/<n>/status PPid field
-    if let Ok(entries) = std::fs::read_dir("/proc") {
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            let child_pid: u32 = match name_str.parse() {
-                Ok(n) if n != pid => n,
-                _ => continue,
-            };
-            let status_path = format!("/proc/{}/status", child_pid);
-            if let Ok(status) = std::fs::read_to_string(&status_path) {
-                for line in status.lines() {
-                    if let Some(rest) = line.strip_prefix("PPid:") {
-                        if let Ok(ppid) = rest.trim().parse::<u32>() {
-                            if ppid == pid {
-                                kill_tree_unix(child_pid, sig);
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
+    use sysinfo::{System, Pid as SysPid};
+
+    let target_pid = Pid::from_raw(pid as i32);
+
+    // 1. Try to kill the whole process group first (most reliable)
+    // We used cmd.process_group(0) so the process is the leader of its own group
+    let _ = kill(Pid::from_raw(-(pid as i32)), sig);
+
+    // 2. Fallback: Manual walk (in case PGID kill failed or wasn't set up)
+    let mut s = System::new();
+    s.refresh_processes();
+
+    fn kill_recursive(s: &System, pid: u32, sig: nix::sys::signal::Signal) {
+        let pids: Vec<u32> = s.processes()
+            .iter()
+            .filter(|(_, p)| p.parent() == Some(SysPid::from(pid as usize)))
+            .map(|(p, _)| p.as_u32())
+            .collect();
+
+        for child_pid in pids {
+            kill_recursive(s, child_pid, sig);
         }
+        let _ = kill(Pid::from_raw(pid as i32), sig);
     }
-    let _ = kill(Pid::from_raw(pid as i32), sig);
+
+    kill_recursive(&s, pid, sig);
+    
+    // Final blow to the top process just in case
+    let _ = kill(target_pid, sig);
 }
 
 /// Entrada de proceso en escucha (netstat).
@@ -287,50 +339,15 @@ pub struct ListeningProcess {
 fn resolve_process_info(pid: u32) -> (String, String) {
     if pid == 0 { return ("System".to_string(), "kernel".to_string()); }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        // Try to get name from comm first
-        let mut name = fs::read_to_string(format!("/proc/{}/comm", pid))
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|_| "unknown".to_string());
-        
-        // If name is unknown or generic, try cmdline
-        if name == "unknown" || name == "node" || name == "java" || name == "python" || name == "sh" || name == "bash" {
-            if let Ok(cmdline) = fs::read_to_string(format!("/proc/{}/cmdline", pid)) {
-                let parts: Vec<&str> = cmdline.split('\0').filter(|s| !s.is_empty()).collect();
-                if let Some(first) = parts.first() {
-                    // Extract basename of the executable
-                    let p = Path::new(first);
-                    if let Some(fname) = p.file_name() {
-                        name = fname.to_string_lossy().to_string();
-                    }
-                }
-            }
-        }
+    use sysinfo::{System, Pid};
+    let mut s = System::new();
+    s.refresh_processes();
 
-        let exe = fs::read_link(format!("/proc/{}/exe", pid))
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "unknown".to_string());
-            
+    if let Some(process) = s.process(Pid::from(pid as usize)) {
+        let name = process.name().to_string();
+        let exe = process.exe().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "unknown".to_string());
         (name, exe)
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Use tasklist to get the name
-        let output = silent_command("tasklist")
-            .args(["/FI", &format!("PID eq {}", pid), "/NH", "/FO", "CSV"])
-            .output();
-            
-        if let Ok(out) = output {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            if let Some(line) = stdout.lines().next() {
-                let parts: Vec<&str> = line.split(',').map(|s| s.trim_matches('"')).collect();
-                if parts.len() > 0 && !parts[0].is_empty() && !parts[0].starts_with("INFO:") {
-                    return (parts[0].to_string(), "unknown".to_string());
-                }
-            }
-        }
+    } else {
         ("unknown".to_string(), "unknown".to_string())
     }
 }
@@ -410,92 +427,123 @@ pub fn get_listening_processes(state: State<'_, AppState>) -> Result<Vec<Listeni
 
     #[cfg(not(target_os = "windows"))]
     {
-        // Try ss first (works without root for current-user processes), then netstat
-        let (output, use_ss) = StdCommand::new("ss")
-            .args(["-tlnp"])
-            .output()
-            .map(|o| (o, true))
-            .or_else(|_| StdCommand::new("netstat").args(["-tlnp"]).output().map(|o| (o, false)))
-            .map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        {
+            // MacOS uses lsof -i -P -n
+            let output = silent_command("lsof")
+                .args(["-iTCP", "-sTCP:LISTEN", "-P", "-n"])
+                .output()
+                .map_err(|e| e.to_string())?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut rows = Vec::new();
 
-        // Detect ss format: modern ss has Netid column → data rows start with "tcp"/"udp".
-        // Older ss omits Netid → data rows start with "LISTEN".
-        let ss_has_netid = use_ss && stdout.lines().any(|l| {
-            let f = l.trim().split_whitespace().next().unwrap_or("");
-            matches!(f, "tcp" | "tcp6" | "udp" | "udp6")
-        });
+            for line in stdout.lines().skip(1) { // Skip header
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                // COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+                if parts.len() >= 9 {
+                    let pid: u32 = parts[1].parse().unwrap_or(0);
+                    let name = parts[0].to_string();
+                    let local = parts[8].to_string(); // e.g. *:3030 or 127.0.0.1:8080
+                    
+                    let service_id = if pid > 0 { pid_to_service.get(&pid).cloned() } else { None };
 
-        let mut rows = Vec::new();
-
-        for line in stdout.lines() {
-            let line = line.trim();
-            if line.is_empty()
-                || line.starts_with("Proto")
-                || line.starts_with("State")
-                || line.starts_with("Netid")
-                || line.starts_with("Local")
-                || line.starts_with("Active")
-            {
-                continue;
+                    rows.push(ListeningProcess {
+                        proto: "tcp".to_string(),
+                        local_address: local,
+                        foreign_address: "*:*".to_string(),
+                        state: "LISTEN".to_string(),
+                        pid,
+                        name,
+                        path: "unknown".to_string(),
+                        service_id,
+                    });
+                }
             }
-            let parts: Vec<&str> = line.split_whitespace().collect();
-
-            let (proto, local, foreign, pid) = if use_ss && ss_has_netid {
-                // Modern ss: tcp LISTEN Recv-Q Send-Q Local:Port Peer:Port [Process]
-                // indices:   [0] [1]    [2]    [3]    [4]        [5]       [6..]
-                if parts.len() < 6 { continue; }
-                let pid = parts.get(6..).map(|p| p.join(" ")).and_then(|s| {
-                    let idx = s.find("pid=")?;
-                    let rest = &s[idx + 4..];
-                    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-                    rest[..end].parse::<u32>().ok()
-                }).unwrap_or(0);
-                (parts[0].to_string(), parts[4].to_string(), parts[5].to_string(), pid)
-            } else if use_ss {
-                // Older ss (no Netid): LISTEN Recv-Q Send-Q Local:Port Peer:Port [Process]
-                // indices:             [0]    [1]    [2]    [3]        [4]       [5..]
-                if parts.len() < 5 { continue; }
-                let pid = parts.get(5..).map(|p| p.join(" ")).and_then(|s| {
-                    let idx = s.find("pid=")?;
-                    let rest = &s[idx + 4..];
-                    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
-                    rest[..end].parse::<u32>().ok()
-                }).unwrap_or(0);
-                ("tcp".to_string(), parts[3].to_string(), parts[4].to_string(), pid)
-            } else {
-                // netstat -tlnp: Proto Recv-Q Send-Q Local Foreign State [PID/Prog]
-                // indices:       [0]   [1]    [2]    [3]   [4]     [5]   [6]
-                if parts.len() < 4 { continue; }
-                let pid = parts.get(6)
-                    .and_then(|s| s.split('/').next())
-                    .and_then(|s| s.parse::<u32>().ok())
-                    .unwrap_or(0);
-                let foreign = parts.get(4).map(|s| s.to_string()).unwrap_or_default();
-                (parts[0].to_string(), parts[3].to_string(), foreign, pid)
-            };
-
-            let (name, path) = if pid > 0 {
-                resolve_process_info(pid)
-            } else {
-                ("unknown".to_string(), "unknown".to_string())
-            };
-
-            let service_id = if pid > 0 { pid_to_service.get(&pid).cloned() } else { None };
-
-            rows.push(ListeningProcess {
-                proto,
-                local_address: local,
-                foreign_address: foreign,
-                state: "LISTEN".to_string(),
-                pid,
-                name,
-                path,
-                service_id,
-            });
+            return Ok(rows);
         }
-        Ok(rows)
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            // Linux implementation (original)
+            let (output, use_ss) = StdCommand::new("ss")
+                .args(["-tlnp"])
+                .output()
+                .map(|o| (o, true))
+                .or_else(|_| StdCommand::new("netstat").args(["-tlnp"]).output().map(|o| (o, false)))
+                .map_err(|e| e.to_string())?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            let ss_has_netid = use_ss && stdout.lines().any(|l| {
+                let f = l.trim().split_whitespace().next().unwrap_or("");
+                matches!(f, "tcp" | "tcp6" | "udp" | "udp6")
+            });
+
+            let mut rows = Vec::new();
+
+            for line in stdout.lines() {
+                let line = line.trim();
+                if line.is_empty()
+                    || line.starts_with("Proto")
+                    || line.starts_with("State")
+                    || line.starts_with("Netid")
+                    || line.starts_with("Local")
+                    || line.starts_with("Active")
+                {
+                    continue;
+                }
+                let parts: Vec<&str> = line.split_whitespace().collect();
+
+                let (proto, local, foreign, pid) = if use_ss && ss_has_netid {
+                    if parts.len() < 6 { continue; }
+                    let pid = parts.get(6..).map(|p| p.join(" ")).and_then(|s| {
+                        let idx = s.find("pid=")?;
+                        let rest = &s[idx + 4..];
+                        let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                        rest[..end].parse::<u32>().ok()
+                    }).unwrap_or(0);
+                    (parts[0].to_string(), parts[4].to_string(), parts[5].to_string(), pid)
+                } else if use_ss {
+                    if parts.len() < 5 { continue; }
+                    let pid = parts.get(5..).map(|p| p.join(" ")).and_then(|s| {
+                        let idx = s.find("pid=")?;
+                        let rest = &s[idx + 4..];
+                        let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+                        rest[..end].parse::<u32>().ok()
+                    }).unwrap_or(0);
+                    ("tcp".to_string(), parts[3].to_string(), parts[4].to_string(), pid)
+                } else {
+                    if parts.len() < 4 { continue; }
+                    let pid = parts.get(6)
+                        .and_then(|s| s.split('/').next())
+                        .and_then(|s| s.parse::<u32>().ok())
+                        .unwrap_or(0);
+                    let foreign = parts.get(4).map(|s| s.to_string()).unwrap_or_default();
+                    (parts[0].to_string(), parts[3].to_string(), foreign, pid)
+                };
+
+                let (name, path) = if pid > 0 {
+                    resolve_process_info(pid)
+                } else {
+                    ("unknown".to_string(), "unknown".to_string())
+                };
+
+                let service_id = if pid > 0 { pid_to_service.get(&pid).cloned() } else { None };
+
+                rows.push(ListeningProcess {
+                    proto,
+                    local_address: local,
+                    foreign_address: foreign,
+                    state: "LISTEN".to_string(),
+                    pid,
+                    name,
+                    path,
+                    service_id,
+                });
+            }
+            Ok(rows)
+        }
     }
 }
 
@@ -757,7 +805,9 @@ pub async fn execute_service_script(
     }
 
     #[cfg(not(target_os = "windows"))]
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+        if Path::new("/bin/zsh").exists() { "/bin/zsh".to_string() } else { "sh".to_string() }
+    });
     #[cfg(not(target_os = "windows"))]
     let mut cmd = silent_async_command(&shell);
     #[cfg(not(target_os = "windows"))]
@@ -965,14 +1015,20 @@ pub async fn execute_ephemeral_task(
         c.args(["/c", &command]);
         c
     } else {
-        let mut c = silent_async_command("sh");
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            if Path::new("/bin/zsh").exists() { "/bin/zsh".to_string() } else { "sh".to_string() }
+        });
+        let mut c = silent_async_command(&shell);
         c.args(["-c", &command]);
+        #[cfg(not(target_os = "windows"))]
+        c.process_group(0);
         c
     };
 
     cmd.current_dir(&project_path);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
+    cmd.kill_on_drop(true);
 
     let mut child = cmd.spawn().map_err(|e| format!("Fallo al iniciar tarea: {}", e))?;
     

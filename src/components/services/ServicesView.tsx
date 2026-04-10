@@ -180,12 +180,23 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         return { ...p, scripts };
     }, [settingsProject, state.projects, JAVA_PRESETS]);
 
+    const activeSelectionType = useMemo(() => {
+        if (selectedProjects.length === 0) return null;
+        const types = new Set<string>();
+        selectedProjects.forEach(path => {
+            const p = state.projects.find(proj => proj.path === path);
+            if (p?.project_type) types.add(p.project_type.toLowerCase());
+        });
+        if (types.size === 1) return Array.from(types)[0];
+        return null; // Mixto o desconocido
+    }, [selectedProjects, state.projects]);
+
     return (
         <div className="flex-1 w-full h-full flex overflow-hidden">
             <ProjectListPane
                 projects={state.projects}
                 selectedProjects={selectedProjects}
-                onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path as string))}
+                onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path))}
                 onDeselectAll={() => setSelectedProjects([])}
                 onToggleSelect={(path) => {
                     if (selectedProjects.includes(path)) setSelectedProjects(selectedProjects.filter(p => p !== path));
@@ -238,7 +249,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                         setViteWrapperModalOpen(true);
                     }}
                     selectedCount={selectedProjects.length}
-                    activeSelectionType={null}
+                    activeSelectionType={activeSelectionType}
                 />
 
                 <ProjectSettingsModal

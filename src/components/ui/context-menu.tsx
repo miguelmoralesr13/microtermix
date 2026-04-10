@@ -7,7 +7,8 @@ interface ContextMenuProps {
 }
 
 interface ContextMenuTriggerProps {
-  children: React.ReactNode
+  children?: React.ReactNode
+  render?: React.ReactElement
   className?: string
 }
 
@@ -44,7 +45,7 @@ export function ContextMenu({ children }: ContextMenuProps) {
   )
 }
 
-export function ContextMenuTrigger({ children, className }: ContextMenuTriggerProps) {
+export function ContextMenuTrigger({ children, render, className }: ContextMenuTriggerProps) {
   const context = React.useContext(ContextMenuContext)
   if (!context) throw new Error("ContextMenuTrigger must be used within ContextMenu")
 
@@ -53,6 +54,13 @@ export function ContextMenuTrigger({ children, className }: ContextMenuTriggerPr
     context.setX(e.clientX)
     context.setY(e.clientY)
     context.setOpen(true)
+  }
+
+  if (render) {
+    return React.cloneElement(render as React.ReactElement<any>, {
+      onContextMenu: handleContextMenu,
+      className: cn((render as any).props?.className, className)
+    });
   }
 
   return (
