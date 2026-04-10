@@ -17,6 +17,7 @@ export default defineConfig(async () => ({
       'ejs': path.resolve(__dirname, 'node_modules/ejs/ejs.min.js'),
     },
   },
+  
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
