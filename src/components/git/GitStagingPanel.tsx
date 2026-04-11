@@ -301,9 +301,8 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const handleDiscardNode = useCallback(async (node: ArrayTreeNode) => {
         setError(null);
         try {
-            const normalizedPath = projectPath.replace(/\/+$/, '');
-            await invoke('git_execute', { projectPath: normalizedPath, args: ['restore', '--', node.fullPath] });
-            await invoke('git_execute', { projectPath: normalizedPath, args: ['clean', '-fd', '--', node.fullPath] });
+            await invoke('git_execute', { projectPath, args: ['restore', node.fullPath] });
+            await invoke('git_execute', { projectPath, args: ['clean', '-fd', node.fullPath] });
             setSelectedForRollback((prev) => {
                 const next = new Set(prev);
                 next.delete(node.fullPath);
@@ -326,10 +325,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
         if (selectedForRollback.size === 0) return;
         setError(null);
         try {
-            const normalizedPath = projectPath.replace(/\/+$/, '');
             for (const path of selectedForRollback) {
-                await invoke('git_execute', { projectPath: normalizedPath, args: ['restore', '--', path] });
-                await invoke('git_execute', { projectPath: normalizedPath, args: ['clean', '-fd', '--', path] });
+                await invoke('git_execute', { projectPath, args: ['restore', path] });
+                await invoke('git_execute', { projectPath, args: ['clean', '-fd', path] });
             }
             setSelectedForRollback(new Set());
             handleRefresh();

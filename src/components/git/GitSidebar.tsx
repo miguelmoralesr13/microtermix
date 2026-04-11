@@ -280,11 +280,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
     const handleStashSave = async () => {
         try {
-            const normalizedPath = projectPath.replace(/\/+$/, '');
-            await invoke('git_execute', { 
-                projectPath: normalizedPath, 
-                args: ['stash', 'save', '-u', 'Stashed via Microtermix'] 
-            });
+            await invoke('git_execute', { projectPath, args: ['stash', 'save', 'Stashed via Microtermix'] });
             handleRefresh();
         } catch { /* no-op */ }
     };
