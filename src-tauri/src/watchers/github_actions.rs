@@ -81,114 +81,123 @@ pub async fn spawn(
         "{}/repos/{}/{}/actions/runs?per_page=30",
         api_base, config.owner, config.repo
     );
-    let auth_header = format!("Bearer {}", config.token);
+    // Switch back to "token" to match frontend and classic PATs
+    let auth_header = format!("token {}", config.token);
 
     tokio::spawn(async move {
         let mut snapshot: HashMap<i64, RunSnapshot> = HashMap::new();
+        let mut poll_count = 0;
 
         loop {
             if stop_rx.try_recv().is_ok() {
                 break;
             }
 
-            let result = client
+            poll_count += 1;
+            if poll_count % 10 == 0 {
+                app_logs::log_debug(
+                    "github-actions-watcher",
+                    &format!("Heartbeat for {}/{} (poll #{})", config.owner, config.repo, poll_count),
+                );
+            }
+
+            let response_result = client
                 .get(&runs_url)
                 .header("Authorization", &auth_header)
                 .header("Accept", "application/vnd.github.v3+json")
                 .send()
-                .await
-                .map_err(|e| e.to_string())
-                .and_then(|r| {
-                    if r.status().is_success() {
-                        Ok(r)
-                    } else {
-                        Err(format!("GitHub API error: {} - {}", r.status(), runs_url))
-                    }
-                });
+                .await;
 
-            let sleep_ms = match result {
+            let sleep_ms = match response_result {
                 Err(e) => {
-                    app_logs::log_error("github-actions-watcher", &format!("Poll failed: {}", e));
+                    app_logs::log_error("github-actions-watcher", &format!("Request failed: {}", e));
                     interval_ms.saturating_mul(3).min(60_000)
                 }
                 Ok(response) => {
-                    let json_result = response
-                        .json::<serde_json::Value>()
-                        .await
-                        .map_err(|e| e.to_string());
-
-                    match json_result {
-                        Err(e) => {
-                            app_logs::log_error(
-                                "github-actions-watcher",
-                                &format!("JSON parse failed: {}", e),
-                            );
-                            interval_ms.saturating_mul(3).min(60_000)
-                        }
-                        Ok(json) => {
-                            let mut changed: Vec<WorkflowRunUpdate> = Vec::new();
-
-                            if let Some(runs) = json["workflow_runs"].as_array() {
-                                for run in runs {
-                                    let id = match run["id"].as_i64() {
-                                        Some(v) => v,
-                                        None => continue,
-                                    };
-                                    let status = run["status"]
-                                        .as_str()
-                                        .unwrap_or("unknown")
-                                        .to_string();
-                                    let conclusion = run["conclusion"]
-                                        .as_str()
-                                        .map(String::from);
-                                    let updated_at = run["updated_at"]
-                                        .as_str()
-                                        .unwrap_or("")
-                                        .to_string();
-
-                                    let current = RunSnapshot {
-                                        status: status.clone(),
-                                        conclusion: conclusion.clone(),
-                                        updated_at: updated_at.clone(),
-                                    };
-
-                                    let is_changed =
-                                        snapshot.get(&id).map_or(true, |p| p != &current);
-
-                                    if is_changed {
-                                        snapshot.insert(id, current);
-                                        changed.push(WorkflowRunUpdate {
-                                            id,
-                                            status,
-                                            conclusion,
-                                            updated_at,
-                                        });
-                                    }
+                    // Check rate limit headers
+                    if let Some(remaining) = response.headers().get("x-ratelimit-remaining") {
+                        if let Ok(val) = remaining.to_str() {
+                            if let Ok(num) = val.parse::<i32>() {
+                                if num < 50 {
+                                    app_logs::log_warn("github-actions-watcher", &format!("Low rate limit: {} remaining", num));
                                 }
                             }
+                        }
+                    }
 
-                            if !changed.is_empty() {
-                                let event_name =
-                                    format!("github-actions-update::{}", watcher_id);
-                                app_logs::log_info(
-                                    "github-actions-watcher",
-                                    &format!(
-                                        "Detected {} changed runs for {}/{}. Emitting event: {}",
-                                        changed.len(),
-                                        config.owner,
-                                        config.repo,
-                                        event_name
-                                    ),
-                                );
-                                let event = GitHubActionsUpdateEvent {
-                                    watcher_id: watcher_id.clone(),
-                                    account_id: config.account_id.clone(),
-                                    changed_runs: changed,
-                                };
-                                let _ = app.emit(&event_name, &event);
+                    if !response.status().is_success() {
+                        let status = response.status();
+                        app_logs::log_error("github-actions-watcher", &format!("GitHub API error: {} - {}", status, runs_url));
+                        interval_ms.saturating_mul(3).min(60_000)
+                    } else {
+                        let json_result = response
+                            .json::<serde_json::Value>()
+                            .await
+                            .map_err(|e| e.to_string());
+
+                        match json_result {
+                            Err(e) => {
+                                app_logs::log_error("github-actions-watcher", &format!("JSON parse failed: {}", e));
+                                interval_ms.saturating_mul(3).min(60_000)
                             }
+                            Ok(json) => {
+                                let mut changed: Vec<WorkflowRunUpdate> = Vec::new();
 
-                            interval_ms
+                                if let Some(runs) = json["workflow_runs"].as_array() {
+                                    for run in runs {
+                                        let id = match run["id"].as_i64() {
+                                            Some(v) => v,
+                                            None => continue,
+                                        };
+                                        let status = run["status"]
+                                            .as_str()
+                                            .unwrap_or("unknown")
+                                            .to_string();
+                                        let conclusion = run["conclusion"]
+                                            .as_str()
+                                            .map(String::from);
+                                        let updated_at = run["updated_at"]
+                                            .as_str()
+                                            .unwrap_or("")
+                                            .to_string();
+
+                                        let current = RunSnapshot {
+                                            status: status.clone(),
+                                            conclusion: conclusion.clone(),
+                                            updated_at: updated_at.clone(),
+                                        };
+
+                                        let is_changed =
+                                            snapshot.get(&id).map_or(true, |p| p != &current);
+
+                                        if is_changed {
+                                            snapshot.insert(id, current);
+                                            changed.push(WorkflowRunUpdate {
+                                                id,
+                                                status,
+                                                conclusion,
+                                                updated_at,
+                                            });
+                                        }
+                                    }
+                                }
+
+                                if !changed.is_empty() {
+                                    let event_name = format!("github-actions-update::{}", watcher_id);
+                                    app_logs::log_info(
+                                        "github-actions-watcher",
+                                        &format!("Detected {} changed runs. Emitting: {}", changed.len(), event_name),
+                                    );
+                                    let event = GitHubActionsUpdateEvent {
+                                        watcher_id: watcher_id.clone(),
+                                        account_id: config.account_id.clone(),
+                                        changed_runs: changed,
+                                    };
+                                    let _ = app.emit(&event_name, &event);
+                                }
+
+                                interval_ms
+                            }
                         }
                     }
                 }
