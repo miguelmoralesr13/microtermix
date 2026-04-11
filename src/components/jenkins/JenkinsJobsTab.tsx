@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Search, X, RefreshCw, Star, Loader2, Settings, FolderCode, Link2Off, ChevronRight } from 'lucide-react';
 import { useJenkinsJobs } from '../../hooks/useJenkins';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
+import { useJenkinsWatcher, WatcherJobStatus } from '../../hooks/useJenkinsWatcher';
+import { normalizeUrl, BuildResult } from '../../services/jenkinsApi';
 import { JenkinsJobRow } from './JenkinsJobRow';
 import { LogTarget } from './JenkinsLogViewer';
 import { jobMatchesSearch, isBuilding, jenkinsGlobalSearch, JenkinsJobSummary } from '../../services/jenkinsApi';
@@ -67,6 +69,61 @@ export function JenkinsJobsTab({
     const cfg = config; // alias used in favorites JSX
     const favorites = useJenkinsStore(s => s.favorites);
     const toggleFavorite = useJenkinsStore(s => s.toggleFavorite);
+    const updateFavoriteStatus = useJenkinsStore(s => s.updateFavoriteStatus);
+
+    // ── Generic watcher — backend push ────────────────────────────────────────
+    // The caller decides what URLs to watch. The watcher is just infrastructure.
+    // Merge favorites + linked local projects into one deduplicated list.
+
+    const watchedUrls = useMemo(() => {
+        const seen = new Set<string>();
+        const add = (url: string) => { const n = normalizeUrl(url); seen.add(n); };
+
+        Object.values(favorites)
+            .filter(f => config?.baseUrl && f.url.startsWith(config.baseUrl))
+            .forEach(f => add(f.url));
+
+        links
+            .filter(l => config?.baseUrl && l.jobUrl.startsWith(config.baseUrl))
+            .forEach(l => add(l.jobUrl));
+
+        return Array.from(seen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [favorites, links, config?.baseUrl]);
+
+    const isAnyBuilding = useMemo(
+        () => Object.values(favorites).some(f =>
+            f.color?.endsWith('_anime') || f.lastBuild?.building === true
+        ),
+        [favorites]
+    );
+
+    const handleWatcherUpdate = useCallback((changed: WatcherJobStatus[]) => {
+        changed.forEach(job => {
+            updateFavoriteStatus(normalizeUrl(job.url), {
+                color: job.color,
+                lastBuild: job.lastBuildNumber != null ? {
+                    number: job.lastBuildNumber,
+                    result: job.lastBuildResult as BuildResult,
+                    building: job.building,
+                    timestamp: job.timestamp ?? 0,
+                    duration: 0,
+                    estimatedDuration: job.estimatedDuration ?? 0,
+                    url: '',
+                    displayName: String(job.lastBuildNumber),
+                } : null,
+            });
+        });
+    }, [updateFavoriteStatus]);
+
+    useJenkinsWatcher({
+        watcherId: `jenkins::${activeAccountId ?? 'none'}`,
+        jobUrls: watchedUrls,
+        config,
+        intervalMs: isAnyBuilding ? 8_000 : 30_000,
+        enabled: !!activeAccountId && watchedUrls.length > 0,
+        onUpdate: handleWatcherUpdate,
+    });
 
     // links y unlinkProject ahora vienen del padre, no del hook local
 

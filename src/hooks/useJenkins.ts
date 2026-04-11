@@ -22,7 +22,7 @@ export function useJenkinsChildren(jobPath: string, enabled = false, live = fals
     queryKey: ['jenkins', 'children', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetChildren(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: live ? 10_000 : false,
+    refetchInterval: false,
   });
 }
 
@@ -34,7 +34,7 @@ export function useJenkinsJobStatus(jobPath: string, enabled = false, live = fal
     queryKey: ['jenkins', 'job-status', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetJobStatus(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: live ? 10_000 : false,
+    refetchInterval: false,
   });
 }
 
@@ -46,12 +46,7 @@ export function useJenkinsBuilds(jobPath: string, enabled = false, live = false)
     queryKey: ['jenkins', 'builds', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetBuilds(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: (query) => {
-        if (live) return 10_000;
-        const data = query.state.data;
-        const building = Array.isArray(data) && data.some(b => b.building);
-        return building ? 10_000 : 30_000;
-    },
+    refetchInterval: false,
   });
 }
 

@@ -29,6 +29,7 @@ mod lambda;
 mod s3;
 mod secrets;
 mod docker;
+mod watchers;
 
 use std::fs;
 use std::path::Path;
@@ -415,6 +416,9 @@ pub fn run() {
             cw_get_metric_data,
             cw_start_tail,
             cw_stop_tail,
+            watchers::start_watcher,
+            watchers::stop_watcher,
+            watchers::stop_all_watchers,
             http_client::execute_http_request,
             ec2_list_instances,
             ec2_start_instance,
