@@ -632,7 +632,7 @@ export async function fetchJobLogs(
     token: string,
     jobId: number,
     apiUrl?: string
-): Promise<string> {
+): Promise<string | null> {
     const info = await getOwnerRepo(projectPath);
     if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
     const base = apiUrl || GITHUB_API_BASE;
@@ -655,6 +655,8 @@ export async function fetchJobLogs(
         return s3Res.text();
     }
 
+    // 404 during in_progress means logs aren't written yet — return null so UI shows "no logs yet"
+    if (res.status === 404) return null;
     if (!res.ok) throw new Error(`GitHub API Error: ${res.status} ${res.statusText}`);
     return res.text();
 }

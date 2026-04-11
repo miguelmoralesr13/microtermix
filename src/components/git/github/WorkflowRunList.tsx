@@ -124,6 +124,12 @@ const PipelineView: React.FC<{
     const elapsed = useElapsed(run.run_started_at ?? run.created_at, isActive);
     const { data: jobs, isLoading, isError, error } = useWorkflowRunJobs(projectPath, run.id, run.status);
 
+    // Always derive from fresh jobs data — selectedJob is a snapshot that goes stale
+    // when a job transitions from in_progress → completed while the drawer is open.
+    const liveSelectedJob = selectedJob
+        ? (jobs?.find(j => j.id === selectedJob.id) ?? selectedJob)
+        : null;
+
     return (
         <div className="flex flex-col h-full overflow-hidden relative">
             {/* Run header */}
@@ -197,7 +203,7 @@ const PipelineView: React.FC<{
                             <JobCard
                                 key={job.id}
                                 job={job}
-                                onViewLogs={() => onSelectJob(selectedJob?.id === job.id ? null : job)}
+                                onViewLogs={() => onSelectJob(liveSelectedJob?.id === job.id ? null : job)}
                             />
                         ))}
                     </div>
@@ -205,9 +211,9 @@ const PipelineView: React.FC<{
             </div>
 
             {/* Logs drawer — overlays the pipeline */}
-            {selectedJob && (
+            {liveSelectedJob && (
                 <JobLogsDrawer
-                    job={selectedJob}
+                    job={liveSelectedJob}
                     projectPath={projectPath}
                     onClose={() => onSelectJob(null)}
                 />

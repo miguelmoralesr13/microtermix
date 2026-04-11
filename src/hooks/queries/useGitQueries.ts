@@ -138,9 +138,7 @@ export function useWorkflowRuns(path: string | null, enabled: boolean) {
         queryKey: gitKeys.workflowRuns(path || ''),
         queryFn: () => fetchWorkflowRuns(path as string, token, apiUrl),
         enabled: !!path && enabled,
-        staleTime: 30_000,
-        // Fixed 30s — must always detect new runs quickly, regardless of current state.
-        // Adaptive logic only applies to jobs (which change rapidly within a run).
+        staleTime: 0, // always refetch on mount so entering the tab shows fresh runs
         refetchInterval: enabled ? 30_000 : false,
         refetchIntervalInBackground: false,
         refetchOnWindowFocus: false,
@@ -174,16 +172,15 @@ export function useWorkflowJobLogs(path: string | null, jobId: number | null, jo
     const token = account?.token || '';
     const apiUrl = account?.url;
 
-    const isActive = jobStatus === 'in_progress';
-    // Logs only exist once a job has started — queued/waiting/pending have nothing yet
-    const hasLogs = jobStatus === 'in_progress' || jobStatus === 'completed';
+    // GitHub REST API only delivers logs for completed jobs.
+    // In-progress jobs return 404 — live streaming is not supported via this endpoint.
+    const isCompleted = jobStatus === 'completed';
 
     return useQuery({
         queryKey: gitKeys.workflowJobLogs(path || '', jobId ?? -1),
         queryFn: () => fetchJobLogs(path as string, token, jobId as number, apiUrl),
-        enabled: !!path && jobId != null && hasLogs,
-        staleTime: isActive ? 0 : 5 * 60_000,
-        refetchInterval: isActive ? 5_000 : false,
+        enabled: !!path && jobId != null && isCompleted,
+        staleTime: 10 * 60_000, // logs are immutable once complete
         refetchOnWindowFocus: false,
         retry: false,
     });
