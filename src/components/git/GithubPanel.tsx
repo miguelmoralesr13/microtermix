@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { GithubPR, GithubIssue, WorkflowRun, fetchGithubPRs, fetchGithubIssues } from '../../services/githubApi';
+import { GithubPR, GithubIssue, fetchGithubPRs, fetchGithubIssues } from '../../services/githubApi';
 import { CircleDot, GitPullRequest, RefreshCw, ExternalLink, Zap } from 'lucide-react';
 import { useGitStore } from '../../stores/gitStore';
 import { useWorkflowRuns } from '../../hooks/queries/useGitQueries';
 import { WorkflowRunList } from './github/WorkflowRunList';
-import { WorkflowRunModal } from './github/WorkflowRunModal';
 
 interface GithubPanelProps {
     projectPath: string | null;
@@ -27,7 +26,6 @@ export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
     const [issues, setIssues] = useState<GithubIssue[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 
     const loadData = async () => {
         if (!projectPath) return;
@@ -96,10 +94,7 @@ export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
             {/* Content Body */}
             {activeTab === 'actions' ? (
                 <div className="flex-1 overflow-hidden flex flex-col">
-                    <WorkflowRunList
-                        projectPath={projectPath}
-                        onSelectRun={setSelectedRun}
-                    />
+                    <WorkflowRunList projectPath={projectPath} />
                 </div>
             ) : (
                 <div className="flex-1 overflow-y-auto p-4 scrollbar-hide relative">
@@ -185,13 +180,6 @@ export const GithubPanel: React.FC<GithubPanelProps> = ({ projectPath }) => {
                 </div>
             )}
 
-            {/* WorkflowRunModal — always mounted, controlled by selectedRun */}
-            <WorkflowRunModal
-                projectPath={projectPath}
-                run={selectedRun}
-                open={selectedRun != null}
-                onOpenChange={(o) => { if (!o) setSelectedRun(null); }}
-            />
         </div>
     );
 };

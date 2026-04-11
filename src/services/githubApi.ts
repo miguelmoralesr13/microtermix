@@ -626,3 +626,35 @@ export async function fetchWorkflowRunJobs(
     const data: WorkflowJobsResponse = await res.json();
     return data.jobs;
 }
+
+export async function fetchJobLogs(
+    projectPath: string,
+    token: string,
+    jobId: number,
+    apiUrl?: string
+): Promise<string> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+
+    const res = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/actions/jobs/${jobId}/logs`,
+        { headers }
+    );
+
+    // GitHub returns a 302 redirect to a signed S3 URL.
+    // If the HTTP plugin followed it automatically we get 200; otherwise handle it manually.
+    if (res.status === 302 || res.status === 301) {
+        const location = res.headers.get('location');
+        if (!location) throw new Error('No redirect location in logs response');
+        // S3 URL is pre-signed — do NOT forward the Authorization header
+        const s3Res = await fetch(location, {});
+        if (!s3Res.ok) throw new Error(`Logs fetch failed: ${s3Res.status}`);
+        return s3Res.text();
+    }
+
+    if (!res.ok) throw new Error(`GitHub API Error: ${res.status} ${res.statusText}`);
+    return res.text();
+}

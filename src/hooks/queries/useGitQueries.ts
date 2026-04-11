@@ -7,6 +7,8 @@ import { listen } from '@tauri-apps/api/event';
 import {
     fetchWorkflowRuns,
     fetchWorkflowRunJobs,
+    fetchJobLogs,
+    type WorkflowRunStatus,
 } from '../../services/githubApi';
 export type { WorkflowRun, WorkflowJob } from '../../services/githubApi';
 
@@ -19,6 +21,7 @@ export const gitKeys = {
     aheadBehind: (path: string) => [...gitKeys.repo(path), 'aheadBehind'] as const,
     workflowRuns: (path: string) => [...gitKeys.repo(path), 'workflow-runs'] as const,
     workflowRunJobs: (path: string, runId: number) => [...gitKeys.repo(path), 'workflow-run-jobs', runId] as const,
+    workflowJobLogs: (path: string, jobId: number) => ['workflow-job-logs', path, jobId] as const,
 };
 
 export function useGitRepoCheck(path: string | null) {
@@ -136,15 +139,9 @@ export function useWorkflowRuns(path: string | null, enabled: boolean) {
         queryFn: () => fetchWorkflowRuns(path as string, token, apiUrl),
         enabled: !!path && enabled,
         staleTime: 30_000,
-        // Adaptive interval: 15s while runs are active, 2min when all done.
-        // `enabled ? fn : false` ensures observers with enabled=false never set an interval.
-        refetchInterval: enabled ? (query) => {
-            const runs = query.state.data as typeof query.state.data;
-            const hasActive = runs?.some(
-                r => r.status === 'in_progress' || r.status === 'queued' || r.status === 'waiting'
-            );
-            return hasActive ? 15_000 : 120_000;
-        } : false,
+        // Fixed 30s — must always detect new runs quickly, regardless of current state.
+        // Adaptive logic only applies to jobs (which change rapidly within a run).
+        refetchInterval: enabled ? 30_000 : false,
         refetchIntervalInBackground: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
@@ -152,17 +149,42 @@ export function useWorkflowRuns(path: string | null, enabled: boolean) {
     });
 }
 
-export function useWorkflowRunJobs(path: string | null, runId: number | null) {
+export function useWorkflowRunJobs(path: string | null, runId: number | null, runStatus?: WorkflowRunStatus) {
     const getActiveAccount = useGitStore(s => s.getActiveAccount);
     const account = path ? getActiveAccount(path) : undefined;
     const token = account?.token || '';
     const apiUrl = account?.url;
 
+    const isActive = runStatus === 'in_progress' || runStatus === 'queued' || runStatus === 'waiting';
+
     return useQuery({
         queryKey: gitKeys.workflowRunJobs(path || '', runId ?? -1),
         queryFn: () => fetchWorkflowRunJobs(path as string, token, runId as number, apiUrl),
         enabled: !!path && runId != null,
-        staleTime: 15_000,
+        staleTime: isActive ? 0 : 15_000,
+        refetchInterval: isActive ? 10_000 : false,
+        refetchOnWindowFocus: false,
         retry: 1,
+    });
+}
+
+export function useWorkflowJobLogs(path: string | null, jobId: number | null, jobStatus?: WorkflowRunStatus) {
+    const getActiveAccount = useGitStore(s => s.getActiveAccount);
+    const account = path ? getActiveAccount(path) : undefined;
+    const token = account?.token || '';
+    const apiUrl = account?.url;
+
+    const isActive = jobStatus === 'in_progress';
+    // Logs only exist once a job has started — queued/waiting/pending have nothing yet
+    const hasLogs = jobStatus === 'in_progress' || jobStatus === 'completed';
+
+    return useQuery({
+        queryKey: gitKeys.workflowJobLogs(path || '', jobId ?? -1),
+        queryFn: () => fetchJobLogs(path as string, token, jobId as number, apiUrl),
+        enabled: !!path && jobId != null && hasLogs,
+        staleTime: isActive ? 0 : 5 * 60_000,
+        refetchInterval: isActive ? 5_000 : false,
+        refetchOnWindowFocus: false,
+        retry: false,
     });
 }
