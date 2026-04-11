@@ -27,6 +27,7 @@ pub struct GitHubActionsWatcherConfig {
 struct RunSnapshot {
     status: String,
     conclusion: Option<String>,
+    updated_at: String,
 }
 
 /// Per-run entry in the emitted event payload.
@@ -148,6 +149,7 @@ pub async fn spawn(
                                     let current = RunSnapshot {
                                         status: status.clone(),
                                         conclusion: conclusion.clone(),
+                                        updated_at: updated_at.clone(),
                                     };
 
                                     let is_changed =
