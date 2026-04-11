@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, GitBranch, Zap, ExternalLink, Loader2, AlertCircle, ChevronDown, ChevronRight, ScrollText, RotateCcw, StopCircle } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../../ui/tooltip';
@@ -6,6 +6,7 @@ import { WorkflowStatusBadge } from './WorkflowStatusBadge';
 import { WorkflowRun, WorkflowJob, WorkflowStep, cancelWorkflowRun, rerunWorkflowRun, rerunFailedJobs } from '../../../services/githubApi';
 import { useWorkflowRuns, useWorkflowRunJobs } from '../../../hooks/queries/useGitQueries';
 import { useGitStore } from '../../../stores/gitStore';
+import { useGithubActionsWatcher } from '../../../hooks/useGithubActionsWatcher';
 import { useQueryClient } from '@tanstack/react-query';
 import { gitKeys } from '../../../hooks/queries/useGitQueries';
 import { JobLogsDrawer } from './JobLogsDrawer';
@@ -477,6 +478,7 @@ export const WorkflowRunList: React.FC<{ projectPath: string }> = ({ projectPath
     const { data: runs, isLoading, isError, error, refetch, isFetching } = useWorkflowRuns(projectPath, true);
     const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
     const [selectedJob, setSelectedJob] = useState<WorkflowJob | null>(null);
+    const queryClient = useQueryClient();
 
     // Resolve token + apiUrl for the active account
     const getActiveAccount = useGitStore(s => s.getActiveAccount);
@@ -486,6 +488,20 @@ export const WorkflowRunList: React.FC<{ projectPath: string }> = ({ projectPath
 
     // Reset selections when project changes
     useEffect(() => { setSelectedRunId(null); setSelectedJob(null); }, [projectPath]);
+
+    // Backend watcher — pushes updates instead of frontend polling every 30s.
+    const handleActionsUpdate = useCallback(() => {
+        console.log(`[Watcher] Invalidating all git queries for ${projectPath}`);
+        queryClient.invalidateQueries({ queryKey: gitKeys.repo(projectPath) });
+    }, [queryClient, projectPath]);
+
+    useGithubActionsWatcher({
+        projectPath,
+        token,
+        apiUrl,
+        accountId: activeAccount?.id,
+        onUpdate: handleActionsUpdate,
+    });
 
     // Close logs drawer when switching runs
     const handleSelectRun = (id: number) => { setSelectedRunId(id); setSelectedJob(null); };

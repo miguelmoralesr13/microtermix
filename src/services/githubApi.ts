@@ -256,7 +256,7 @@ export interface GithubIssue {
 const ownerRepoCache = new Map<string, { owner: string; repo: string }>();
 
 // Extract Owner and Repo from remote URL
-async function getOwnerRepo(projectPath: string): Promise<{ owner: string; repo: string } | null> {
+export async function getOwnerRepo(projectPath: string): Promise<{ owner: string; repo: string } | null> {
     if (ownerRepoCache.has(projectPath)) {
         return ownerRepoCache.get(projectPath)!;
     }

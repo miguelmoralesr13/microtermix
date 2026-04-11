@@ -1,4 +1,5 @@
 pub mod jenkins;
+pub mod github_actions;
 
 use serde_json::Value;
 use tauri::State;
@@ -34,6 +35,11 @@ pub async fn start_watcher(
             let cfg: jenkins::JenkinsWatcherConfig =
                 serde_json::from_value(config).map_err(|e| e.to_string())?;
             jenkins::spawn(app, state.watchers.clone(), watcher_id, cfg, interval_ms).await
+        }
+        "github_actions" => {
+            let cfg: github_actions::GitHubActionsWatcherConfig =
+                serde_json::from_value(config).map_err(|e| e.to_string())?;
+            github_actions::spawn(app, state.watchers.clone(), watcher_id, cfg, interval_ms).await
         }
         // Future watcher types: add a new file + one arm here.
         // e.g. "git_status" => git_status::spawn(...).await,

@@ -139,7 +139,7 @@ export function useWorkflowRuns(path: string | null, enabled: boolean) {
         queryFn: () => fetchWorkflowRuns(path as string, token, apiUrl),
         enabled: !!path && enabled,
         staleTime: 0, // always refetch on mount so entering the tab shows fresh runs
-        refetchInterval: enabled ? 30_000 : false,
+        refetchInterval: false,
         refetchIntervalInBackground: false,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
