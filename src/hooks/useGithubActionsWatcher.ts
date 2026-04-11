@@ -39,7 +39,7 @@ export function useGithubActionsWatcher({
   token,
   apiUrl,
   accountId,
-  intervalMs = 15_000,
+  intervalMs = 5_000,
   enabled = true,
   onUpdate,
 }: UseGithubActionsWatcherOptions): void {

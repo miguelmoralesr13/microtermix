@@ -160,7 +160,7 @@ export function useWorkflowRunJobs(path: string | null, runId: number | null, ru
         queryFn: () => fetchWorkflowRunJobs(path as string, token, runId as number, apiUrl),
         enabled: !!path && runId != null,
         staleTime: isActive ? 0 : 15_000,
-        refetchInterval: isActive ? 10_000 : false,
+        refetchInterval: false,
         refetchOnWindowFocus: false,
         retry: 1,
     });
