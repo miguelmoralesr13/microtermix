@@ -3,7 +3,7 @@ import { Plus, RefreshCw, AlertCircle, Search, Terminal, CheckCircle2, XCircle, 
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTempoStore, formatDuration } from '../../stores/tempoStore';
-import { resolveMyAccountId, tempoApiLog, type TempoApiLogEntry } from '../../services/tempoApi';
+import { resolveMyAccountId } from '../../services/tempoApi';
 import type { TempoWorklog } from '../../services/tempoApi';
 import type { JiraConfig } from './jiraApi';
 import { PeriodSelector } from './PeriodSelector';
@@ -20,155 +20,6 @@ interface TempoTabProps {
 
 type SubTab = 'my-worklogs' | 'calendar' | 'by-issue';
 
-// ── Console (bottom panel) ─────────────────────────────────────────────────────
-
-const TempoConsole: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const [entries, setEntries] = useState<TempoApiLogEntry[]>([]);
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (entry: TempoApiLogEntry) => {
-      setEntries(prev => [...prev.slice(-199), entry]);
-    };
-    tempoApiLog.on(handler);
-    return () => tempoApiLog.off(handler);
-  }, []);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [entries.length]);
-
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => toast.success('Copiado'));
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-700 bg-slate-900 shrink-0">
-        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-          <Terminal size={11} />
-          <span>Console</span>
-          {entries.length > 0 && (
-            <span className="text-slate-600">({entries.length})</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {entries.length > 0 && (
-            <button
-              onClick={() => setEntries([])}
-              className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-slate-300 transition-colors"
-            >
-              <Trash2 size={10} /> Limpiar
-            </button>
-          )}
-          <button
-            onClick={onClose}
-            className="text-slate-600 hover:text-slate-300 transition-colors"
-            title="Cerrar consola"
-          >
-            <ChevronDown size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Log entries */}
-      <div className="flex-1 overflow-y-auto font-mono text-[11px] bg-slate-950 scrollbar-hide">
-        {entries.length === 0 ? (
-          <div className="flex items-center justify-center h-full gap-2 text-slate-700">
-            <Terminal size={14} />
-            <span>Sin actividad. Realiza una acción para ver los logs.</span>
-          </div>
-        ) : (
-          <>
-            {entries.map(e => (
-              <div key={e.id} className="border-b border-slate-800/60">
-                {/* Summary row */}
-                <div
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-800/40 transition-colors',
-                    !e.ok && 'bg-red-950/20',
-                  )}
-                  onClick={() => setExpanded(prev => prev === e.id ? null : e.id)}
-                >
-                  {e.ok
-                    ? <CheckCircle2 size={10} className="text-green-500 shrink-0" />
-                    : <XCircle size={10} className="text-red-400 shrink-0" />
-                  }
-                  <span className="text-slate-600 shrink-0">{e.time}</span>
-                  <span className={cn('font-bold shrink-0 w-9', e.ok ? 'text-microtermix-neon' : 'text-red-400')}>
-                    {e.method}
-                  </span>
-                  <span className="text-slate-300 truncate flex-1">{e.path}</span>
-                  {e.status && (
-                    <span className={cn('shrink-0 px-1.5 py-0.5 rounded text-[10px]', e.ok ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400')}>
-                      {e.status}
-                    </span>
-                  )}
-                  {e.durationMs !== undefined && (
-                    <span className="text-slate-700 shrink-0">{e.durationMs}ms</span>
-                  )}
-                </div>
-
-                {/* Expanded detail */}
-                {expanded === e.id && (
-                  <div className="bg-slate-950 px-3 py-2 space-y-2 border-t border-slate-800">
-                    <div>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">URL</span>
-                        <button onClick={() => copyText(e.url)} className="text-[10px] text-slate-600 hover:text-slate-300 flex items-center gap-1">
-                          <Copy size={9} /> copiar
-                        </button>
-                      </div>
-                      <p className="text-slate-300 break-all">{e.url}</p>
-                    </div>
-
-                    {e.body && (
-                      <div>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">Body</span>
-                        <pre className="text-slate-300 mt-0.5 whitespace-pre-wrap break-all bg-slate-900 rounded p-2">
-                          {(() => { try { return JSON.stringify(JSON.parse(e.body), null, 2); } catch { return e.body; } })()}
-                        </pre>
-                      </div>
-                    )}
-
-                    {e.responsePreview && (
-                      <div>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">Response</span>
-                        <pre className={cn('mt-0.5 whitespace-pre-wrap break-all bg-slate-900 rounded p-2', e.ok ? 'text-slate-300' : 'text-red-300')}>
-                          {(() => { try { return JSON.stringify(JSON.parse(e.responsePreview), null, 2).slice(0, 600); } catch { return e.responsePreview; } })()}
-                        </pre>
-                      </div>
-                    )}
-
-                    {e.error && !e.responsePreview && (
-                      <div>
-                        <span className="text-[10px] text-red-500 uppercase tracking-wide">Error</span>
-                        <p className="text-red-300 mt-0.5 break-all">{e.error}</p>
-                      </div>
-                    )}
-
-                    <div>
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">cURL</span>
-                        <button onClick={() => copyText(e.curl)} className="text-[10px] text-slate-600 hover:text-slate-300 flex items-center gap-1">
-                          <Copy size={9} /> copiar
-                        </button>
-                      </div>
-                      <pre className="text-slate-400 whitespace-pre-wrap break-all bg-slate-900 rounded p-2">{e.curl}</pre>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
 
 // ── Main TempoTab ──────────────────────────────────────────────────────────────
 
@@ -199,7 +50,6 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
   const [editingWorklog, setEditingWorklog] = useState<TempoWorklog | undefined>();
   const [defaultIssueKey, setDefaultIssueKey] = useState('');
   const [issueSearchInput, setIssueSearchInput] = useState('');
-  const [consoleOpen, setConsoleOpen] = useState(false);
 
   const token = config.tempoToken;
   const hasToken = !!token;
@@ -333,9 +183,6 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
               <div className="flex items-center gap-2 text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2 mb-3">
                 <AlertCircle size={13} />
                 <span className="flex-1">{String(worklogsError)}</span>
-                <button onClick={() => setConsoleOpen(true)} className="underline text-red-300 hover:text-white shrink-0">
-                  ver log
-                </button>
               </div>
             )}
             {loading ? (
@@ -401,24 +248,6 @@ export const TempoTab: React.FC<TempoTabProps> = ({ config, accountId: propAccou
         )}
       </div>
 
-      {/* Console — collapsible bottom panel */}
-      <div className={cn(
-        'shrink-0 border-t border-slate-700 transition-all duration-200',
-        consoleOpen ? 'h-56' : 'h-7',
-      )}>
-        {consoleOpen ? (
-          <TempoConsole onClose={() => setConsoleOpen(false)} />
-        ) : (
-          <button
-            onClick={() => setConsoleOpen(true)}
-            className="w-full h-full flex items-center gap-2 px-3 text-[11px] text-slate-600 hover:text-slate-400 hover:bg-slate-800/30 transition-colors font-mono"
-          >
-            <Terminal size={11} />
-            <span>Console</span>
-            <ChevronUp size={11} className="ml-auto" />
-          </button>
-        )}
-      </div>
 
       <LogTimeModal
         open={modalOpen}

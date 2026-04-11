@@ -26,7 +26,7 @@ export function useSemgrepInstalled() {
 interface ScanParams {
     projectPath: string;
     configPath: string | null;
-    onLog: (log: string) => void;
+    onLog?: (log: string) => void;
     onProgress: (action: string) => void;
 }
 
@@ -35,15 +35,15 @@ export function useSemgrepScan() {
     
     return useMutation({
         mutationFn: async ({ projectPath, configPath, onLog, onProgress }: ScanParams) => {
-            // Listener for real-time logs
+            // Listener for progress (and optional logs)
             const unlisten = await listen<string>('semgrep-log', (event) => {
-                const line = event.payload;
+                const line = String(event.payload);
                 if (line.startsWith('PROG:')) {
                     const cleanLine = line.replace('PROG:', '').trim();
                     if (cleanLine) onProgress(cleanLine.substring(0, 40).toUpperCase());
-                    onLog(`⚡ ${cleanLine}`);
+                    if (onLog) onLog(`⚡ ${cleanLine}`);
                 } else {
-                    onLog(line);
+                    if (onLog) onLog(line);
                 }
             });
 

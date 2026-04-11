@@ -1,19 +1,74 @@
-import { useState, useMemo } from 'react';
-import { Search, X, RefreshCw, Star, Loader2, Settings } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, X, RefreshCw, Star, Loader2, Settings, FolderCode, Link2Off, ChevronRight } from 'lucide-react';
 import { useJenkinsJobs } from '../../hooks/useJenkins';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
 import { JenkinsJobRow } from './JenkinsJobRow';
-import { JenkinsFavoriteCard } from './JenkinsFavoriteCard';
 import { LogTarget } from './JenkinsLogViewer';
 import { jobMatchesSearch, isBuilding, jenkinsGlobalSearch, JenkinsJobSummary } from '../../services/jenkinsApi';
 import { useQueryClient } from '@tanstack/react-query';
+import { useJenkinsProjectLinks } from '../../hooks/useJenkinsProjectLinks';
+import { JenkinsJobCard } from './JenkinsJobCard';
+import { LinkedProjectsDirectory } from './LinkedProjectsDirectory';
+import { cn } from '../../lib/utils';
 
-export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) => void }) {
+
+// ── LinkedProjectCard — thin wrapper over JenkinsJobCard ───────────────────────
+
+function LinkedProjectCard({
+    link,
+    config,
+    onOpenLog,
+    onUnlink,
+}: {
+    link: import('../../hooks/useJenkinsProjectLinks').JobLink;
+    config: import('../../services/jenkinsApi').JenkinsConfig;
+    onOpenLog: (target: LogTarget) => void;
+    onUnlink: () => void;
+}) {
+    const projectName = link.projectPath.split('/').filter(Boolean).pop() ?? link.projectName;
+
+    return (
+        <JenkinsJobCard
+            jobUrl={link.jobUrl}
+            displayName={link.jobDisplayName || link.jobName}
+            subtitle={projectName}
+            subtitleColor="text-orange-400/60"
+            jobName={link.jobName}
+            baseUrl={config.baseUrl}
+            onOpenLog={onOpenLog}
+            badgeLeft={<FolderCode size={8} className="text-orange-400/70 shrink-0" />}
+            extraActions={
+                <button
+                    onClick={onUnlink}
+                    className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                    title="Desvincular"
+                >
+                    <Link2Off size={12} />
+                </button>
+            }
+        />
+    );
+}
+
+
+export function JenkinsJobsTab({
+    onOpenLog,
+    links,
+    unlinkProject,
+}: {
+    onOpenLog: (target: LogTarget) => void;
+    links: import('../../hooks/useJenkinsProjectLinks').JobLink[];
+    unlinkProject: (projectPath: string) => void;
+}) {
     const queryClient = useQueryClient();
     const accounts = useJenkinsStore(s => s.accounts);
     const activeAccountId = useJenkinsStore(s => s.activeAccountId);
     const config = accounts.find(a => a.id === activeAccountId);
+    const cfg = config; // alias used in favorites JSX
     const favorites = useJenkinsStore(s => s.favorites);
+    const toggleFavorite = useJenkinsStore(s => s.toggleFavorite);
+
+    // links y unlinkProject ahora vienen del padre, no del hook local
 
     console.log('[JenkinsJobsTab] Diagnostics:', {
         accountsCount: accounts.length,
@@ -25,7 +80,7 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
 
     const [inputValue, setInputValue] = useState('');
     const [search, setSearch] = useState('');
-    const [filter, setFilter] = useState<'all' | 'favorites'>('all');
+    const [filter, setFilter] = useState<'all' | 'favorites' | 'local'>('all');
 
     const { data: treeJobs, isLoading: isTreeLoading, isFetching: isTreeFetching } = useJenkinsJobs();
     const [searchResults, setSearchResults] = useState<JenkinsJobSummary[] | null>(null);
@@ -186,6 +241,14 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
                         <Star size={10} className={filter === 'favorites' ? 'fill-current' : ''} />
                         {Object.keys(favorites).length > 0 && <span>{Object.keys(favorites).length}</span>}
                     </button>
+                    <button
+                        onClick={() => setFilter('local')}
+                        className={`flex items-center gap-1 px-3 py-1 text-xs border-l border-slate-700 transition-colors ${filter === 'local' ? 'bg-slate-700 text-orange-400' : 'text-slate-500 hover:text-orange-400'}`}
+                    >
+                        <FolderCode size={10} />
+                        Locales
+                        {links.length > 0 && <span className="text-[9px]">{links.length}</span>}
+                    </button>
                 </div>
 
                 <div className="relative flex-1 min-w-32">
@@ -256,8 +319,51 @@ export function JenkinsJobsTab({ onOpenLog }: { onOpenLog: (target: LogTarget) =
                             ) : (
                                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                     {favoriteList.map(fav => (
-                                        <JenkinsFavoriteCard key={fav.url} fav={fav} onOpenLog={onOpenLog} />
+                                        <JenkinsJobCard
+                                            key={fav.url}
+                                            jobUrl={fav.url}
+                                            displayName={fav.displayName || fav.name}
+                                            subtitle={fav.fullName || fav.name}
+                                            subtitleColor="text-slate-500"
+                                            jobName={fav.fullDisplayName || fav.displayName || fav.name}
+                                            baseUrl={cfg?.baseUrl ?? ''}
+
+                                            onOpenLog={onOpenLog}
+                                            extraActions={
+                                                <button
+                                                    onClick={() => toggleFavorite(fav)}
+                                                    className="p-1.5 text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 rounded transition-colors"
+                                                    title="Quitar de favoritos"
+                                                >
+                                                    <Star size={12} className="fill-current" />
+                                                </button>
+                                            }
+                                        />
                                     ))}
+                                </div>
+                            )
+                        ) : filter === 'local' ? (
+                            // ── Locales Tab ──────────────────────────────────────
+                            links.length === 0 ? (
+                                <div className="text-center text-xs text-slate-500 py-24 flex flex-col items-center gap-4">
+                                    <div className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center border border-slate-800">
+                                        <FolderCode size={20} className="text-slate-700" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="font-medium text-slate-300">Sin proyectos vinculados</p>
+                                        <p className="max-w-[260px] mx-auto opacity-60">
+                                            Usá el botón "Proyectos" del header para vincular proyectos locales con Jobs de Jenkins.
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="h-[calc(100vh-220px)] min-h-[400px]">
+                                    <LinkedProjectsDirectory
+                                        links={links.filter(l => !config?.baseUrl || l.jobUrl.startsWith(config.baseUrl))}
+                                        config={config!}
+                                        onOpenLog={onOpenLog}
+                                        onUnlink={unlinkProject}
+                                    />
                                 </div>
                             )
                         ) : (

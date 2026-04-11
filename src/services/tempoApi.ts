@@ -55,10 +55,15 @@ type TempoLogListener = (entry: TempoApiLogEntry) => void;
 let _listeners: TempoLogListener[] = [];
 let _seq = 0;
 
+import { emit } from '@tauri-apps/api/event';
+
 export const tempoApiLog = {
   on(fn: TempoLogListener)  { _listeners.push(fn); },
   off(fn: TempoLogListener) { _listeners = _listeners.filter(l => l !== fn); },
-  emit(entry: TempoApiLogEntry) { _listeners.forEach(l => l(entry)); },
+  emit(entry: TempoApiLogEntry) { 
+    _listeners.forEach(l => l(entry)); 
+    emit('tempo-api-log', entry).catch(console.error);
+  },
 };
 
 // ── Request helper ─────────────────────────────────────────────────────────────
@@ -73,7 +78,7 @@ async function tempoRequest<T>(token: string, path: string, options?: RequestIni
   const curlParts = [
     `curl -s -X ${method}`,
     `'${fullUrl}'`,
-    `-H 'Authorization: Bearer <TOKEN>'`,
+    `-H 'Authorization: Bearer ${token}'`,
     `-H 'Accept: application/json'`,
     `-H 'Content-Type: application/json'`,
   ];

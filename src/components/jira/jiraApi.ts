@@ -9,11 +9,13 @@ export const JIRA_ACTIVE_KEY = 'microtermix-jira-active';
 // ── API Request Logger (event bus) ───────────────────────────────────────────
 export interface JiraApiLogEntry {
     id: number;
+    uuid: string;           // Unique identifier for correlation
     time: string;           // HH:MM:SS
     method: string;         // GET | POST | PUT …
     path: string;           // /rest/api/3/…
     url: string;            // full URL
-    body?: string;          // JSON body if present
+    request?: any;          // Parsed request body
+    response?: any;         // Parsed response body
     status?: number;        // HTTP response status
     durationMs?: number;    // round-trip ms
     ok: boolean;
@@ -25,10 +27,19 @@ type LogListener = (entry: JiraApiLogEntry) => void;
 let _logListeners: LogListener[] = [];
 let _logSeq = Date.now(); // Use timestamp as base to avoid duplicate keys after hot-reload
 
+import { emit } from '@tauri-apps/api/event';
+
+let _logBuffer: JiraApiLogEntry[] = [];
+
 export const jiraApiLog = {
     on(fn: LogListener) { _logListeners.push(fn); },
     off(fn: LogListener) { _logListeners = _logListeners.filter(l => l !== fn); },
-    emit(entry: JiraApiLogEntry) { _logListeners.forEach(l => l(entry)); },
+    emit(entry: JiraApiLogEntry) { 
+        _logBuffer = [entry, ..._logBuffer].slice(0, 100);
+        _logListeners.forEach(l => l(entry)); 
+        emit('jira-api-log', entry).catch(console.error);
+    },
+    getHistory() { return _logBuffer; }
 };
 
 export interface JiraConfig {
@@ -181,12 +192,18 @@ async function jiraFetch(path: string, opts?: RequestInit): Promise<any> {
     const method = (opts?.method ?? 'GET').toUpperCase();
     const fullUrl = `${cfg.baseUrl.replace(/\/$/, '')}/rest/api/3${path}`;
     const bodyStr = opts?.body ? String(opts.body) : undefined;
+    
+    // Parse request body for the log (so it's an object in the editor)
+    let requestObj = undefined;
+    if (bodyStr) {
+        try { requestObj = JSON.parse(bodyStr); } catch { requestObj = bodyStr; }
+    }
 
     // Build curl string (token redacted for safety)
     const curlParts = [
         `curl -s -X ${method}`,
         `'${fullUrl}'`,
-        `-H 'Authorization: Basic <TOKEN>'`,
+        `-H 'Authorization: Basic ${token}'`,
         `-H 'Accept: application/json'`,
         `-H 'Content-Type: application/json'`,
     ];
@@ -196,6 +213,7 @@ async function jiraFetch(path: string, opts?: RequestInit): Promise<any> {
     const t0 = Date.now();
     const time = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const id = ++_logSeq;
+    const uuid = crypto.randomUUID();
 
     try {
         const res = await fetch(fullUrl, {
@@ -208,17 +226,16 @@ async function jiraFetch(path: string, opts?: RequestInit): Promise<any> {
             },
         });
         const durationMs = Date.now() - t0;
+        const text = await res.text();
+        let responseObj = undefined;
+        try { responseObj = JSON.parse(text); } catch { responseObj = text; }
+
         if (!res.ok) {
-            console.error('[Jira] Response not OK:', res.status);
-            let text = '';
-            try { text = await res.text(); } catch { }
-            jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, status: res.status, durationMs, ok: false, curl, error: text });
+            jiraApiLog.emit({ id, uuid, time, method, path, url: fullUrl, request: requestObj, response: responseObj, status: res.status, durationMs, ok: false, curl, error: text });
             throw new Error(`Jira ${res.status}: ${text}`);
         }
-
-        // Tauri's plugin-http JSON parsing sometimes lacks deep fallback types on errors
-        const text = await res.text();
-        jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, status: res.status, durationMs, ok: true, curl });
+        
+        jiraApiLog.emit({ id, uuid, time, method, path, url: fullUrl, request: requestObj, response: responseObj, status: res.status, durationMs, ok: true, curl });
         if (!text) return {};
         try {
             return JSON.parse(text);
@@ -229,7 +246,7 @@ async function jiraFetch(path: string, opts?: RequestInit): Promise<any> {
         const durationMs = Date.now() - t0;
         if (!String(e?.message).startsWith('Jira ')) {
             // Only emit if not already emitted above
-            jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, durationMs, ok: false, curl, error: e?.message });
+            jiraApiLog.emit({ id, uuid, time, method, path, url: fullUrl, request: requestObj, durationMs, ok: false, curl, error: e?.message });
         }
         console.error('[Jira] Fetch Error:', e);
         throw new Error(e?.message || (typeof e === 'string' ? e : 'Error desconocido de conexión.'));
@@ -294,10 +311,15 @@ async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
     const fullUrl = `https://api.tempo.io/4${path}`;
     const bodyStr = opts?.body ? String(opts.body) : undefined;
 
+    let requestObj = undefined;
+    if (bodyStr) {
+        try { requestObj = JSON.parse(bodyStr); } catch { requestObj = bodyStr; }
+    }
+
     const curlParts = [
         `curl -s -X ${method}`,
         `'${fullUrl}'`,
-        `-H 'Authorization: Bearer <TOKEN>'`,
+        `-H 'Authorization: Bearer ${cfg.tempoToken}'`,
         `-H 'Accept: application/json'`,
         `-H 'Content-Type: application/json'`,
     ];
@@ -307,6 +329,7 @@ async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
     const t0 = Date.now();
     const time = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const id = ++_logSeq;
+    const uuid = crypto.randomUUID();
 
     try {
         const res = await fetch(fullUrl, {
@@ -320,17 +343,20 @@ async function tempoFetch(path: string, opts?: RequestInit): Promise<any> {
         });
         const durationMs = Date.now() - t0;
         const text = await res.text();
+        let responseObj = undefined;
+        try { responseObj = JSON.parse(text); } catch { responseObj = text; }
+
         if (!res.ok) {
-            jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, status: res.status, durationMs, ok: false, curl, error: text });
+            jiraApiLog.emit({ id, uuid, time, method, path, url: fullUrl, request: requestObj, response: responseObj, status: res.status, durationMs, ok: false, curl, error: text });
             throw new Error(`Tempo ${res.status}: ${text}`);
         }
-        jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, status: res.status, durationMs, ok: true, curl });
+        jiraApiLog.emit({ id, uuid, time, method, path, url: fullUrl, request: requestObj, response: responseObj, status: res.status, durationMs, ok: true, curl });
         if (!text) return {};
         try { return JSON.parse(text); } catch { return {}; }
     } catch (e: any) {
         const durationMs = Date.now() - t0;
         if (!String(e?.message).startsWith('Tempo ')) {
-            jiraApiLog.emit({ id, time, method, path, url: fullUrl, body: bodyStr, durationMs, ok: false, curl, error: e?.message });
+            jiraApiLog.emit({ id, uuid, time, method, path, url: fullUrl, request: requestObj, durationMs, ok: false, curl, error: e?.message });
         }
         console.error('[Tempo] Fetch Error:', e);
         throw new Error(e?.message || 'Error de conexión con Tempo.');

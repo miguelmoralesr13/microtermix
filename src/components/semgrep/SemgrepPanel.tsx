@@ -14,6 +14,7 @@ import { cn } from '../../lib/utils';
 import { SemgrepFindingRemediator } from './SemgrepFindingRemediator';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useSemgrepInstalled, useSemgrepScan } from '../../hooks/queries/useSemgrepQueries';
+import { Terminal } from '../ui/terminal/Terminal';
 
 const STORAGE_SEMGREP_PATH = 'microtermix-semgrep-selected-path';
 
@@ -34,8 +35,8 @@ export const SemgrepPanel: React.FC = () => {
     }, [selectedPath]);
 
     const [remediatingFinding, setRemediatingFinding] = useState<SemgrepFinding | null>(null);
-    const [logs, setLogs] = useState<string[]>([]);
-    const [isConsoleOpen, setIsConsoleOpen] = useState(false);
+    const [scanId, setScanId] = useState(0);
+    const [terminalHeight, setTerminalHeight] = useState(256);
     const [currentAction, setCurrentAction] = useState<string>('IDLE');
     
     const findingsCache = useSemgrepStore(s => s.findings);
@@ -65,8 +66,7 @@ export const SemgrepPanel: React.FC = () => {
     const handleRunScan = async () => {
         if (!selectedPath) return;
         
-        setLogs([]);
-        setIsConsoleOpen(true);
+        setScanId(s => s + 1);
         setCurrentAction("INITIALIZING");
         toast.info("Lanzando escaneo de seguridad local...");
         
@@ -74,7 +74,6 @@ export const SemgrepPanel: React.FC = () => {
             await scanMutation.mutateAsync({
                 projectPath: selectedPath,
                 configPath,
-                onLog: (line) => setLogs(prev => [...prev.slice(-100), line]),
                 onProgress: (action) => setCurrentAction(action)
             });
             setCurrentAction("COMPLETED");
@@ -308,19 +307,18 @@ export const SemgrepPanel: React.FC = () => {
                             </div>
 
                             {/* Collapsible Terminal at the very bottom */}
-                            <div className={cn(
-                                "shrink-0 border-t border-slate-800 bg-slate-950 flex flex-col transition-all duration-300 z-10 shadow-2xl shadow-black",
-                                isConsoleOpen ? "h-56" : "h-9"
-                            )}>
-                                <div 
-                                    onClick={() => setIsConsoleOpen(!isConsoleOpen)}
-                                    className="h-9 px-4 flex items-center justify-between cursor-pointer hover:bg-slate-900/50 bg-slate-950 select-none shrink-0"
-                                >
+                            <Terminal
+                                key={`semgrep-scan-${scanId}`}
+                                mode="log-stream"
+                                variant="panel"
+                                defaultIsOpen={true}
+                                resizable={true}
+                                height={terminalHeight}
+                                onHeightChange={setTerminalHeight}
+                                className="z-10 shadow-2xl shadow-black"
+                                title={
                                     <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <TerminalSquare size={14} className={cn("text-slate-600", isScanning && "text-emerald-500 animate-pulse")} />
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Scan Logs</span>
-                                        </div>
+                                        <span className="text-[10px] uppercase tracking-widest">Live Scan Logs</span>
                                         {isScanning && (
                                             <div className="flex items-center gap-2 px-2 py-0.5 bg-emerald-500/10 rounded border border-emerald-500/20">
                                                 <div className="w-1 h-1 rounded-full bg-emerald-500 animate-ping" />
@@ -328,28 +326,20 @@ export const SemgrepPanel: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
-                                    <ChevronDown size={16} className={cn("text-slate-600 transition-transform duration-300", isConsoleOpen ? "" : "rotate-180")} />
-                                </div>
-                                {isConsoleOpen && (
-                                    <div className="flex-1 overflow-y-auto p-4 font-mono text-[10px] bg-[#020408] space-y-1.5 custom-scrollbar">
-                                        {logs.length === 0 ? (
-                                            <div className="h-full flex flex-col items-center justify-center opacity-20">
-                                                <Activity size={32} className="mb-2" />
-                                                <p className="text-[10px] uppercase font-black tracking-widest text-center">Esperando ejecución...</p>
-                                            </div>
-                                        ) : (
-                                            logs.map((log, i) => (
-                                                <div key={i} className={cn(
-                                                    "border-l-2 pl-3 py-0.5 transition-colors",
-                                                    log.startsWith('⚡') ? "border-emerald-500/40 text-emerald-400/90 bg-emerald-500/5" : "border-slate-800 text-slate-400"
-                                                )}>
-                                                    {log}
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                                }
+                                icon={<TerminalSquare size={14} className={cn("text-slate-600", isScanning && "text-emerald-500 animate-pulse")} />}
+                                events={[{
+                                    event: 'semgrep-log',
+                                    outputFormat: 'json',
+                                    format: (payload: unknown) => {
+                                        const line = String(payload);
+                                        if (line.startsWith('PROG:')) {
+                                            return `\x1b[38;5;48m⚡ ${line.replace('PROG:', '').trim()}\x1b[0m`;
+                                        }
+                                        return line;
+                                    }
+                                }]}
+                            />
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center gap-4 text-slate-600">

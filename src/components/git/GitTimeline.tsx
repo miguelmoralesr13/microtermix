@@ -217,16 +217,20 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     }, [projectPath]);
 
     useEffect(() => {
+        // Only fetch CI status for HEAD commit (the first one).
+        // GitHub's combined status endpoint runs against branch HEADs, not individual SHAs —
+        // intermediate commits almost always stay "pending" forever, which is misleading.
         if (rawCommits.length > 0 && activeAccount?.token && activeAccount?.provider === 'github') {
-            const topHashes = rawCommits.slice(0, 5).map(c => c.hash);
+            const headHash = rawCommits[0].hash;
             const timer = setTimeout(() => {
                 import('../../services/githubApi').then(({ fetchGithubCommitStatus }) => {
-                    Promise.allSettled(topHashes.map(h => fetchGithubCommitStatus(projectPath, activeAccount.token, h).then((res: any) => ({ hash: h, state: res?.state || null }))))
-                    .then(results => {
-                        const newStatuses: Record<string, any> = {};
-                        results.forEach(r => { if (r.status === 'fulfilled' && r.value.state) newStatuses[r.value.hash] = r.value.state; });
-                        if (Object.keys(newStatuses).length > 0) setCommitStatuses(prev => ({ ...prev, ...newStatuses }));
-                    });
+                    fetchGithubCommitStatus(projectPath, activeAccount.token, headHash)
+                        .then((res: any) => {
+                            if (res?.state) {
+                                setCommitStatuses(prev => ({ ...prev, [headHash]: res.state }));
+                            }
+                        })
+                        .catch(() => { /* silently ignore */ });
                 });
             }, 1500);
             return () => clearTimeout(timer);

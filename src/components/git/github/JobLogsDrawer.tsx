@@ -249,13 +249,7 @@ export const JobLogsDrawer: React.FC<JobLogsDrawerProps> = ({ job, projectPath, 
         : (steps[selectedStepIdx]?.lines ?? []);
 
     return (
-        <div className={cn(
-            'absolute inset-y-0 right-0 z-10 flex flex-col',
-            'bg-slate-950 border-l border-slate-700',
-            'w-[70%] min-w-[480px]',
-            'shadow-2xl shadow-black/60',
-            'animate-in slide-in-from-right-8 duration-200'
-        )}>
+        <div className="flex-1 flex flex-col overflow-hidden bg-slate-950 border-l border-slate-800 animate-in fade-in duration-150">
             {/* Header */}
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 shrink-0 bg-slate-900">
                 <WorkflowStatusBadge status={job.status} conclusion={job.conclusion} />

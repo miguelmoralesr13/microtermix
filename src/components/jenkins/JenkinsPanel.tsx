@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, ChevronRight, Server } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Settings, ChevronRight, Server, TerminalSquare, FolderGit2 } from 'lucide-react';
 import { jenkinsApiLog, JenkinsApiLogEntry } from '../../services/jenkinsApi';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
 import { JenkinsJobsTab } from './JenkinsJobsTab';
 import { JenkinsSettings } from './JenkinsSettings';
 import { JenkinsLogViewer, LogTarget } from './JenkinsLogViewer';
 import { cn } from '../../lib/utils';
+import { Terminal } from '@/components/ui/terminal';
+import type { TerminalRef } from '@/components/ui/terminal/types';
+import { LogDetailModal } from '../jira/LogDetailModal';
+import { toast } from 'sonner';
+import { LinkProjectsModal } from './LinkProjectsModal';
+import { useJenkinsProjectLinks } from '@/hooks/useJenkinsProjectLinks';
+
+const STORAGE_JENKINS_TERMINAL_HEIGHT = 'microtermix-jenkins-terminal-height';
 
 export const JenkinsPanel: React.FC = () => {
     const accounts = useJenkinsStore(s => s.accounts);
@@ -14,11 +22,19 @@ export const JenkinsPanel: React.FC = () => {
 
     const [showSettings, setShowSettings] = useState(accounts.length === 0);
     const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
+    const [showLinkModal, setShowLinkModal] = useState(false);
+
+    // ┌── Estado compartido de links — Única instancia, se pasa como props hacia abajo ─────┐
+    const { links, linksMap, linkProject, unlinkProject } = useJenkinsProjectLinks();
+    // └───────────────────────────────────────────────────────────────────────┘
 
     // API Console State
     const [apiLog, setApiLog] = useState<JenkinsApiLogEntry[]>([]);
-    const [consoleOpen, setConsoleOpen] = useState(false);
-    const [expandedEntry, setExpandedEntry] = useState<number | null>(null);
+    const [selectedLog, setSelectedLog] = useState<any | null>(null);
+    const terminalRef = useRef<TerminalRef>(null);
+    const [terminalHeight, setTerminalHeight] = useState(() => parseInt(localStorage.getItem(STORAGE_JENKINS_TERMINAL_HEIGHT) || '180'));
+
+    useEffect(() => { localStorage.setItem(STORAGE_JENKINS_TERMINAL_HEIGHT, terminalHeight.toString()); }, [terminalHeight]);
 
     useEffect(() => {
         if (accounts.length > 0 && !activeAccountId) {
@@ -37,10 +53,60 @@ export const JenkinsPanel: React.FC = () => {
     }, [accounts.length, activeAccountId, setActiveAccount]);
 
     useEffect(() => {
-        const handler = (e: JenkinsApiLogEntry) => setApiLog(prev => [e, ...prev].slice(0, 100));
+        const handler = (e: JenkinsApiLogEntry) => {
+            setApiLog(prev => [e, ...prev].slice(0, 100)); // Store metadata in RAM for LogDetailModal
+            
+            // Inject directly to terminal
+            if (terminalRef.current) {
+                const { time, method, path, status, ok, durationMs, id } = e;
+                const statusColor = ok ? '\x1b[32m' : '\x1b[31m';
+                const methodColor = '\x1b[1m\x1b[33m'; // Yellow-ish for Jenkins HTTP
+                const labelColor = `\x1b[1m\x1b[38;5;208m`; // Orange text
+                
+                let displayPath = path;
+                if (displayPath.length > 80) {
+                    displayPath = displayPath.slice(0, 80) + '...';
+                }
+                
+                let line = `\x1b[90m[${time}]\x1b[0m`;
+                if (id) {
+                    line += ` \x1b[38;5;236mid:${id}\x1b[0m`;
+                }
+                line += ` ${labelColor}[Jenkins]\x1b[0m ${methodColor}${method}\x1b[0m \x1b[37m${displayPath}\x1b[0m`;
+                if (status) line += ` ${statusColor}${status}\x1b[0m`;
+                if (durationMs !== undefined) line += ` \x1b[90m(${durationMs}ms)\x1b[0m`;
+                
+                terminalRef.current.writeln(line);
+            }
+        };
         jenkinsApiLog.on(handler);
         return () => jenkinsApiLog.off(handler);
     }, []);
+
+    const handleLineClick = (line: string) => {
+        const cleanLine = line.replace(/\x1b\[[0-9;]*[mK]/g, '').trim();
+        const idMatch = cleanLine.match(/id:([0-9]+)/);
+        
+        if (!idMatch) {
+            toast.error("No se encontró el id. Intenta clic más arriba (antes del text wrap).");
+            return;
+        }
+        
+        const id = parseInt(idMatch[1], 10);
+        const found = apiLog.find(l => l.id === id);
+
+        if (found) {
+            // Transform the Jenkins log object into the format expected by LogDetailModal (from Jira)
+            // Need to map any discrepancies if any, but they generally use same signature (method, path, url, status, duration)
+            setSelectedLog({
+                ...found,
+                source: 'Jenkins', 
+            });
+            toast.success(`Inspeccionando petici\u00f3n a Jenkins`);
+        } else {
+            toast.error("Detalle del log expirado o no encontrado");
+        }
+    };
 
     const activeAccount = accounts.find(a => a.id === activeAccountId);
 
@@ -65,6 +131,16 @@ export const JenkinsPanel: React.FC = () => {
                         <span className="text-[10px] text-slate-500 font-mono truncate max-w-40">{activeAccount.baseUrl}</span>
                     )}
                 </div>
+                {/* Botón de vinculación de proyectos locales */}
+                {!showSettings && accounts.length > 0 && (
+                    <button
+                        onClick={() => setShowLinkModal(true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-orange-400/80 hover:text-orange-400 hover:bg-orange-400/10 rounded-md border border-orange-400/20 hover:border-orange-400/40 transition-all"
+                    >
+                        <FolderGit2 size={12} />
+                        Proyectos
+                    </button>
+                )}
             </div>
 
             {/* Tabs */}
@@ -103,7 +179,12 @@ export const JenkinsPanel: React.FC = () => {
                         "flex flex-col overflow-hidden transition-all h-full",
                         logTarget ? "w-1/2 border-r border-slate-800 shrink-0" : "flex-1"
                     )}>
-                        <JenkinsJobsTab key={activeAccountId} onOpenLog={setLogTarget} />
+                        <JenkinsJobsTab
+                            key={activeAccountId}
+                            onOpenLog={setLogTarget}
+                            links={links}
+                            unlinkProject={unlinkProject}
+                        />
                     </div>
                 )}
 
@@ -120,137 +201,35 @@ export const JenkinsPanel: React.FC = () => {
                 )}
             </div>
 
-            {/* API Console Log (footer) */}
-            <div className="shrink-0 border-t border-slate-800 bg-slate-950 z-10">
-                <div
-                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-900/40 select-none"
-                    onClick={() => setConsoleOpen(v => !v)}
-                >
-                    <ChevronRight size={10} className={`text-slate-600 transition-transform ${consoleOpen ? 'rotate-90' : ''}`} />
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">API Log</span>
-                    <span className="text-[9px] text-slate-700 font-mono">{apiLog.length} req</span>
-                    {apiLog.some(e => !e.ok) && (
-                        <span className="text-[9px] text-red-500 font-mono">{apiLog.filter(e => !e.ok).length} err</span>
-                    )}
-                    {apiLog.length > 0 && (
-                        <button
-                            onClick={ev => { ev.stopPropagation(); setApiLog([]); setExpandedEntry(null); }}
-                            className="ml-auto text-[10px] text-slate-600 hover:text-slate-400"
-                        >Clear</button>
-                    )}
-                </div>
+            {/* API Console Log Unificada */}
+            <Terminal
+                ref={terminalRef}
+                mode="log-stream"
+                variant="panel"
+                title="API Logs"
+                icon={<TerminalSquare size={13} />}
+                height={terminalHeight}
+                onHeightChange={setTerminalHeight}
+                resizable={true}
+                defaultIsOpen={false}
+                onLineClick={handleLineClick}
+                className="z-10 shadow-t-2xl shadow-black/40"
+                showSearch={true}
+                showClear={true}
+            />
 
-                {consoleOpen && (
-                    <div className="h-40 overflow-y-auto">
-                        {apiLog.length === 0 ? (
-                            <p className="text-[10px] text-slate-700 py-3 px-3 font-mono">Waiting for requests…</p>
-                        ) : apiLog.map(entry => (
-                            <div key={entry.id} className="border-b border-slate-900">
-                                <div
-                                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-slate-900/60 group"
-                                    onClick={() => setExpandedEntry(expandedEntry === entry.id ? null : entry.id)}
-                                >
-                                    <span className={`shrink-0 font-mono text-[9px] font-bold px-1.5 py-0.5 rounded ${entry.method === 'GET' ? 'bg-sky-500/20 text-sky-400' :
-                                        entry.method === 'POST' ? 'bg-violet-500/20 text-violet-400' :
-                                            'bg-amber-500/20 text-amber-400'
-                                        }`}>{entry.method}</span>
-                                    {entry.status !== undefined && (
-                                        <span className={`shrink-0 font-mono text-[9px] font-bold ${entry.ok ? 'text-emerald-400' : 'text-red-400'}`}>
-                                            {entry.status}
-                                        </span>
-                                    )}
-                                    <span className="flex-1 font-mono text-[10px] text-slate-400 truncate">{entry.path}</span>
-                                    {entry.durationMs !== undefined && (
-                                        <span className="shrink-0 text-[9px] text-slate-600 font-mono">{entry.durationMs}ms</span>
-                                    )}
-                                    <span className="shrink-0 text-[9px] text-slate-700 font-mono">{entry.time}</span>
-                                </div>
-                                {expandedEntry === entry.id && (
-                                    <div className="bg-slate-950 px-3 pb-3 space-y-3 border-t border-slate-900/50">
-                                        {/* Error Context */}
-                                        {entry.error && (
-                                            <div className="text-[10px] text-red-300 font-mono bg-red-500/10 p-2 rounded border border-red-500/20 mt-2">
-                                                <strong className="text-red-400">FAULT:</strong> {entry.error}
-                                            </div>
-                                        )}
+            {/* Inspección de log reutilizando modal de Jira */}
+            <LogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
 
-                                        {/* URL & cURL Command */}
-                                        <div className="space-y-1.5 mt-2">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Request Details</span>
-                                                {entry.curl && (
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            navigator.clipboard.writeText(entry.curl!);
-                                                        }}
-                                                        className="text-[9px] px-2 py-0.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 rounded border border-sky-500/20 transition-colors"
-                                                    >
-                                                        Copy cURL
-                                                    </button>
-                                                )}
-                                            </div>
-                                            <div className="bg-slate-900/80 p-2 rounded border border-white/5 space-y-1">
-                                                <p className="text-[9px] text-slate-300 font-mono break-all font-bold">{entry.method} {entry.url}</p>
-                                                {entry.curl && <p className="text-[8px] text-slate-500 font-mono truncate opacity-60">curl -X {entry.method} ...</p>}
-                                            </div>
-                                        </div>
-
-                                        {/* Headers Grid */}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            {entry.requestHeaders && (
-                                                <div className="space-y-1">
-                                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter">Request Headers</span>
-                                                    <div className="bg-slate-900/40 p-1.5 rounded border border-white/5 max-h-32 overflow-y-auto custom-scrollbar">
-                                                        {Object.entries(entry.requestHeaders).map(([k, v]) => (
-                                                            <div key={k} className="text-[9px] font-mono leading-tight mb-1">
-                                                                <span className="text-sky-500/70">{k}:</span> <span className="text-slate-400">{v}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {entry.responseHeaders && (
-                                                <div className="space-y-1">
-                                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter">Response Headers</span>
-                                                    <div className="bg-slate-900/40 p-1.5 rounded border border-white/5 max-h-32 overflow-y-auto custom-scrollbar">
-                                                        {Object.entries(entry.responseHeaders).map(([k, v]) => (
-                                                            <div key={k} className="text-[9px] font-mono leading-tight mb-1">
-                                                                <span className="text-emerald-500/70">{k}:</span> <span className="text-slate-400">{v}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Response Body */}
-                                        {entry.responseBody && (
-                                            <div className="space-y-1">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-[8px] font-bold text-slate-600 uppercase tracking-tighter">Response Body (JSON)</span>
-                                                    <button 
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            navigator.clipboard.writeText(JSON.stringify(entry.responseBody, null, 2));
-                                                        }}
-                                                        className="text-[8px] text-slate-500 hover:text-slate-300 transition-colors"
-                                                    >
-                                                        Copy Body
-                                                    </button>
-                                                </div>
-                                                <pre className="text-[9px] font-mono p-2 bg-slate-950 rounded border border-white/5 overflow-x-auto max-h-60 text-emerald-400/90 leading-relaxed selection:bg-emerald-500/20">
-                                                    {JSON.stringify(entry.responseBody, null, 2)}
-                                                </pre>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+            {/* Modal de vinculación de proyectos locales */}
+            <LinkProjectsModal
+                open={showLinkModal}
+                onClose={() => setShowLinkModal(false)}
+                links={links}
+                linksMap={linksMap}
+                linkProject={linkProject}
+                unlinkProject={unlinkProject}
+            />
         </div>
     );
 };

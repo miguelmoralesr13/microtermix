@@ -1,10 +1,28 @@
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
+
+// ─── Tipos ─────────────────────────────────────────────────────────────────────
 
 export type ProcessStatus = 'idle' | 'running' | 'error' | 'stopped';
 
+/**
+ * Identifica a qué utilidad pertenece el proceso.
+ * Cada panel filtra `activeProcesses` usando su propio source.
+ * Agregar nuevas utilidades aquí cuando se integren al sistema.
+ */
+export type ProcessSource =
+    | 'services'   // Procesos visibles en la pestaña Services / Terminals
+    | 'sonar'      // Scanner de Sonar (solo visible en el panel Sonar)
+    | 'semgrep'    // Scanner de Semgrep (solo visible en el panel Semgrep)
+    | 'git'        // Operaciones de Git (solo visible en el panel Git)
+    | 'jenkins'    // Pipelines de Jenkins
+    | 'tests'      // Ejecución de tests
+    | 'proxy'      // Procesos del proxy local
+    | string;      // fallback para futuras utilidades sin tipado estricto
+
 export interface ProcessState {
     status: ProcessStatus;
+    source: ProcessSource;  // ← Qué utilidad es dueña de este proceso
     script?: string;
     envJson?: string;
     logs: string[];
@@ -14,119 +32,145 @@ export interface ProcessState {
 export interface ProcessStore {
     activeProcesses: Record<string, ProcessState>;
     activeTerminalTab: string | null;
-    
+
     // Actions
     setActiveTerminalTab: (tabId: string | null) => void;
-    updateProcessStatus: (serviceId: string, status: ProcessStatus, script?: string, envJson?: string, incrementRestart?: boolean) => void;
+    updateProcessStatus: (
+        serviceId: string,
+        status: ProcessStatus,
+        script?: string,
+        envJson?: string,
+        incrementRestart?: boolean,
+        source?: ProcessSource,
+    ) => void;
     appendLogs: (serviceId: string, newLines: string[]) => void;
     setLogs: (serviceId: string, logs: string[]) => void;
     removeProcess: (serviceId: string) => void;
     clearAllProcesses: () => void;
+
+    // Selector helper — devuelve los ids de procesos de una utilidad
+    getProcessIdsBySource: (source: ProcessSource) => string[];
 }
 
-// Buffer temporal para batching de logs (fuera del store para evitar re-renders constantes)
+// ─── Buffer de batching de logs ───────────────────────────────────────────────
+
 const logBuffer: Record<string, string[]> = {};
 let logTimer: ReturnType<typeof setTimeout> | null = null;
 
+// ─── Store ────────────────────────────────────────────────────────────────────
+
 export const useProcessStore = create<ProcessStore>()(
-    devtools(
-        (set) => ({
-            activeProcesses: {},
-            activeTerminalTab: null,
+    subscribeWithSelector(
+        devtools(
+            (set, get) => ({
+                activeProcesses: {},
+                activeTerminalTab: null,
 
-            setActiveTerminalTab: (tabId) => set({ activeTerminalTab: tabId }),
+                setActiveTerminalTab: (tabId) => set({ activeTerminalTab: tabId }),
 
-            updateProcessStatus: (serviceId, status, script, envJson, incrementRestart) => 
-                set((state) => {
-                    const existing = state.activeProcesses[serviceId];
-                    
-                    if (status === 'idle') {
-                        const next = { ...state.activeProcesses };
-                        delete next[serviceId];
-                        return { activeProcesses: next };
-                    }
+                updateProcessStatus: (serviceId, status, script, envJson, incrementRestart, source) =>
+                    set((state) => {
+                        const existing = state.activeProcesses[serviceId];
 
-                    const base = existing || { logs: [], restarts: 0, status: 'idle' };
-                    let nextLogs = base.logs;
-                    let nextRestarts = base.restarts;
-
-                    // Si pasamos de cualquier estado a 'running', o si forzamos incremento, limpiamos logs
-                    const isNewStart = status === 'running' && (base.status !== 'running' || !existing || incrementRestart);
-                    
-                    if (isNewStart) {
-                        nextLogs = [];
-                        if (incrementRestart || existing) nextRestarts += 1;
-                    }
-
-                    return {
-                        activeProcesses: {
-                            ...state.activeProcesses,
-                            [serviceId]: {
-                                ...base,
-                                status,
-                                script: script ?? base.script,
-                                envJson: envJson ?? base.envJson,
-                                logs: nextLogs,
-                                restarts: nextRestarts
-                            }
+                        // 'idle' elimina el registro del mapa
+                        if (status === 'idle') {
+                            const next = { ...state.activeProcesses };
+                            delete next[serviceId];
+                            return { activeProcesses: next };
                         }
-                    };
-                }),
 
-            appendLogs: (serviceId, newLines) => 
-                set((state) => {
-                    const existing = state.activeProcesses[serviceId];
-                    if (!existing) {
+                        const base = existing || {
+                            logs: [],
+                            restarts: 0,
+                            status: 'idle' as ProcessStatus,
+                            source: source ?? 'services',
+                        };
+
+                        let nextLogs = base.logs;
+                        let nextRestarts = base.restarts;
+
+                        const isNewStart =
+                            status === 'running' &&
+                            (base.status !== 'running' || !existing || incrementRestart);
+
+                        if (isNewStart) {
+                            nextLogs = [];
+                            if (incrementRestart || existing) nextRestarts += 1;
+                        }
+
                         return {
                             activeProcesses: {
                                 ...state.activeProcesses,
                                 [serviceId]: {
-                                    status: 'running',
-                                    logs: newLines.slice(-1000),
-                                    restarts: 0
-                                }
-                            }
+                                    ...base,
+                                    status,
+                                    source: source ?? base.source,
+                                    script: script ?? base.script,
+                                    envJson: envJson ?? base.envJson,
+                                    logs: nextLogs,
+                                    restarts: nextRestarts,
+                                },
+                            },
                         };
-                    }
+                    }),
 
-                    // Optimized: direct append without expensive O(N) deduplication
-                    // React will handle the delta in TerminalView efficiently
-                    return {
+                appendLogs: (serviceId, newLines) =>
+                    set((state) => {
+                        const existing = state.activeProcesses[serviceId];
+
+                        // Si el proceso aún no existe en el store, ignoramos los logs.
+                        // El proceso siempre debe ser registrado primero vía updateProcessStatus
+                        // (que sí porta el source correcto). Esto evita la race condition donde
+                        // los primeros logs crean la entrada con source='services' por defecto.
+                        if (!existing) return state;
+
+                        return {
+                            activeProcesses: {
+                                ...state.activeProcesses,
+                                [serviceId]: {
+                                    ...existing,
+                                    logs: [...existing.logs, ...newLines].slice(-1000),
+                                },
+                            },
+                        };
+                    }),
+
+                setLogs: (serviceId, logs) =>
+                    set((state) => ({
                         activeProcesses: {
                             ...state.activeProcesses,
                             [serviceId]: {
-                                ...existing,
-                                logs: [...existing.logs, ...newLines].slice(-1000)
-                            }
-                        }
-                    };
-                }),
+                                ...(state.activeProcesses[serviceId] || {
+                                    status: 'idle',
+                                    restarts: 0,
+                                    source: 'services',
+                                }),
+                                logs: logs.slice(-1000),
+                            },
+                        },
+                    })),
 
-            setLogs: (serviceId, logs) =>
-                set((state) => ({
-                    activeProcesses: {
-                        ...state.activeProcesses,
-                        [serviceId]: {
-                            ...(state.activeProcesses[serviceId] || { status: 'idle', restarts: 0 }),
-                            logs: logs.slice(-1000)
-                        }
-                    }
-                })),
+                removeProcess: (serviceId) =>
+                    set((state) => {
+                        const next = { ...state.activeProcesses };
+                        delete next[serviceId];
+                        return { activeProcesses: next };
+                    }),
 
-            removeProcess: (serviceId) => 
-                set((state) => {
-                    const next = { ...state.activeProcesses };
-                    delete next[serviceId];
-                    return { activeProcesses: next };
-                }),
+                clearAllProcesses: () => set({ activeProcesses: {} }),
 
-            clearAllProcesses: () => set({ activeProcesses: {} }),
-        }),
-        { name: 'ProcessStore' }
+                getProcessIdsBySource: (source) => {
+                    const procs = get().activeProcesses;
+                    return Object.keys(procs).filter((id) => procs[id].source === source);
+                },
+            }),
+            { name: 'ProcessStore' }
+        )
     )
 );
 
-// Helper para enviar logs al store con throttling (Punto 4)
+// ─── Helper de batching ───────────────────────────────────────────────────────
+
 export const batchedAppendLogs = (serviceId: string, logLine: string) => {
     if (!logBuffer[serviceId]) logBuffer[serviceId] = [];
     logBuffer[serviceId].push(logLine);
@@ -134,7 +178,6 @@ export const batchedAppendLogs = (serviceId: string, logLine: string) => {
     if (!logTimer) {
         logTimer = setTimeout(() => {
             const bufferCopy = { ...logBuffer };
-            // Limpiar buffer original inmediatamente
             for (const key in logBuffer) delete logBuffer[key];
             logTimer = null;
 

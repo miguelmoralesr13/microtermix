@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { Power, PowerOff, Plus, Trash2, Upload, Pencil, ExternalLink, FileCode, FolderOpen, QrCode, Activity } from 'lucide-react';
+import { Power, PowerOff, Plus, Trash2, Upload, Pencil, ExternalLink, FileCode, FolderOpen, QrCode, Activity, TerminalSquare } from 'lucide-react';
+import { Terminal } from '@/components/ui/terminal';
 import { Button } from '@/components//ui/button';
 import { Input } from '@/components//ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components//ui/select';
@@ -70,6 +71,7 @@ function contentTypeFromPath(path: string): string {
 }
 
 const STORAGE_KEY = 'microtermix-file-server';
+const STORAGE_TERMINAL_HEIGHT = 'microtermix-file-server-terminal-height';
 function loadSaved(): { port: number; bindHost: string; routes: FileServerRouteEntry[]; baseDir?: string } {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -99,6 +101,28 @@ function save(port: number, bindHost: string, routes: FileServerRouteEntry[], ba
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ port, bindHost, routes, baseDir }));
 }
 
+let isListeningHistory = false;
+const fileServerLogBuffer: string[] = [];
+
+function formatFileServerLog(line: string): string {
+    const time = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    // Parse: [METHOD] path -> status
+    // If it's the start message "▶ Servidor iniciado..."
+    if (line.includes('▶')) {
+        return `\x1b[90m[${time}]\x1b[0m \x1b[1m\x1b[32m${line}\x1b[0m`;
+    }
+
+    const match = line.match(/^\[(.*?)\] (.*?) -> (.*)$/);
+    if (!match) return `\x1b[90m[${time}]\x1b[0m ${line}`;
+
+    const [, method, path, status] = match;
+    const methodColor = '\x1b[1m\x1b[36m'; // Cyan
+    const statusColor = status.trim().startsWith('2') ? '\x1b[32m' : '\x1b[31m'; // Green or Red
+    
+    return `\x1b[90m[${time}]\x1b[0m ${methodColor}[${method}]\x1b[0m \x1b[37m${path}\x1b[0m -> ${statusColor}${status}\x1b[0m`;
+}
+
 export const FileServerPanel: React.FC = () => {
     const saved = useMemo(() => loadSaved(), []);
     const monacoTheme = useMonacoTheme();
@@ -109,7 +133,7 @@ export const FileServerPanel: React.FC = () => {
     );
     const [bindHost, setBindHost] = useState(saved.bindHost);
     const [baseDir, setBaseDir] = useState<string | undefined>(saved.baseDir);
-    const [logs, setLogs] = useState<string[]>([]);
+    const [terminalHeight, setTerminalHeight] = useState(() => parseInt(localStorage.getItem(STORAGE_TERMINAL_HEIGHT) || '200'));
     const [error, setError] = useState<string | null>(null);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editDraft, setEditDraft] = useState('');
@@ -128,13 +152,19 @@ export const FileServerPanel: React.FC = () => {
     }, [port, bindHost, routes, baseDir]);
 
     useEffect(() => {
-        if (!running) return;
-        const unlisten = listen<string>('file-server-logs', (event) => {
-            const line = typeof event.payload === 'string' ? event.payload : String(event.payload);
-            setLogs(prev => [...prev.slice(-500), line]);
-        });
-        return () => { unlisten.then(fn => fn()); };
-    }, [running]);
+        localStorage.setItem(STORAGE_TERMINAL_HEIGHT, terminalHeight.toString());
+    }, [terminalHeight]);
+
+    useEffect(() => {
+        if (!isListeningHistory) {
+            isListeningHistory = true;
+            listen<string>('file-server-logs', (e) => {
+                const raw = typeof e.payload === 'string' ? e.payload : String(e.payload);
+                fileServerLogBuffer.push(formatFileServerLog(raw));
+                if (fileServerLogBuffer.length > 500) fileServerLogBuffer.shift();
+            });
+        }
+    }, []);
 
     const handleSelectFolder = async () => {
         const selected = await open({
@@ -219,9 +249,9 @@ export const FileServerPanel: React.FC = () => {
         };
 
         try {
+            fileServerLogBuffer.length = 0;
             await invoke('start_file_server', { config });
             setRunning(true);
-            setLogs([]);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
@@ -231,15 +261,24 @@ export const FileServerPanel: React.FC = () => {
         setError(null);
         try {
             await invoke('stop_file_server');
+            fileServerLogBuffer.length = 0;
             setRunning(false);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
     }, []);
 
+    const editingRoute = editingIndex !== null ? routes[editingIndex] : null;
+
     const baseUrl = `http://${bindHost === '0.0.0.0' ? 'localhost' : bindHost}:${port}`;
     const canStart = baseDir || routes.some(r => r.path.trim() && (r.content?.trim?.()?.length ?? 0) > 0);
-    const editingRoute = editingIndex !== null ? routes[editingIndex] : null;
+
+    const terminalEvents = useMemo(() => [
+        {
+            event: 'file-server-logs',
+            format: formatFileServerLog
+        }
+    ], []);
 
     return (
         <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-950">
@@ -321,7 +360,7 @@ export const FileServerPanel: React.FC = () => {
                 </div>
             )}
 
-            <div className="flex-1 overflow-auto p-4 flex flex-col gap-6">
+            <div className="flex-1 overflow-auto p-4 flex flex-col gap-6 min-h-0">
                 <div className="flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -448,30 +487,23 @@ export const FileServerPanel: React.FC = () => {
                     )}
                 </div>
 
-                {/* Logs */}
+                {/* Logs Terminal */}
                 {running && (
-                    <div className="rounded-xl border border-slate-800 bg-slate-900/30 overflow-hidden flex flex-col flex-1 min-h-[300px]">
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/80 border-b border-slate-800">
-                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                <Activity size={12} className="text-emerald-500" /> Monitor de Tráfico
-                            </h3>
-                            <span className="text-[10px] font-mono text-slate-600">{logs.length} peticiones</span>
-                        </div>
-                        <div className="flex-1 overflow-y-auto bg-slate-950/50 p-4 font-mono text-[11px] space-y-1">
-                            {logs.length === 0 ? (
-                                <div className="text-slate-700 italic">Esperando tráfico...</div>
-                            ) : (
-                                logs.map((log, i) => (
-                                    <div key={i} className={cn(
-                                        "py-0.5 border-l-2 pl-3 transition-colors",
-                                        log.includes('-> 200') ? "border-emerald-500/30 text-slate-400" : "border-red-500/30 text-red-400 bg-red-500/5"
-                                    )}>
-                                        {log}
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
+                    <Terminal
+                        mode="log-stream"
+                        variant="panel"
+                        title="Monitor de Tráfico"
+                        icon={<TerminalSquare size={13} />}
+                        height={terminalHeight}
+                        onHeightChange={setTerminalHeight}
+                        resizable={true}
+                        defaultIsOpen={true}
+                        events={terminalEvents}
+                        initialLogs={fileServerLogBuffer}
+                        className="z-10 shadow-t-2xl shadow-black/40"
+                        showSearch={true}
+                        showClear={true}
+                    />
                 )}
             </div>
 

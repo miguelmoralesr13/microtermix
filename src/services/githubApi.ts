@@ -660,3 +660,85 @@ export async function fetchJobLogs(
     if (!res.ok) throw new Error(`GitHub API Error: ${res.status} ${res.statusText}`);
     return res.text();
 }
+
+export async function cancelWorkflowRun(
+    projectPath: string,
+    token: string,
+    runId: number,
+    apiUrl?: string
+): Promise<void> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const res = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/actions/runs/${runId}/cancel`,
+        {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'Authorization': `token ${token}`,
+            },
+        }
+    );
+    // 202 Accepted is the success response for cancel
+    if (!res.ok && res.status !== 202) {
+        const body = await res.json().catch(() => null);
+        console.error('[GITHUB_ACTIONS] cancelWorkflowRun error body:', body);
+        throw new Error(`GitHub API Error ${res.status}: ${body?.message || res.statusText}`);
+    }
+}
+
+export async function rerunWorkflowRun(
+    projectPath: string,
+    token: string,
+    runId: number,
+    apiUrl?: string
+): Promise<void> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const res = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/actions/runs/${runId}/rerun`,
+        {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'Authorization': `token ${token}`,
+                'Content-Length': '0',
+            },
+        }
+    );
+    // 201 Created is the success response for re-run
+    if (!res.ok && res.status !== 201) {
+        const body = await res.json().catch(() => null);
+        console.error('[GITHUB_ACTIONS] rerunWorkflowRun error body:', body);
+        throw new Error(`GitHub API Error ${res.status}: ${body?.message || res.statusText}`);
+    }
+}
+
+export async function rerunFailedJobs(
+    projectPath: string,
+    token: string,
+    runId: number,
+    apiUrl?: string
+): Promise<void> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const res = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/actions/runs/${runId}/rerun-failed-jobs`,
+        {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'Authorization': `token ${token}`,
+                'Content-Length': '0',
+            },
+        }
+    );
+    if (!res.ok && res.status !== 201) {
+        const body = await res.json().catch(() => null);
+        console.error('[GITHUB_ACTIONS] rerunFailedJobs error body:', body);
+        throw new Error(`GitHub API Error ${res.status}: ${body?.message || res.statusText}`);
+    }
+}

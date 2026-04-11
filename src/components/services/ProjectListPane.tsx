@@ -134,7 +134,9 @@ export const ProjectListPane: React.FC<ProjectListPaneProps> = ({
     }, []);
 
     const getProjectStatus = (path: string) => {
-        const entries = Object.entries(activeProcesses).filter(([id]) => id.startsWith(path + '::'));
+        const entries = Object.entries(activeProcesses).filter(
+            ([id, p]) => id.startsWith(path + '::') && p.source === 'services'
+        );
         if (entries.some(([_, p]) => p.status === 'running')) return 'running';
         if (entries.some(([_, p]) => p.status === 'error')) return 'error';
         if (entries.some(([_, p]) => p.status === 'stopped')) return 'stopped';

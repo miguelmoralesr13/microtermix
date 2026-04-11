@@ -1,173 +1,86 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from '@xterm/addon-fit';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { Terminal as TerminalIcon, ChevronUp, ChevronDown } from 'lucide-react';
-import { Button } from '../ui/button';
-import { cn } from '../../lib/utils';
-import 'xterm/css/xterm.css';
+import { TerminalSquare } from 'lucide-react';
+import { Terminal } from '@/components/ui/terminal';
+import { TERMINAL_PREFIXES } from '../ui/terminal/terminal.constants';
 
 interface GitConsoleProps {
     projectPath: string;
 }
 
 export const GitConsole: React.FC<GitConsoleProps> = ({ projectPath }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [serviceId, setServiceId] = useState<string | null>(null);
-    const terminalRef = useRef<HTMLDivElement>(null);
-    const xtermRef = useRef<Terminal | null>(null);
-    const fitAddonRef = useRef<FitAddon | null>(null);
-    const lastPathRef = useRef<string>(projectPath);
+    const [terminalHeight, setTerminalHeight] = useState(256);
+    // Trackeamos los comandos enviados por el usuario para no filtrarlos
+    const userCommandsRef = useRef<Set<string>>(new Set());
 
-    // Initialize terminal backend (Solo una vez)
-    const initTerminal = async () => {
+    // El nombre de la carpeta actual para el prompt
+    const projectName = useMemo(() => projectPath.split(/[/\\]/).filter(Boolean).pop() || 'repo', [projectPath]);
+
+    const handleCommand = useCallback(async (cmd: string) => {
+        if (!cmd.trim()) return;
+
+        // Parsear comando
+        const cleanCmd = cmd.trim();
+        const fullCmd = cleanCmd.startsWith('git ') ? cleanCmd : `git ${cleanCmd}`;
+        const args = fullCmd.split(' ').slice(1);
+
+        // Registrar como comando de usuario para evitar el filtro
+        userCommandsRef.current.add(fullCmd);
+
         try {
-            const sid = await invoke<string>('spawn_local_git_terminal', { projectPath });
-            setServiceId(sid);
-            setIsOpen(true);
+            await invoke('git_execute', { 
+                projectPath, 
+                args 
+            });
         } catch (e) {
-            console.error('Failed to spawn git terminal', e);
+            console.error('[GitConsole] Error executing command:', e);
+            userCommandsRef.current.delete(fullCmd);
         }
-    };
+    }, [projectPath]);
 
-    // Sincronizar directorio cuando cambia el proyecto activo
-    useEffect(() => {
-        if (serviceId && projectPath && projectPath !== lastPathRef.current) {
-            lastPathRef.current = projectPath;
-            // Enviar comando CD silencioso
-            const cdCmd = window.navigator.platform.includes('Win')
-                ? `cd "${projectPath}"\r`
-                : `cd '${projectPath}'\n`;
-
-            invoke('write_stdin_line', { serviceId, line: cdCmd }).catch(console.error);
-
-            // Opcional: Mostrar un mensaje informativo en la terminal
-            if (xtermRef.current) {
-                xtermRef.current.write(`\r\n\x1b[33m--- Switched to: ${projectPath} ---\x1b[0m\r\n`);
-            }
-        }
-    }, [projectPath, serviceId]);
-
-    useEffect(() => {
-        if (!isOpen || !terminalRef.current || !serviceId) return;
-
-        // Pequeño delay para asegurar que el contenedor tiene sus dimensiones finales
-        const timer = setTimeout(() => {
-            if (!terminalRef.current) return;
-
-            const term = new Terminal({
-                theme: {
-                    background: '#020617',
-                    foreground: '#f8fafc',
-                    cursor: '#38bdf8',
-                },
-                fontFamily: 'Consolas, monospace',
-                fontSize: 12,
-                scrollback: 1000,
-                convertEol: true, // Crucial para Windows
-            });
-
-            const fitAddon = new FitAddon();
-            term.loadAddon(fitAddon);
-            term.open(terminalRef.current);
-
-            // Forzar reflow antes de fit
-            setTimeout(() => {
-                fitAddon.fit();
-                const { cols, rows } = term;
-                invoke('resize_pty', { serviceId, cols, rows }).catch(console.error);
-            }, 50);
-
-            xtermRef.current = term;
-            fitAddonRef.current = fitAddon;
-
-            // Input handler - ENVIAR raw strings, no lineas completas
-            term.onData(data => {
-                invoke('write_stdin_line', { serviceId, line: data }).catch(console.error);
-            });
-
-            // Output handler
-            const unlistenOutputPromise = listen('pty-output', (event: any) => {
-                if (event.payload.serviceId === serviceId) {
-                    term.write(event.payload.data);
-                }
-            });
-
-            // Git Log handler - MOSTRAR lo que hace la app automáticamente
-            const unlistenLogPromise = listen('git-log', (event: any) => {
-                const { command, stdout, stderr } = event.payload;
+    const terminalEvents = useMemo(() => [
+        {
+            event: 'git-log',
+            prefix: TERMINAL_PREFIXES.GIT,
+            format: (payload: any) => {
+                const { command, stdout, stderr } = payload;
                 
-                // Solo si es para el mismo proyecto (o si queremos ver todo)
-                // Usamos colores ANSI: 33=Yellow, 0=Reset, 32=Green, 31=Red
-                term.write(`\r\n\x1b[33m⚡ App Executing:\x1b[0m ${command}\x1b[0m\r\n`);
-
-                if (stdout) {
-                    // Normalizar saltos de línea para xterm
-                    const formattedStdout = stdout.replace(/\n/g, '\r\n');
-                    term.write(`\x1b[38;5;244m${formattedStdout}\x1b[0m\r\n`);
+                const NOISY_INTERNAL = ['git config', 'git rev-parse', 'git show'];
+                const isNoisy = NOISY_INTERNAL.some(noisy => command.startsWith(noisy));
+                const isCommon = ['git status', 'git branch'].some(c => command.startsWith(c));
+                
+                let isUserInitiated = userCommandsRef.current.has(command);
+                
+                if (isUserInitiated) {
+                    userCommandsRef.current.delete(command);
+                } else {
+                    if (isNoisy && !stderr) return null;
+                    if (isCommon && !stderr) return null;
                 }
 
-                if (stderr) {
-                    const formattedStderr = stderr.replace(/\n/g, '\r\n');
-                    term.write(`\x1b[31m${formattedStderr}\x1b[0m\r\n`);
-                }
-
-                term.write(`\r\n`);
-            });
-
-            const handleResize = () => fitAddon.fit();
-            window.addEventListener('resize', handleResize);
-
-            // Cleanup
-            (term as any)._unlisten = Promise.all([unlistenOutputPromise, unlistenLogPromise]);
-        }, 100);
-
-        return () => {
-            clearTimeout(timer);
-            const term = xtermRef.current;
-            if (term) {
-                // Correctly unlisten from both promises
-                (term as any)._unlisten?.then((unlisteners: any) => {
-                    if (Array.isArray(unlisteners)) {
-                        unlisteners.forEach(fn => typeof fn === 'function' && fn());
-                    }
-                });
-                term.dispose();
-                xtermRef.current = null;
+                let output = `\x1b[38;5;39m➜\x1b[0m \x1b[1m${command}\x1b[0m\n`;
+                if (stdout.trim()) output += `\x1b[38;5;250m${stdout.trim()}\x1b[0m\n`;
+                if (stderr.trim()) output += `\x1b[31m${stderr.trim()}\x1b[0m\n`;
+                
+                return output;
             }
-        };
-    }, [isOpen, serviceId]);
+        }
+    ], []);
 
     return (
-        <div className={cn(
-            "border-t border-slate-800 bg-slate-950 transition-all duration-300 flex flex-col",
-            isOpen ? "h-64" : "h-9"
-        )}>
-            {/* Header / Trigger */}
-            <div
-                className="flex items-center justify-between px-3 h-9 cursor-pointer hover:bg-slate-900/50 select-none"
-                onClick={() => isOpen ? setIsOpen(false) : initTerminal()}
-            >
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    <TerminalIcon size={14} className={isOpen ? "text-microtermix-neon" : ""} />
-                    Git Terminal
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="icon-xs" className="h-6 w-6 text-slate-500 hover:text-white">
-                        {isOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </Button>
-                </div>
-            </div>
-
-            {/* Terminal Container */}
-            <div
-                ref={terminalRef}
-                className={cn(
-                    "flex-1 w-full overflow-hidden px-2 pb-2",
-                    !isOpen && "hidden"
-                )}
-            />
-        </div>
+        <Terminal
+            mode="log-stream"
+            variant="panel"
+            title="Git Terminal"
+            icon={<TerminalSquare size={14} />}
+            projectPath={projectPath}
+            resizable={true}
+            height={terminalHeight}
+            onHeightChange={setTerminalHeight}
+            className="z-10 shadow-2xl shadow-black"
+            onCommand={handleCommand}
+            commandPrompt={projectName} /* Mostramos el nombre del repo en el input */
+            events={terminalEvents}
+        />
     );
 };

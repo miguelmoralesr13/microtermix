@@ -160,18 +160,11 @@ export function StoriesView() {
     const [createForStory, setCreateForStory] = useState<JiraIssue | null>(null);
     const [linkedIssuesTarget, setLinkedIssuesTarget] = useState<string | null>(null);
     const [showTempoModal, setShowTempoModal] = useState(false);
-    const [apiLog, setApiLog] = useState<JiraApiLogEntry[]>([]);
-    const [logVisible, setLogVisible] = useState(true);
     const [transitioningTask, setTransitioningTask] = useState<string | null>(null);
     const [transitionTarget, setTransitionTarget] = useState<TransitionTarget | null>(null);
     const [discardSubtasksTarget, setDiscardSubtasksTarget] = useState<DiscardSubtasksTarget | null>(null);
     const [taskDetailTarget, setTaskDetailTarget] = useState<JiraIssue | null>(null);
 
-    useEffect(() => {
-        const handler = (entry: JiraApiLogEntry) => setApiLog(prev => [entry, ...prev].slice(0, 80));
-        jiraApiLog.on(handler);
-        return () => jiraApiLog.off(handler);
-    }, []);
 
     const togglePin = (key: string, list: string[], setList: (keys: string[]) => void) => {
         const next = list.includes(key) ? list.filter(k => k !== key) : [key, ...list];
@@ -355,23 +348,6 @@ export function StoriesView() {
                 </div>
             </div>
 
-            <div className="shrink-0 border-t border-slate-800 bg-slate-950">
-                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-slate-800/60 cursor-pointer hover:bg-slate-900/40 select-none" onClick={() => setLogVisible(!logVisible)}>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">API Log</span>
-                    <ChevronRight size={10} className={cn("text-slate-600 transition-transform", logVisible && "rotate-90")} />
-                </div>
-                {logVisible && (
-                    <div className="h-36 overflow-y-auto scrollbar-hide p-2 space-y-1 font-mono text-[10px]">
-                        {apiLog.map(entry => (
-                            <div key={entry.id} className="flex items-center gap-2 py-0.5">
-                                <span className={cn("px-1 rounded", entry.ok ? "bg-green-900/20 text-green-400" : "bg-red-900/20 text-red-400")}>{entry.status}</span>
-                                <span className="text-slate-500">{entry.method}</span>
-                                <span className="text-slate-300 truncate flex-1">{entry.path}</span>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
 
             {createForStory && <CreateSubTaskModal parentKey={createForStory.key} onClose={() => setCreateForStory(null)} onCreated={() => handleRefreshAll()} />}
             {linkedIssuesTarget && <LinkedIssuesModal parentKey={linkedIssuesTarget} onClose={() => setLinkedIssuesTarget(null)} onDetail={setTaskDetailTarget} />}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import {Settings, Globe, TerminalSquare, 
+import {
+    Settings, Globe, TerminalSquare,
     Bug, ShieldAlert, FileSearch, Check, ExternalLink, RefreshCw
 } from 'lucide-react';
 
@@ -10,14 +11,14 @@ import { useProcessStore } from '../../stores/processStore';
 import { useSonarStore } from '../../stores/sonarStore';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { TerminalView } from '../services/TerminalView';
+import { Terminal } from '@/components/ui/terminal';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { cn } from '../../lib/utils';
 import { normalizeSonarUrl } from '../../utils/sonarUtils';
-import { 
-    useSonarMetrics, useSonarIssues, sonarKeys, SonarIssue, useSonarLocalConfig 
+import {
+    useSonarMetrics, useSonarIssues, sonarKeys, SonarIssue, useSonarLocalConfig
 } from '../../hooks/queries/useSonarQueries';
 import { useGitStatus } from '../../hooks/queries/useGitQueries';
 
@@ -94,11 +95,11 @@ export const SonarPanel: React.FC = () => {
     useEffect(() => { localStorage.setItem(STORAGE_SONAR_TAB, activeTab); }, [activeTab]);
 
     const isProjectView = selectedPath !== 'dashboard' && selectedPath !== 'config';
-    
+
     const { data: localConfig } = useSonarLocalConfig(isProjectView ? selectedPath : undefined);
     const { data: metrics, isLoading: loadingCloudMetrics } = useSonarMetrics(isProjectView && activeTab === 'server' ? selectedPath : undefined, projectKey);
     const { data: cloudIssues = [] } = useSonarIssues(isProjectView ? selectedPath : undefined, projectKey);
-    
+
     const issues = useMemo(() => {
         const targetKey = projectKey.trim().toLowerCase();
         return cloudIssues.filter(i => {
@@ -114,7 +115,7 @@ export const SonarPanel: React.FC = () => {
                     const relativeDir = '.microtermix/sonar';
                     // El comando Rust espera (base, path)
                     await invoke('ensure_directory', { base: selectedPath, path: relativeDir });
-                    
+
                     const simplified = {
                         projectKey,
                         lastUpdate: new Date().toISOString(),
@@ -129,10 +130,10 @@ export const SonarPanel: React.FC = () => {
                     };
 
                     // El comando Rust espera (base, file, content)
-                    await invoke('write_file_content', { 
+                    await invoke('write_file_content', {
                         base: selectedPath,
-                        file: `${relativeDir}/report.json`, 
-                        content: JSON.stringify(simplified, null, 2) 
+                        file: `${relativeDir}/report.json`,
+                        content: JSON.stringify(simplified, null, 2)
                     });
                     console.log(`[Sonar] Reporte guardado en ${selectedPath}/${relativeDir}/report.json`);
                 } catch (e) {
@@ -145,7 +146,7 @@ export const SonarPanel: React.FC = () => {
 
     const loadingMetrics = activeTab === 'server' ? loadingCloudMetrics : false;
 
-    const [debugLogs, setDebugLogs] = useState<{id:string, timestamp:string, type:string, message:string}[]>([]);
+    const [debugLogs, setDebugLogs] = useState<{ id: string, timestamp: string, type: string, message: string }[]>([]);
     const addLog = useCallback((type: string, message: string) => {
         setDebugLogs(prev => [{ id: Math.random().toString(36), timestamp: new Date().toLocaleTimeString(), type, message }, ...prev.slice(0, 50)]);
     }, []);
@@ -180,7 +181,7 @@ export const SonarPanel: React.FC = () => {
             if (link.includeBranch && currentBranch) cmd += ` -Dsonar.branch.name=${currentBranch}`;
             if (link.sources) cmd += ` -Dsonar.sources=${link.sources}`;
         }
-        
+
         if (link.extraProps) cmd += ` ${link.extraProps}`;
         if (link.debug) cmd += ' -X';
         return cmd;
@@ -207,7 +208,7 @@ export const SonarPanel: React.FC = () => {
         if (!selectedPath || !effectiveCommand) return;
         addLog('cmd', `Ejecutando: ${effectiveCommand}`);
         setActiveTab('analysis');
-        await executeProjectScript(selectedPath, effectiveCommand, { globalEnvName: 'none', incrementRestart: true });
+        await executeProjectScript(selectedPath, effectiveCommand, { globalEnvName: 'none', incrementRestart: true, source: 'sonar' });
     };
 
     const handleStop = async () => {
@@ -226,11 +227,11 @@ export const SonarPanel: React.FC = () => {
 
     return (
         <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900 font-sans">
-            <SonarHeader 
-                isRunning={isRunning} 
-                canRun={isProjectView} 
-                onRun={handleRunAnalysis} 
-                onStop={handleStop} 
+            <SonarHeader
+                isRunning={isRunning}
+                canRun={isProjectView}
+                onRun={handleRunAnalysis}
+                onStop={handleStop}
                 onRefresh={() => {
                     queryClient.invalidateQueries({ queryKey: sonarKeys.all });
                     toast.success("Datos de Sonar actualizados");
@@ -238,11 +239,11 @@ export const SonarPanel: React.FC = () => {
             />
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
-                <SonarSidebar 
-                    projects={projects} 
-                    selectedPath={selectedPath} 
-                    onSelectPath={setSelectedPath} 
-                    onOpenSettings={() => setIsSettingsOpen(true)} 
+                <SonarSidebar
+                    projects={projects}
+                    selectedPath={selectedPath}
+                    onSelectPath={setSelectedPath}
+                    onOpenSettings={() => setIsSettingsOpen(true)}
                 />
 
                 <div className="flex-1 flex flex-col bg-[#020617] overflow-hidden">
@@ -281,7 +282,13 @@ export const SonarPanel: React.FC = () => {
                                             <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)} className="h-8 w-8 text-slate-500 hover:text-blue-400 shrink-0 hover:bg-white/5 rounded-lg"><Settings size={14} /></Button>
                                         </div>
                                         <div className="flex-1 border border-white/5 rounded-2xl overflow-hidden bg-black/40">
-                                            <TerminalView serviceId={serviceId} />
+                                            <Terminal
+                                                key={serviceId}
+                                                mode="log-stream"
+                                                serviceId={serviceId}
+                                                variant="full"
+                                                autoClearOnRestart={true}
+                                            />
                                         </div>
                                     </div>
                                 ) : (
@@ -298,13 +305,13 @@ export const SonarPanel: React.FC = () => {
                                                     <SonarMetricCard label="Vulnerabilidades" value={metrics.vulnerabilities} rating={metrics.security} icon={ShieldAlert} colorClass="text-yellow-400" />
                                                     <SonarMetricCard label="Code Smells" value={metrics.codeSmells} rating={metrics.maintainability} icon={FileSearch} colorClass="text-blue-400" />
                                                 </div>
-                                                
+
                                                 <div className="pt-8 border-t border-white/5">
                                                     <div className="flex items-center justify-between mb-8">
                                                         <h3 className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em]">Detalle de Hallazgos ({issues.length})</h3>
                                                         <Badge className="bg-blue-500/10 text-blue-400 border-white/5 text-[8px] uppercase px-2 py-0.5 rounded-md">Varios Severidades</Badge>
                                                     </div>
-                                                    
+
                                                     <div className="space-y-3">
                                                         {issues.length === 0 ? (
                                                             <div className="py-20 flex flex-col items-center justify-center bg-slate-900/10 border border-dashed border-white/5 rounded-[2rem] text-slate-700 gap-4">
@@ -351,27 +358,27 @@ export const SonarPanel: React.FC = () => {
                 </div>
             </div>
 
-            <SonarSettingsDialog 
-                isOpen={isSettingsOpen} 
-                onOpenChange={setIsSettingsOpen} 
-                link={link} 
-                onLinkChange={(patch) => linkProject(selectedPath, { ...link, ...patch })} 
+            <SonarSettingsDialog
+                isOpen={isSettingsOpen}
+                onOpenChange={setIsSettingsOpen}
+                link={link}
+                onLinkChange={(patch) => linkProject(selectedPath, { ...link, ...patch })}
                 projectPath={selectedPath}
                 projectName={projectName}
             />
 
-            <SonarActivityConsole 
-                isOpen={isConsoleOpen} 
-                onToggle={() => setIsConsoleOpen(!isConsoleOpen)} 
-                logs={debugLogs} 
+            <SonarActivityConsole
+                isOpen={isConsoleOpen}
+                onToggle={() => setIsConsoleOpen(!isConsoleOpen)}
+                logs={debugLogs}
             />
 
             {remediatingIssue && (
-                <SonarIssueRemediator 
-                    isOpen={!!remediatingIssue} 
-                    issue={remediatingIssue} 
-                    projectPath={selectedPath} 
-                    onClose={() => setRemediatingIssue(null)} 
+                <SonarIssueRemediator
+                    isOpen={!!remediatingIssue}
+                    issue={remediatingIssue}
+                    projectPath={selectedPath}
+                    onClose={() => setRemediatingIssue(null)}
                 />
             )}
         </div>

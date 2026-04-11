@@ -426,16 +426,20 @@ export const GitPanel: React.FC = () => {
                             )}
                         </div>
 
-                        <ResizableDivider direction="horizontal" onResize={resizeStaging} className="bg-slate-900" />
+                        {centerTab !== 'github' && (
+                            <>
+                                <ResizableDivider direction="horizontal" onResize={resizeStaging} className="bg-slate-900" />
 
-                        {/* Right: Staging & Commit */}
-                        <div style={{ width: stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
-                            <GitStagingPanel
-                                projectPath={activeTab}
-                                onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode, line })}
-                                onOpenConflictModal={() => setIsConflictModalOpen(true)}
-                            />
-                        </div>
+                                {/* Right: Staging & Commit */}
+                                <div style={{ width: stagingWidth, minWidth: MIN_PANEL, maxWidth: MAX_PANEL }} className="flex flex-col shrink-0 min-h-0 overflow-hidden">
+                                    <GitStagingPanel
+                                        projectPath={activeTab}
+                                        onDiffRequest={(file, mode, line) => setActiveDiffFile({ file, mode, line })}
+                                        onOpenConflictModal={() => setIsConflictModalOpen(true)}
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

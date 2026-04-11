@@ -115,7 +115,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
             else toast.error("No se encontró un script principal");
         } else if (action === 'stop') {
             const current = useProcessStore.getState().activeProcesses;
-            const serviceIds = Object.keys(current).filter(id => id.startsWith(path + '::'));
+            const serviceIds = Object.keys(current).filter(id => id.startsWith(path + '::') && current[id].source === 'services');
             for (const id of serviceIds) {
                 await invoke('kill_service', { serviceId: id });
                 updateProcessStatus(id, 'stopped');
@@ -128,11 +128,11 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     }, [state.projects, activeProcesses, handlePlayScript, updateProcessStatus, setActiveTerminalTab]);
 
     const handleCloseAllTabs = useCallback(async () => {
-        const ids = Object.keys(activeProcesses);
+        const ids = Object.keys(activeProcesses).filter(id => activeProcesses[id].source === 'services');
         if (ids.length === 0) return;
-        
+
         for (const id of ids) {
-            await invoke('kill_service', { serviceId: id }).catch(() => {});
+            await invoke('kill_service', { serviceId: id }).catch(() => { });
         }
         useProcessStore.getState().clearAllProcesses();
         setActiveTerminalTab(null);
@@ -140,7 +140,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     }, [activeProcesses, setActiveTerminalTab]);
 
     const handleCloseFinishedTabs = useCallback(() => {
-        const ids = Object.keys(activeProcesses);
+        const ids = Object.keys(activeProcesses).filter(id => activeProcesses[id].source === 'services');
         let closedCount = 0;
         for (const id of ids) {
             const status = activeProcesses[id].status;
@@ -149,7 +149,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 closedCount++;
             }
         }
-        
+
         if (closedCount > 0) {
             toast.success(`${closedCount} terminales terminadas cerradas`);
             // Si la tab activa se cerró, seleccionar la primera disponible o null
@@ -268,7 +268,10 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 />
 
                 <ServiceTerminals
-                    processIds={useMemo(() => Object.keys(activeProcesses), [activeProcesses])}
+                    processIds={useMemo(() =>
+                        Object.keys(activeProcesses).filter(id => activeProcesses[id].source === 'services'),
+                        [activeProcesses]
+                    )}
                     activeProcesses={activeProcesses}
                     activeTerminalTab={activeTerminalTab}
                     vitePreviewOpen={vitePreviewOpen}
@@ -287,10 +290,10 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                             await handlePlayScript(id.split('::')[0], p.script as string);
                         }
                     }}
-                    onTabClose={async (e, id) => { 
-                        e.preventDefault(); 
-                        await invoke('kill_service', { serviceId: id }).catch(() => {});
-                        removeProcess(id); 
+                    onTabClose={async (e, id) => {
+                        e.preventDefault();
+                        await invoke('kill_service', { serviceId: id }).catch(() => { });
+                        removeProcess(id);
                     }}
                     onTabCloseAll={handleCloseAllTabs}
                     onTabCloseFinished={handleCloseFinishedTabs}

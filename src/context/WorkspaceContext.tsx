@@ -66,6 +66,7 @@ interface WorkspaceContextType {
             globalEnvName?: string;
             buildFirst?: boolean;
             incrementRestart?: boolean;
+            source?: import('../stores/processStore').ProcessSource;
         }
     ) => Promise<void>;
 }
@@ -380,7 +381,16 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     useEffect(() => {
         let unlisten: (() => void) | undefined;
         listen<string>('service-stopped', (event) => {
-            updateProcessStatusStore(event.payload, 'stopped');
+            const serviceId = event.payload;
+            const proc = useProcessStore.getState().activeProcesses[serviceId];
+
+            // Los procesos de utilidades externas a 'services' se limpian solos al terminar,
+            // ya que cada utilidad muestra sus propios procesos en su panel.
+            if (proc && proc.source !== 'services') {
+                useProcessStore.getState().removeProcess(serviceId);
+            } else {
+                updateProcessStatusStore(serviceId, 'stopped');
+            }
         }).then(fn => unlisten = fn);
         return () => { unlisten?.(); };
     }, [updateProcessStatusStore]);
@@ -427,9 +437,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             globalEnvName?: string;
             buildFirst?: boolean;
             incrementRestart?: boolean;
+            source?: import('../stores/processStore').ProcessSource;
         }
     ) => {
-        const { globalEnvName = 'none', buildFirst = false, incrementRestart = false } = options || {};
+        const { globalEnvName = 'none', buildFirst = false, incrementRestart = false, source = 'services' } = options || {};
         const actualScriptBase = rawScript.trim();
         const compositeServiceId = `${projectPath}::${actualScriptBase} `;
 
@@ -473,7 +484,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         executingServiceIdsRef.current.add(compositeServiceId);
 
         try {
-            updateProcessStatusStore(compositeServiceId, 'running', actualScriptBase, envVarsJson, incrementRestart);
+            updateProcessStatusStore(compositeServiceId, 'running', actualScriptBase, envVarsJson, incrementRestart, source);
             await invoke('execute_service_script', {
                 serviceId: compositeServiceId,
                 projectPath,
