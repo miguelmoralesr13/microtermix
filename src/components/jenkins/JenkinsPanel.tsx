@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Settings, ChevronRight, Server, TerminalSquare, FolderGit2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Server, TerminalSquare, FolderGit2 } from 'lucide-react';
 import { jenkinsApiLog, JenkinsApiLogEntry } from '../../services/jenkinsApi';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
 import { JenkinsJobsTab } from './JenkinsJobsTab';

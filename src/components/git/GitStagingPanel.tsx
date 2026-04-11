@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
-import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle } from 'lucide-react';
+import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap } from 'lucide-react';
 import { GitStatusEntry } from '../../stores/gitStore';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -23,8 +23,8 @@ interface ArrayTreeNode {
 
 interface GitStagingPanelProps {
     projectPath: string;
-    onDiffRequest?: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
-    onOpenConflictModal?: () => void;
+    onDiffRequest: (file: string, mode: 'staged' | 'unstaged', line?: number) => void;
+    onOpenConflictModal: () => void;
 }
 
 // ── File tree node ──
@@ -110,6 +110,23 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                     </div>
 
                     <div className="flex items-center shrink-0 ml-2 gap-0.5">
+                        {/* Hunk Staging Button — The surgical way */}
+                        {!f.isConflicted && !isDeleted && (
+                            <Tooltip>
+                                <TooltipTrigger render={
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-xs"
+                                        onClick={(e) => { e.stopPropagation(); onDiffRequest?.(f.file, defaultDiffMode as any); }}
+                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-microtermix-neon hover:bg-microtermix-neon/10"
+                                    >
+                                        <Zap size={12} />
+                                    </Button>
+                                } />
+                                <TooltipContent>Surgical Staging (Hunks & Lines)</TooltipContent>
+                            </Tooltip>
+                        )}
+
                         <Button
                             variant="ghost"
                             size="icon-xs"

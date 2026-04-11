@@ -576,7 +576,13 @@ pub async fn git_apply_patch_impl(
     let patch_path = format!("{}/.microtermix_temp.patch", project_path);
     fs::write(&patch_path, &patch_content).map_err(|e| e.to_string())?;
 
-    let mut args = vec!["apply".to_string()];
+    let mut args = vec![
+        "apply".to_string(), 
+        "--recount".to_string(), 
+        "--whitespace=nowarn".to_string(),
+        "--3way".to_string(),
+        "--verbose".to_string()
+    ];
 
     match target.as_deref() {
         Some("working") => {}

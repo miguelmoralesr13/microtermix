@@ -14,7 +14,7 @@ import {
     useJenkinsTriggerBuild, useJenkinsAbortBuild,
     useJenkinsChildren,
 } from '../../hooks/useJenkins';
-import { ResultBadge, JobColorDot } from './JenkinsCommon';
+import { ResultBadge } from './JenkinsCommon';
 import { JenkinsBranchRow } from './JenkinsJobCard';
 import { LogTarget } from './JenkinsLogViewer';
 import { cn } from '../../lib/utils';

@@ -87,12 +87,18 @@ export function buildPatch(fileName: string, selectedLines: Set<number>, allHunk
         if (!hasChanges) continue;
 
         // Calculate new counts for hunk header
-        const oldLines = filteredLines.filter(l => l.type !== 'added').length;
-        const newLines = filteredLines.filter(l => l.type !== 'removed').length;
+        const oldLinesCount = filteredLines.filter(l => l.type !== 'added').length;
+        const newLinesCount = filteredLines.filter(l => l.type !== 'removed').length;
         
-        // Use original starts for simplicity (git apply handles offsets)
-        // Note: Real git patch would need precise line numbers, but git apply --recount helps
-        patch += `${hunk.header}\n`;
+        // Parse original header to get start positions: @@ -start,count +start,count @@
+        const match = hunk.header.match(/^@@ -(\d+),?\d* \+(\d+),?\d* @@/);
+        if (!match) {
+            patch += `${hunk.header}\n`; // Fallback
+        } else {
+            const oldStart = match[1];
+            const newStart = match[2];
+            patch += `@@ -${oldStart},${oldLinesCount} +${newStart},${newLinesCount} @@\n`;
+        }
         
         for (const line of filteredLines) {
             const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';

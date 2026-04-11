@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Search, X, RefreshCw, Star, Loader2, Settings, FolderCode, Link2Off, ChevronRight } from 'lucide-react';
+import  { useState, useMemo, useCallback } from 'react';
+import { Search, X, RefreshCw, Star, Loader2, Settings, FolderCode } from 'lucide-react';
 import { useJenkinsJobs } from '../../hooks/useJenkins';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
 import { useJenkinsWatcher, WatcherJobStatus } from '../../hooks/useJenkinsWatcher';
@@ -8,49 +8,10 @@ import { JenkinsJobRow } from './JenkinsJobRow';
 import { LogTarget } from './JenkinsLogViewer';
 import { jobMatchesSearch, isBuilding, jenkinsGlobalSearch, JenkinsJobSummary } from '../../services/jenkinsApi';
 import { useQueryClient } from '@tanstack/react-query';
-import { useJenkinsProjectLinks } from '../../hooks/useJenkinsProjectLinks';
 import { JenkinsJobCard } from './JenkinsJobCard';
 import { LinkedProjectsDirectory } from './LinkedProjectsDirectory';
-import { cn } from '../../lib/utils';
 
 
-// ── LinkedProjectCard — thin wrapper over JenkinsJobCard ───────────────────────
-
-function LinkedProjectCard({
-    link,
-    config,
-    onOpenLog,
-    onUnlink,
-}: {
-    link: import('../../hooks/useJenkinsProjectLinks').JobLink;
-    config: import('../../services/jenkinsApi').JenkinsConfig;
-    onOpenLog: (target: LogTarget) => void;
-    onUnlink: () => void;
-}) {
-    const projectName = link.projectPath.split('/').filter(Boolean).pop() ?? link.projectName;
-
-    return (
-        <JenkinsJobCard
-            jobUrl={link.jobUrl}
-            displayName={link.jobDisplayName || link.jobName}
-            subtitle={projectName}
-            subtitleColor="text-orange-400/60"
-            jobName={link.jobName}
-            baseUrl={config.baseUrl}
-            onOpenLog={onOpenLog}
-            badgeLeft={<FolderCode size={8} className="text-orange-400/70 shrink-0" />}
-            extraActions={
-                <button
-                    onClick={onUnlink}
-                    className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                    title="Desvincular"
-                >
-                    <Link2Off size={12} />
-                </button>
-            }
-        />
-    );
-}
 
 
 export function JenkinsJobsTab({
