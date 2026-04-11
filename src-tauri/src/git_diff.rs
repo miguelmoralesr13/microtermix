@@ -573,15 +573,12 @@ pub async fn git_apply_patch_impl(
     reverse: bool,
     target: Option<String>,
 ) -> Result<GitResult, String> {
-    let patch_path = format!("{}/.microtermix_temp.patch", project_path);
-    fs::write(&patch_path, &patch_content).map_err(|e| e.to_string())?;
-
     let mut args = vec![
-        "apply".to_string(), 
-        "--recount".to_string(), 
+        "apply".to_string(),
+        "--recount".to_string(),
         "--whitespace=nowarn".to_string(),
-        "--3way".to_string(),
-        "--verbose".to_string()
+        "--ignore-whitespace".to_string(),
+        "--verbose".to_string(),
     ];
 
     match target.as_deref() {
@@ -590,10 +587,43 @@ pub async fn git_apply_patch_impl(
         _ => { args.push("--cached".to_string()); }
     }
 
-    if reverse { args.push("--reverse".to_string()); }
-    args.push(".microtermix_temp.patch".to_string());
+    if reverse {
+        args.push("--reverse".to_string());
+    }
+    
+    // We pass "-" to tell git to read from stdin
+    args.push("-".to_string());
 
-    let result = git_execute_impl(app_handle, project_path.clone(), args).await;
-    let _ = fs::remove_file(&patch_path);
-    result
+    use tokio::io::AsyncWriteExt;
+    use std::process::Stdio;
+
+    let mut child = tokio::process::Command::new("git")
+        .args(&args)
+        .current_dir(&project_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn git apply: {}", e))?;
+
+    let mut stdin = child.stdin.take().ok_or("Failed to open stdin")?;
+    stdin.write_all(patch_content.as_bytes()).await.map_err(|e| format!("Failed to write to stdin: {}", e))?;
+    drop(stdin); // Close stdin so git knows we are done
+
+    let output = child.wait_with_output().await.map_err(|e| format!("Failed to wait for git apply: {}", e))?;
+
+    let result = GitResult {
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        success: output.status.success(),
+    };
+
+    let _ = tauri::Emitter::emit(&app_handle, "git-log", GitLogPayload {
+        project_path: project_path.clone(),
+        command: format!("git apply (surgical patch)"),
+        stdout: result.stdout.clone(),
+        stderr: result.stderr.clone(),
+    });
+
+    Ok(result)
 }

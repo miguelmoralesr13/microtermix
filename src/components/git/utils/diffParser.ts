@@ -5,7 +5,7 @@ export interface DiffLine {
     content: string;
     oldLineNo?: number;
     newLineNo?: number;
-    index: number; // Unique index for selection
+    index: number;
 }
 
 export interface Hunk {
@@ -13,55 +13,41 @@ export interface Hunk {
     lines: DiffLine[];
 }
 
-/**
- * Parses a unified diff string into structured Hunks and Lines.
- */
 export function parseUnifiedDiff(diff: string): Hunk[] {
     const hunks: Hunk[] = [];
-    const lines = diff.split('\n');
+    // Split and clean every line
+    const rawLines = diff.split(/\r?\n/);
     let currentHunk: Hunk | null = null;
     let oldLineNo = 0;
     let newLineNo = 0;
     let lineIndex = 0;
 
-    for (const line of lines) {
-        // Skip git headers (diff --git, index, ---, +++)
+    for (const line of rawLines) {
+        // Skip git file headers
         if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ ')) {
             continue;
         }
 
-        // Detect hunk header: @@ -1,3 +1,4 @@
-        const hunkHeaderMatch = line.match(/^@@ -(\d+),?(\d*) \+(\d+),?(\d*) @@/);
-        if (hunkHeaderMatch) {
+        // Detect hunk header: @@ -1,9 +1,74 @@
+        const match = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        if (match) {
             if (currentHunk) hunks.push(currentHunk);
-            
-            oldLineNo = parseInt(hunkHeaderMatch[1], 10);
-            newLineNo = parseInt(hunkHeaderMatch[3], 10);
-            
-            currentHunk = {
-                header: line,
-                lines: []
-            };
+            oldLineNo = parseInt(match[1], 10);
+            newLineNo = parseInt(match[3], 10);
+            currentHunk = { header: line, lines: [] };
             continue;
         }
 
         if (currentHunk) {
-            let type: LineType = 'unchanged';
-            let content = line;
-
+            // Very strict prefix checking
             if (line.startsWith('+')) {
-                type = 'added';
-                content = line.substring(1);
-                currentHunk.lines.push({ type, content, newLineNo: newLineNo++, index: lineIndex++ });
+                currentHunk.lines.push({ type: 'added', content: line.substring(1), newLineNo: newLineNo++, index: lineIndex++ });
             } else if (line.startsWith('-')) {
-                type = 'removed';
-                content = line.substring(1);
-                currentHunk.lines.push({ type, content, oldLineNo: oldLineNo++, index: lineIndex++ });
-            } else {
-                // Line starts with space (unchanged context)
-                type = 'unchanged';
-                content = line.substring(1);
-                currentHunk.lines.push({ type, content, oldLineNo: oldLineNo++, newLineNo: newLineNo++, index: lineIndex++ });
+                currentHunk.lines.push({ type: 'removed', content: line.substring(1), oldLineNo: oldLineNo++, index: lineIndex++ });
+            } else if (line.startsWith(' ') || line === '') {
+                // Context line: if line is empty string, it's actually an empty context line
+                const content = line.startsWith(' ') ? line.substring(1) : line;
+                currentHunk.lines.push({ type: 'unchanged', content, oldLineNo: oldLineNo++, newLineNo: newLineNo++, index: lineIndex++ });
             }
         }
     }
@@ -70,38 +56,36 @@ export function parseUnifiedDiff(diff: string): Hunk[] {
     return hunks;
 }
 
-/**
- * Reconstructs a unified diff (patch) from selected lines.
- */
 export function buildPatch(fileName: string, selectedLines: Set<number>, allHunks: Hunk[]): string {
+    // We use \n explicitly for git compatibility
     let patch = `--- a/${fileName}\n+++ b/${fileName}\n`;
-    
+
     for (const hunk of allHunks) {
-        // Filter lines: keep if they are 'unchanged' OR if they are 'added/removed' AND selected
-        const filteredLines = hunk.lines.filter(l => 
-            l.type === 'unchanged' || selectedLines.has(l.index)
-        );
+        const activeLines = hunk.lines.map(l => {
+            if (l.type === 'unchanged') return { ...l, mode: 'context' };
+            if (l.type === 'added') {
+                return selectedLines.has(l.index) ? { ...l, mode: 'added' } : null;
+            }
+            if (l.type === 'removed') {
+                return selectedLines.has(l.index) ? { ...l, mode: 'removed' } : { ...l, mode: 'context' };
+            }
+            return null;
+        }).filter((l): l is (DiffLine & { mode: string }) => l !== null);
 
-        // Only include hunk if it has changes (selected added/removed lines)
-        const hasChanges = filteredLines.some(l => l.type !== 'unchanged');
-        if (!hasChanges) continue;
+        const hasActualChanges = activeLines.some(l => l.mode === 'added' || l.mode === 'removed');
+        if (!hasActualChanges) continue;
 
-        // Calculate new counts for hunk header
-        const oldLinesCount = filteredLines.filter(l => l.type !== 'added').length;
-        const newLinesCount = filteredLines.filter(l => l.type !== 'removed').length;
-        
-        // Parse original header to get start positions: @@ -start,count +start,count @@
-        const match = hunk.header.match(/^@@ -(\d+),?\d* \+(\d+),?\d* @@/);
-        if (!match) {
-            patch += `${hunk.header}\n`; // Fallback
-        } else {
-            const oldStart = match[1];
-            const newStart = match[2];
-            patch += `@@ -${oldStart},${oldLinesCount} +${newStart},${newLinesCount} @@\n`;
-        }
-        
-        for (const line of filteredLines) {
-            const prefix = line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' ';
+        const oldLen = activeLines.filter(l => l.mode !== 'added').length;
+        const newLen = activeLines.filter(l => l.mode !== 'removed').length;
+
+        const match = hunk.header.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
+        const oldStart = match ? match[1] : '1';
+        const newStart = match ? match[3] : '1';
+
+        patch += `@@ -${oldStart},${oldLen} +${newStart},${newLen} @@\n`;
+
+        for (const line of activeLines) {
+            const prefix = line.mode === 'added' ? '+' : (line.mode === 'removed' ? '-' : ' ');
             patch += `${prefix}${line.content}\n`;
         }
     }
