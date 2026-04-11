@@ -396,6 +396,19 @@ export const GitPanel: React.FC = () => {
                                 </div>
                             )}
 
+import { GitHunkStaging } from './GitHunkStaging';
+
+// ... (dentro del componente GitPanel)
+
+interface ActiveDiff {
+    file: string;
+    mode: 'staged' | 'unstaged' | 'conflicted';
+    line?: number;
+    hunkMode?: boolean;
+}
+
+export const GitPanel: React.FC<GitPanelProps> = ({ projectPath: initialProjectPath }) => {
+    // ... (alrededor de la línea 400)
                             {centerTab === 'github' && isGithubAccount && !activeDiffFile ? (
                                 <GithubPanel projectPath={activeTab} />
                             ) : activeDiffFile ? (
@@ -406,14 +419,28 @@ export const GitPanel: React.FC = () => {
                                         onClose={() => setActiveDiffFile(null)}
                                         onRefreshRequest={() => queryClient.invalidateQueries({ queryKey: gitKeys.status(activeTab) })}
                                     />
+                                ) : activeDiffFile.hunkMode ? (
+                                    <GitHunkStaging
+                                        projectPath={activeTab}
+                                        file={activeDiffFile.file}
+                                        mode={activeDiffFile.mode as 'staged' | 'unstaged'}
+                                        onClose={() => setActiveDiffFile(null)}
+                                        onRefreshRequest={() => {
+                                            queryClient.invalidateQueries({ queryKey: gitKeys.status(activeTab) });
+                                            handleRefreshAll();
+                                        }}
+                                    />
                                 ) : (
                                     <GitDiffViewer
                                         projectPath={activeTab}
                                         file={activeDiffFile.file}
-                                        mode={activeDiffFile.mode}
+                                        mode={activeDiffFile.mode as 'staged' | 'unstaged'}
                                         targetLine={activeDiffFile.line}
                                         onClose={() => setActiveDiffFile(null)}
-                                        onRefreshRequest={() => queryClient.invalidateQueries({ queryKey: gitKeys.status(activeTab) })}
+                                        onRefreshRequest={() => {
+                                            queryClient.invalidateQueries({ queryKey: gitKeys.status(activeTab) });
+                                            handleRefreshAll();
+                                        }}
                                     />
                                 )
                             ) : (

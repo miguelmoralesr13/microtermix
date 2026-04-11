@@ -474,7 +474,10 @@ function errorMessage(msg: string): string {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export const WorkflowRunList: React.FC<{ projectPath: string }> = ({ projectPath }) => {
+export const WorkflowRunList: React.FC<{ projectPath: string }> = ({ projectPath: rawPath }) => {
+    // Normalize path to avoid trailing slash mismatches in query keys
+    const projectPath = rawPath.replace(/\/+$/, '');
+    
     const { data: runs, isLoading, isError, error, refetch, isFetching } = useWorkflowRuns(projectPath, true);
     const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
     const [selectedJob, setSelectedJob] = useState<WorkflowJob | null>(null);

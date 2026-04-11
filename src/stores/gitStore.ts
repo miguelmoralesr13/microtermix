@@ -70,86 +70,80 @@ interface GitActions {
     addCloneFavorite: (f: CloneFavorite) => void;
     removeCloneFavorite: (id: string) => void;
     setUi: (patch: Partial<GitUi>) => void;
+    hydrate: (accounts: GitAccount[], repoAccounts: Record<string, string>) => void;
 }
 
 export const useGitStore = create<GitState & GitActions>()(
     devtools(
-        persist(
-            (set, get) => ({
-                ui: {
-                    activeTab: null,
-                    sidebarWidth: 230,
-                    stagingWidth: 280,
-                    branchFilter: 'all',
-                },
+        (set, get) => ({
+            ui: {
+                activeTab: null,
+                sidebarWidth: 230,
+                stagingWidth: 280,
+                branchFilter: 'all',
+            },
 
-                accounts: [],
-                repoAccounts: {},
-                cloneFavorites: [],
+            accounts: [],
+            repoAccounts: {},
+            cloneFavorites: [],
 
-                addAccount: (a) => {
-                    const id = crypto.randomUUID();
-                    set(s => ({ accounts: [...s.accounts, { ...a, id }] }));
-                    return id;
-                },
+            hydrate: (accounts, repoAccounts) => {
+                set({ accounts, repoAccounts });
+            },
 
-                updateAccount: (id, patch) => {
-                    set(s => ({
-                        accounts: s.accounts.map(acc => acc.id === id ? { ...acc, ...patch } : acc),
-                    }));
-                },
+            addAccount: (a) => {
+                const id = crypto.randomUUID();
+                set(s => ({ accounts: [...s.accounts, { ...a, id }] }));
+                return id;
+            },
 
-                removeAccount: (id) => {
-                    set(s => ({
-                        accounts: s.accounts.filter(acc => acc.id !== id),
-                        repoAccounts: Object.fromEntries(
-                            Object.entries(s.repoAccounts).filter(([, v]) => v !== id)
-                        ),
-                    }));
-                },
+            updateAccount: (id, patch) => {
+                set(s => ({
+                    accounts: s.accounts.map(acc => acc.id === id ? { ...acc, ...patch } : acc),
+                }));
+            },
 
-                setRepoAccount: (repoPath, accountId) => {
-                    set(s => {
-                        const next = { ...s.repoAccounts };
-                        if (accountId === null) {
-                            delete next[repoPath];
-                        } else {
-                            next[repoPath] = accountId;
-                        }
-                        return { repoAccounts: next };
-                    });
-                },
+            removeAccount: (id) => {
+                set(s => ({
+                    accounts: s.accounts.filter(acc => acc.id !== id),
+                    repoAccounts: Object.fromEntries(
+                        Object.entries(s.repoAccounts).filter(([, v]) => v !== id)
+                    ),
+                }));
+            },
 
-                getActiveAccount: (repoPath) => {
-                    const s = get();
-                    const id = s.repoAccounts[repoPath];
-                    return id ? s.accounts.find(a => a.id === id) : undefined;
-                },
+            setRepoAccount: (repoPath, accountId) => {
+                set(s => {
+                    const next = { ...s.repoAccounts };
+                    if (accountId === null) {
+                        delete next[repoPath];
+                    } else {
+                        next[repoPath] = accountId;
+                    }
+                    return { repoAccounts: next };
+                });
+            },
 
-                addCloneFavorite: (f) => {
-                    set(s => ({
-                        cloneFavorites: s.cloneFavorites.some(x => x.id === f.id)
-                            ? s.cloneFavorites
-                            : [...s.cloneFavorites, f],
-                    }));
-                },
+            getActiveAccount: (repoPath) => {
+                const s = get();
+                const id = s.repoAccounts[repoPath];
+                return id ? s.accounts.find(a => a.id === id) : undefined;
+            },
 
-                removeCloneFavorite: (id) => {
-                    set(s => ({ cloneFavorites: s.cloneFavorites.filter(f => f.id !== id) }));
-                },
+            addCloneFavorite: (f) => {
+                set(s => ({
+                    cloneFavorites: s.cloneFavorites.some(x => x.id === f.id)
+                        ? s.cloneFavorites
+                        : [...s.cloneFavorites, f],
+                }));
+            },
 
-                setUi: (patch) => set(s => ({ ui: { ...s.ui, ...patch } })),
-            }),
-            {
-                name: 'microtermix-git-store',
-                partialize: (s) => ({
-                    ui: s.ui,
-                    accounts: s.accounts,
-                    cloneFavorites: s.cloneFavorites,
-                    // repoAccounts se persiste en microtermix.json, no aquí
-                }),
-            }
-        ),
+            removeCloneFavorite: (id) => {
+                set(s => ({ cloneFavorites: s.cloneFavorites.filter(f => f.id !== id) }));
+            },
+
+            setUi: (patch) => set(s => ({ ui: { ...s.ui, ...patch } })),
+        }),
         { name: 'GitStore' }
     )
 );

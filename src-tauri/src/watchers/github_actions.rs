@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::app_logs;
-use base64::Engine as _;
-use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::sync::Mutex as AsyncMutex;
@@ -142,6 +140,7 @@ pub async fn spawn(
                             }
                             Ok(json) => {
                                 let mut changed: Vec<WorkflowRunUpdate> = Vec::new();
+                                let mut has_active_runs = false;
 
                                 if let Some(runs) = json["workflow_runs"].as_array() {
                                     for run in runs {
@@ -153,6 +152,11 @@ pub async fn spawn(
                                             .as_str()
                                             .unwrap_or("unknown")
                                             .to_string();
+                                        
+                                        if status == "in_progress" || status == "queued" || status == "waiting" {
+                                            has_active_runs = true;
+                                        }
+
                                         let conclusion = run["conclusion"]
                                             .as_str()
                                             .map(String::from);
@@ -182,7 +186,9 @@ pub async fn spawn(
                                     }
                                 }
 
-                                if !changed.is_empty() {
+                                let any_changed = !changed.is_empty();
+
+                                if any_changed {
                                     let event_name = format!("github-actions-update::{}", watcher_id);
                                     app_logs::log_info(
                                         "github-actions-watcher",
@@ -196,7 +202,12 @@ pub async fn spawn(
                                     let _ = app.emit(&event_name, &event);
                                 }
 
-                                interval_ms
+                                // Adaptive sleep: 3s if active/changed, 20s if idle.
+                                if has_active_runs || any_changed {
+                                    3_000
+                                } else {
+                                    20_000
+                                }
                             }
                         }
                     }

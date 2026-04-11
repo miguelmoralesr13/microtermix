@@ -139,10 +139,10 @@ export function useWorkflowRuns(path: string | null, enabled: boolean) {
         queryFn: () => fetchWorkflowRuns(path as string, token, apiUrl),
         enabled: !!path && enabled,
         staleTime: 0, // always refetch on mount so entering the tab shows fresh runs
-        refetchInterval: false,
-        refetchIntervalInBackground: false,
+        // 10s fallback poll in case the watcher fails for any reason.
+        // This ensures the main workflow status doesn't get "stuck".
+        refetchInterval: enabled ? 10_000 : false,
         refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
         retry: 1,
     });
 }
@@ -155,17 +155,23 @@ export function useWorkflowRunJobs(path: string | null, runId: number | null, ru
 
     const isActive = runStatus === 'in_progress' || runStatus === 'queued' || runStatus === 'waiting';
 
-    return useQuery({
+    const { data, isLoading, isError, error } = useQuery({
         queryKey: gitKeys.workflowRunJobs(path || '', runId ?? -1),
         queryFn: () => fetchWorkflowRunJobs(path as string, token, runId as number, apiUrl),
         enabled: !!path && runId != null,
         staleTime: isActive ? 0 : 15_000,
-        // When active, poll every 5s to see step-by-step progress. 
-        // This avoids the "jumps" caused by the runs-list watcher.
-        refetchInterval: isActive ? 5_000 : false,
+        // Adaptive interval: 2s if jobs are running, 5s if run is active but jobs are waiting/stalled.
+        refetchInterval: (query) => {
+            if (!isActive) return false;
+            const jobs = query.state.data as any[];
+            const hasActiveJobs = jobs?.some(j => j.status === 'in_progress' || j.status === 'queued' || j.status === 'waiting');
+            return hasActiveJobs ? 2_000 : 5_000;
+        },
         refetchOnWindowFocus: false,
         retry: 1,
     });
+
+    return { data, isLoading, isError, error };
 }
 
 export function useWorkflowJobLogs(path: string | null, jobId: number | null, jobStatus?: WorkflowRunStatus) {

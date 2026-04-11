@@ -242,25 +242,15 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             ...(config.pipelines != null && { pipelines: config.pipelines }),
         }));
 
-        const gitStore = useGitStore.getState();
-        if (config.gitAccounts && config.gitAccounts.length > 0) {
-            config.gitAccounts.forEach(a => {
-                const exists = gitStore.accounts.find(x => x.id === a.id);
-                if (exists) {
-                    gitStore.updateAccount(a.id, a);
-                } else {
-                    useGitStore.setState(s => ({
-                        accounts: [...s.accounts.filter(x => x.id !== a.id), a],
-                    }));
-                }
-            });
-        }
+        // Hidratar cuentas Git desde workspace JSON
+        const resolvedRepoAccounts: Record<string, string> = {};
         if (config.repoAccounts) {
             Object.entries(config.repoAccounts).forEach(([id, accountId]) => {
                 const fullPath = resolveIdentifierToPath(id, projectPaths, workspacePath);
-                if (fullPath) gitStore.setRepoAccount(fullPath, accountId);
+                if (fullPath) resolvedRepoAccounts[fullPath] = accountId;
             });
         }
+        useGitStore.getState().hydrate(config.gitAccounts || [], resolvedRepoAccounts);
 
         // Hidratar cuentas de Jira desde workspace JSON
         if (config.jiraAccounts != null) {
