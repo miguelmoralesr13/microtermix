@@ -78,7 +78,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
         const loadData = async () => {
             setLoading(true);
             try {
-                const fileData = await invoke<string>('read_file', { path: filePath });
+                const fileData = await invoke<string>('read_text_file', { path: filePath });
                 setContent(fileData);
                 setOriginalContent(fileData);
 
@@ -115,7 +115,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
         if (newContent === originalContent && originalContent !== '') return;
         setIsSaving(true);
         try {
-            await invoke('write_file', { path: filePath, content: newContent });
+            await invoke('write_file_content', { base: projectPath, file: issue.component, content: newContent });
             setOriginalContent(newContent);
             onSaved?.();
         } catch (e) {
@@ -123,7 +123,7 @@ export const SonarIssueRemediator: React.FC<SonarIssueRemediatorProps> = ({
         } finally {
             setIsSaving(false);
         }
-    }, [filePath, originalContent, onSaved]);
+    }, [projectPath, issue.component, originalContent, onSaved]);
 
     const onEditorChange = (value: string | undefined) => {
         const val = value || '';

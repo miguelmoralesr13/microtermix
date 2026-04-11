@@ -509,3 +509,120 @@ export async function deleteGithubBranch(
         method: 'DELETE', headers,
     }); // non-fatal if fails
 }
+
+// ── GitHub Actions ────────────────────────────────────────────────────────────
+
+export type WorkflowRunStatus =
+    | 'queued'
+    | 'in_progress'
+    | 'completed'
+    | 'waiting'
+    | 'requested'
+    | 'pending';
+
+export type WorkflowRunConclusion =
+    | 'success'
+    | 'failure'
+    | 'cancelled'
+    | 'skipped'
+    | 'timed_out'
+    | 'action_required'
+    | 'neutral'
+    | 'stale'
+    | null;
+
+export interface WorkflowRun {
+    id: number;
+    name: string | null;
+    display_title: string;
+    run_number: number;
+    event: string;
+    status: WorkflowRunStatus;
+    conclusion: WorkflowRunConclusion;
+    workflow_id: number;
+    head_branch: string | null;
+    head_sha: string;
+    html_url: string;
+    created_at: string;
+    updated_at: string;
+    run_started_at: string | null;
+    actor: { login: string; avatar_url: string } | null;
+    head_commit: {
+        id: string;
+        message: string;
+        author: { name: string; email: string };
+    } | null;
+}
+
+export interface WorkflowRunsResponse {
+    total_count: number;
+    workflow_runs: WorkflowRun[];
+}
+
+export interface WorkflowStep {
+    name: string;
+    status: WorkflowRunStatus;
+    conclusion: WorkflowRunConclusion;
+    number: number;
+    started_at: string | null;
+    completed_at: string | null;
+}
+
+export interface WorkflowJob {
+    id: number;
+    run_id: number;
+    name: string;
+    status: WorkflowRunStatus;
+    conclusion: WorkflowRunConclusion;
+    started_at: string | null;
+    completed_at: string | null;
+    html_url: string;
+    steps: WorkflowStep[];
+    runner_name: string | null;
+    labels: string[];
+}
+
+export interface WorkflowJobsResponse {
+    total_count: number;
+    jobs: WorkflowJob[];
+}
+
+export async function fetchWorkflowRuns(
+    projectPath: string,
+    token: string,
+    apiUrl?: string,
+    perPage: number = 30
+): Promise<WorkflowRun[]> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+    const res = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/actions/runs?per_page=${perPage}`,
+        { headers }
+    );
+    if (!res.ok) throw new Error(`GitHub API Error: ${res.status} ${res.statusText}`);
+    const data: WorkflowRunsResponse = await res.json();
+    return data.workflow_runs;
+}
+
+export async function fetchWorkflowRunJobs(
+    projectPath: string,
+    token: string,
+    runId: number,
+    apiUrl?: string
+): Promise<WorkflowJob[]> {
+    const info = await getOwnerRepo(projectPath);
+    if (!info) throw new Error("Could not determine GitHub repository from 'origin' remote.");
+    const base = apiUrl || GITHUB_API_BASE;
+    const headers: Record<string, string> = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `token ${token}`;
+    const res = await fetch(
+        `${base}/repos/${info.owner}/${info.repo}/actions/runs/${runId}/jobs?per_page=30`,
+        { headers }
+    );
+    if (!res.ok) throw new Error(`GitHub API Error: ${res.status} ${res.statusText}`);
+    const data: WorkflowJobsResponse = await res.json();
+    return data.jobs;
+}

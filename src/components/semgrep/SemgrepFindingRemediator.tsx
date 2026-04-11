@@ -47,7 +47,7 @@ export const SemgrepFindingRemediator: React.FC<SemgrepRemediatorProps> = ({
         if (!isOpen) return;
         const loadFile = async () => {
             try {
-                const data = await invoke<string>('read_file', { path: filePath });
+                const data = await invoke<string>('read_text_file', { path: filePath });
                 setContent(data);
                 setOriginalContent(data);
             } catch (e) {
@@ -61,7 +61,7 @@ export const SemgrepFindingRemediator: React.FC<SemgrepRemediatorProps> = ({
         if (newContent === originalContent && originalContent !== '') return;
         setIsSaving(true);
         try {
-            await invoke('write_file', { path: filePath, content: newContent });
+            await invoke('write_file_content', { path: filePath, content: newContent });
             setOriginalContent(newContent);
             onSaved?.();
         } catch (e) {

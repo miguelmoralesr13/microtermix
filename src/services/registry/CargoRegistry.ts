@@ -57,7 +57,7 @@ export class CargoRegistry implements RegistryStrategy {
     const deps: {name: string, version: string, isDev?: boolean}[] = [];
     
     try {
-        const content = await invoke<string>('read_file', { path: `${projectPath}/Cargo.toml` });
+        const content = await invoke<string>('read_text_file', { path: `${projectPath}/Cargo.toml` });
         
         // Basic parser for Cargo.toml [dependencies]
         const sections = ['[dependencies]', '[dev-dependencies]', '[build-dependencies]'];

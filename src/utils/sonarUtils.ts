@@ -20,7 +20,13 @@ export function getSonarAuthHeader(authType: 'basic' | 'bearer', token: string):
 export async function fetchProjectMetrics(projectKey: string, account: SonarAccount, effectiveToken: string): Promise<SonarMetrics> {
     const baseUrl = normalizeSonarUrl(account.serverUrl);
     const metricKeys = 'alert_status,bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,reliability_rating,security_rating,sqale_rating';
-    const url = `${baseUrl}/api/measures/component?component=${encodeURIComponent(projectKey)}${account.organization ? `&organization=${account.organization}` : ''}&metricKeys=${metricKeys}`;
+    
+    let url = `${baseUrl}/api/measures/component?component=${encodeURIComponent(projectKey.trim())}&metricKeys=${metricKeys}`;
+    if (account.organization && account.organization.trim() !== '') {
+        url += `&organization=${encodeURIComponent(account.organization.trim())}`;
+    }
+
+    console.log(`[Sonar] Fetching metrics: ${url}`);
 
     const response = await invoke('execute_http_request', {
         request: {
@@ -58,7 +64,17 @@ export async function fetchProjectMetrics(projectKey: string, account: SonarAcco
 
 export async function fetchProjectIssues(projectKey: string, account: SonarAccount, effectiveToken: string): Promise<any[]> {
     const baseUrl = normalizeSonarUrl(account.serverUrl);
-    const url = `${baseUrl}/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}${account.organization ? `&organization=${account.organization}` : ''}&ps=100`;
+    
+    // Usamos statuses en lugar de resolved=false para mayor compatibilidad con versiones viejas de Sonar.
+    // También probamos con la key tal cual llega.
+    const trimmedKey = projectKey.trim();
+    let url = `${baseUrl}/api/issues/search?componentKeys=${encodeURIComponent(trimmedKey)}&statuses=OPEN,CONFIRMED,REOPENED&ps=100`;
+    
+    if (account.organization && account.organization.trim() !== '') {
+        url += `&organization=${encodeURIComponent(account.organization.trim())}`;
+    }
+
+    console.log(`[Sonar API] Fetching: ${url}`);
 
     const response = await invoke('execute_http_request', {
         request: {
@@ -73,7 +89,11 @@ export async function fetchProjectIssues(projectKey: string, account: SonarAccou
     if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
 
     const data = JSON.parse(response.body);
-    return data.issues || [];
+    // Mapeo robusto: intentamos sacar la projectKey de varios campos posibles.
+    return (data.issues || []).map((i: any) => ({ 
+        ...i, 
+        projectKey: i.project || i.projectKey || (i.component?.includes(':') ? i.component.split(':')[0] : '')
+    }));
 }
 
 export async function fetchSonarRules(account: SonarAccount, effectiveToken: string, projectKey?: string, query?: string): Promise<any[]> {
@@ -96,5 +116,46 @@ export async function fetchSonarRules(account: SonarAccount, effectiveToken: str
     if (response.status >= 400) throw new Error(`HTTP ${response.status}`);
 
     const data = JSON.parse(response.body);
-    return data.rules || [];
+    return (data.rules || []).map((r: any) => ({
+        key: r.key,
+        name: r.name,
+        severity: r.severity,
+        type: r.type,
+        status: r.status,
+        lang: r.lang,
+        langName: r.langName,
+        htmlDesc: r.htmlDesc
+    }));
+}
+
+export async function parseSonarProperties(content: string): Promise<{serverUrl?: string, token?: string, projectKey?: string}> {
+    const config: {serverUrl?: string, token?: string, projectKey?: string} = {};
+    const lines = content.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+        const [key, ...valParts] = trimmed.split('=');
+        const value = valParts.join('=').trim();
+        
+        switch (key.trim()) {
+            case 'sonar.host.url': config.serverUrl = value; break;
+            case 'sonar.token': 
+            case 'sonar.login': config.token = value; break;
+            case 'sonar.projectKey': config.projectKey = value; break;
+        }
+    }
+    return config;
+}
+
+export async function readProjectSonarConfig(projectPath: string, propertiesFileName: string = 'sonar-project.properties'): Promise<{isLocal: boolean, serverUrl?: string, token?: string, projectKey?: string}> {
+    try {
+        const filePath = `${projectPath}/${propertiesFileName}`;
+        console.log(`[Sonar] Reading config from ${filePath}`);
+        const content = await invoke('read_text_file', { path: filePath }) as string;
+        const config = await parseSonarProperties(content);
+        return { isLocal: !!(config.serverUrl || config.token || config.projectKey), ...config };
+    } catch (e) {
+        console.log(`[Sonar] No local config found at ${projectPath}`);
+        return { isLocal: false };
+    }
 }

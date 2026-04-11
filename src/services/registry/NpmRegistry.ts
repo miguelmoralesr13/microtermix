@@ -112,7 +112,7 @@ export class NpmRegistry implements RegistryStrategy {
   async getLocalDependencies(projectPath: string): Promise<{name: string, version: string, isDev?: boolean}[]> {
     try {
         const pkgPath = `${projectPath}/package.json`;
-        const content = await invoke<string>('read_file', { path: pkgPath });
+        const content = await invoke<string>('read_text_file', { path: pkgPath });
         const json = JSON.parse(content);
         const deps: {name: string, version: string, isDev?: boolean}[] = [];
 

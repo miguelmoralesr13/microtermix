@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle } from 'lucide-react';
+import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle, GitCommitHorizontal, Zap } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GitTimeline } from './GitTimeline';
@@ -9,10 +9,12 @@ import { GitDiffViewer } from './GitDiffViewer';
 import { GitConflictResolver } from './GitConflictResolver';
 import { GitConsole } from './GitConsole';
 import { GitSidebar } from './GitSidebar';
+import { GithubPanel } from './GithubPanel';
 import { ResizableDivider } from '../layout/ResizableDivider';
 import { CommitDiffModal } from './CommitDiffModal';
 import { GitInitPanel } from './GitInitPanel';
 import { GitConflictModal } from './GitConflictModal';
+import { useWorkflowRuns } from '../../hooks/queries/useGitQueries';
 import { useGitStore } from '../../stores/gitStore';
 import { AccountManagerModal } from './AccountManagerModal';
 import { CloneRepoModal } from './CloneRepoModal';
@@ -23,6 +25,15 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { toast } from 'sonner';
 import { useGitRepoCheck, useGitStatus, useGitAheadBehind, gitKeys } from '../../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
+
+// Leaf component: subscribes to workflow-runs cache (observer-only, enabled=false),
+// renders a pulsing amber dot when any run is in_progress or queued.
+const GithubTabPulse: React.FC<{ projectPath: string }> = ({ projectPath }) => {
+    const { data } = useWorkflowRuns(projectPath, false);
+    const hasActive = data?.some(r => r.status === 'in_progress' || r.status === 'queued') ?? false;
+    if (!hasActive) return null;
+    return <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block shrink-0" />;
+};
 
 function detectProviderFromUrl(remoteUrl: string): 'github' | 'gitlab' | null {
     if (!remoteUrl) return null;
@@ -62,13 +73,20 @@ export const GitPanel: React.FC = () => {
 
     const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
+    const [centerTab, setCenterTab] = useState<'timeline' | 'github'>('timeline');
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
     const [detectedAccounts, setDetectedAccounts] = useState<typeof accounts>([]);
     
     const activeAccount = activeTab ? getActiveAccount(activeTab) : undefined;
+    const isGithubAccount = activeAccount?.provider === 'github';
     const showBanner = !!activeTab && !activeAccount;
+
+    // Si la cuenta deja de ser GitHub, volver al timeline
+    useEffect(() => {
+        if (!isGithubAccount) setCenterTab('timeline');
+    }, [isGithubAccount]);
 
     const handleRefreshAll = useCallback(() => {
         if (!activeTab) return;
@@ -79,6 +97,7 @@ export const GitPanel: React.FC = () => {
         setUi({ activeTab: path });
         setActiveDiffFile(null);
         setSelectedCommit(null);
+        setCenterTab('timeline');
     };
 
     // Focus background fetch worker on the current active project
@@ -203,6 +222,9 @@ export const GitPanel: React.FC = () => {
                                                 : <Gitlab size={13} className="text-slate-400" />
                                             }
                                             <span className="text-[11px] font-bold">{activeAccount.alias}</span>
+                                            {activeAccount.provider === 'github' && (
+                                                <GithubTabPulse projectPath={activeTab} />
+                                            )}
                                         </>
                                     ) : (
                                         <>
@@ -341,9 +363,42 @@ export const GitPanel: React.FC = () => {
 
                         <ResizableDivider direction="horizontal" onResize={resizeSidebar} className="bg-slate-900" />
 
-                        {/* Center: Commit Timeline or Diff Viewer */}
+                        {/* Center: Timeline / GitHub (tabs visibles solo con cuenta GitHub) */}
                         <div className="flex-1 min-w-[200px] min-h-0 border-r border-slate-800 relative flex flex-col overflow-hidden">
-                            {activeDiffFile ? (
+                            {/* Tab bar — solo cuando hay cuenta GitHub y no hay diff abierto */}
+                            {isGithubAccount && !activeDiffFile && (
+                                <div className="flex shrink-0 border-b border-slate-800 bg-slate-950">
+                                    <button
+                                        onClick={() => setCenterTab('timeline')}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-4 py-2 text-xs font-bold border-b-2 transition-colors",
+                                            centerTab === 'timeline'
+                                                ? "border-microtermix-accent text-microtermix-accent"
+                                                : "border-transparent text-slate-500 hover:text-slate-300"
+                                        )}
+                                    >
+                                        <GitCommitHorizontal size={13} />
+                                        Timeline
+                                    </button>
+                                    <button
+                                        onClick={() => setCenterTab('github')}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-4 py-2 text-xs font-bold border-b-2 transition-colors",
+                                            centerTab === 'github'
+                                                ? "border-amber-500 text-amber-400"
+                                                : "border-transparent text-slate-500 hover:text-slate-300"
+                                        )}
+                                    >
+                                        <Github size={13} />
+                                        GitHub
+                                        {activeTab && <GithubTabPulse projectPath={activeTab} />}
+                                    </button>
+                                </div>
+                            )}
+
+                            {centerTab === 'github' && isGithubAccount && !activeDiffFile ? (
+                                <GithubPanel projectPath={activeTab} />
+                            ) : activeDiffFile ? (
                                 activeDiffFile.mode === 'conflicted' ? (
                                     <GitConflictResolver
                                         projectPath={activeTab}

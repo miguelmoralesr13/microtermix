@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Play, Square } from 'lucide-react';
+import { BarChart3, Play, Square, RefreshCw } from 'lucide-react';
 import { Button } from '../../ui/button';
 
 interface SonarHeaderProps {
@@ -7,9 +7,10 @@ interface SonarHeaderProps {
     onRun: () => void;
     onStop: () => void;
     canRun: boolean;
+    onRefresh?: () => void;
 }
 
-export const SonarHeader: React.FC<SonarHeaderProps> = ({ isRunning, onRun, onStop, canRun }) => {
+export const SonarHeader: React.FC<SonarHeaderProps> = ({ isRunning, onRun, onStop, canRun, onRefresh }) => {
     return (
         <div className="shrink-0 px-6 py-3 border-b border-white/5 flex items-center justify-between bg-slate-900/40 backdrop-blur-md">
             <div className="flex items-center gap-4">
@@ -22,6 +23,17 @@ export const SonarHeader: React.FC<SonarHeaderProps> = ({ isRunning, onRun, onSt
                 </div>
             </div>
             <div className="flex items-center gap-2">
+                {onRefresh && (
+                    <Button 
+                        onClick={onRefresh}
+                        variant="outline" 
+                        size="sm"
+                        className="font-black px-4 h-9 rounded-xl bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all text-[10px] tracking-widest"
+                    >
+                        <RefreshCw size={12} className="mr-2" />
+                        REFRESH
+                    </Button>
+                )}
                 <Button 
                     onClick={isRunning ? onStop : onRun} 
                     disabled={!canRun} 

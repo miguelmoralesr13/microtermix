@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { useSonarStore } from '../../stores/sonarStore';
-import { fetchProjectMetrics, fetchProjectIssues, fetchSonarRules, getSonarAuthHeader, normalizeSonarUrl } from '../../utils/sonarUtils';
+import { 
+    fetchProjectMetrics, fetchProjectIssues, fetchSonarRules, 
+    getSonarAuthHeader, normalizeSonarUrl, readProjectSonarConfig 
+} from '../../utils/sonarUtils';
 
 export const sonarKeys = {
     all: ['sonar'] as const,
+    config: (path: string) => [...sonarKeys.all, 'config', path] as const,
     metrics: (accountId: string, projectKey: string) => [...sonarKeys.all, 'metrics', accountId, projectKey] as const,
     issues: (accountId: string, projectKey: string) => [...sonarKeys.all, 'issues', accountId, projectKey] as const,
     search: (accountId: string, query: string) => [...sonarKeys.all, 'search', accountId, query] as const,
@@ -18,6 +22,7 @@ export interface SonarIssue {
     type: string;
     message: string;
     component: string;
+    projectKey: string;
     line?: number;
 }
 
@@ -31,26 +36,45 @@ export interface SonarRule {
     htmlDesc?: string;
 }
 
+export function useSonarLocalConfig(projectPath: string | undefined, propertiesFileName?: string) {
+    return useQuery({
+        queryKey: sonarKeys.config(projectPath || 'none'),
+        queryFn: () => readProjectSonarConfig(projectPath!, propertiesFileName),
+        enabled: !!projectPath,
+        staleTime: 60 * 1000,
+    });
+}
+
 export function useSonarMetrics(projectPath: string | undefined, projectKey: string | undefined) {
     const { getProjectAccount } = useSonarStore();
+    const { data: localConfig } = useSonarLocalConfig(projectPath);
+    
     const account = projectPath ? getProjectAccount(projectPath) : undefined;
+    const effectiveKey = localConfig?.projectKey || projectKey;
+    const effectiveToken = localConfig?.token || account?.token;
+    const effectiveAccount = localConfig?.isLocal ? { ...account, ...localConfig } : account;
 
     return useQuery({
-        queryKey: sonarKeys.metrics(account?.id || 'none', projectKey || ''),
-        queryFn: () => fetchProjectMetrics(projectKey!, account!, account!.token),
-        enabled: !!projectKey && !!account?.token && !!account?.serverUrl,
+        queryKey: sonarKeys.metrics(effectiveAccount?.id || 'none', effectiveKey || ''),
+        queryFn: () => fetchProjectMetrics(effectiveKey!, effectiveAccount as any, effectiveToken!),
+        enabled: !!effectiveKey && !!effectiveToken && !!effectiveAccount?.serverUrl,
         staleTime: 5 * 60 * 1000,
     });
 }
 
 export function useSonarIssues(projectPath: string | undefined, projectKey: string | undefined) {
     const { getProjectAccount } = useSonarStore();
+    const { data: localConfig } = useSonarLocalConfig(projectPath);
+
     const account = projectPath ? getProjectAccount(projectPath) : undefined;
+    const effectiveKey = localConfig?.projectKey || projectKey;
+    const effectiveToken = localConfig?.token || account?.token;
+    const effectiveAccount = localConfig?.isLocal ? { ...account, ...localConfig } : account;
 
     return useQuery({
-        queryKey: sonarKeys.issues(account?.id || 'none', projectKey || ''),
+        queryKey: sonarKeys.issues(effectiveAccount?.id || 'none', effectiveKey || ''),
         queryFn: async () => {
-            const rawIssues = await fetchProjectIssues(projectKey!, account!, account!.token);
+            const rawIssues = await fetchProjectIssues(effectiveKey!, effectiveAccount as any, effectiveToken!);
             return rawIssues.map((i: any) => ({
                 key: i.key,
                 rule: i.rule,
@@ -58,10 +82,11 @@ export function useSonarIssues(projectPath: string | undefined, projectKey: stri
                 type: i.type || 'CODE_SMELL',
                 message: i.message || '',
                 component: (i.component || '').split(':').slice(1).join(':') || i.component || '',
+                projectKey: i.projectKey || i.project || '',
                 line: i.line,
             })) as SonarIssue[];
         },
-        enabled: !!projectKey && !!account?.token && !!account?.serverUrl && !!projectPath,
+        enabled: !!effectiveKey && !!effectiveToken && !!effectiveAccount?.serverUrl && !!projectPath,
         staleTime: 5 * 60 * 1000,
     });
 }
@@ -97,12 +122,17 @@ export function useSonarProjectSearch(query: string, enabled: boolean = false) {
 
 export function useSonarRules(projectPath?: string, projectKey?: string, query: string = '') {
     const { getProjectAccount, getActiveAccount } = useSonarStore();
+    const { data: localConfig } = useSonarLocalConfig(projectPath);
+
     const account = projectPath ? getProjectAccount(projectPath) : getActiveAccount();
+    const effectiveKey = localConfig?.projectKey || projectKey;
+    const effectiveToken = localConfig?.token || account?.token;
+    const effectiveAccount = localConfig?.isLocal ? { ...account, ...localConfig } : account;
 
     return useQuery({
-        queryKey: sonarKeys.rules(account?.id || 'none', projectKey || 'global', query),
-        queryFn: () => fetchSonarRules(account!, account!.token, projectKey, query),
-        enabled: !!account?.token && !!account?.serverUrl,
+        queryKey: sonarKeys.rules(effectiveAccount?.id || 'none', effectiveKey || 'global', query),
+        queryFn: () => fetchSonarRules(effectiveAccount as any, effectiveToken!, effectiveKey, query),
+        enabled: !!effectiveToken && !!effectiveAccount?.serverUrl,
         staleTime: 15 * 60 * 1000,
     });
 }
