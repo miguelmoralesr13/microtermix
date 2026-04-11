@@ -252,13 +252,15 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
     const handleCheckout = async (branch: string, isRemote: boolean) => {
         try {
+            // Normalize path
+            const normalizedPath = projectPath.replace(/\/+$/, '');
+            
             // Extraemos el nombre limpio de la rama (ej: de 'origin/main' sacamos 'main')
-            // Git se encargará de crearla y rastrearla si no existe localmente.
             const parts = branch.split('/');
             const branchName = isRemote ? parts.slice(1).join('/') : branch;
 
             const res: any = await invoke('git_execute', { 
-                projectPath, 
+                projectPath: normalizedPath, 
                 args: ['checkout', branchName] 
             });
             
@@ -267,7 +269,10 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                 return;
             }
             
-            handleRefresh();
+            // Wait a bit for filesystem to settle before refreshing
+            setTimeout(() => {
+                handleRefresh();
+            }, 300);
         } catch (e: any) {
             alert(e?.toString() || 'Error al ejecutar checkout');
         }
