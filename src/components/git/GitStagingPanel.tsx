@@ -23,7 +23,7 @@ interface ArrayTreeNode {
 
 interface GitStagingPanelProps {
     projectPath: string;
-    onDiffRequest: (file: string, mode: 'staged' | 'unstaged', line?: number) => void;
+    onDiffRequest: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
     onOpenConflictModal: () => void;
 }
 

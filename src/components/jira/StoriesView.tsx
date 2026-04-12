@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useJiraStore } from '../../stores/jiraStore';
-import { RefreshCw, Search, AlertCircle, Plus, ChevronRight, Timer } from 'lucide-react';
+import { RefreshCw, Search, AlertCircle, Plus, Timer } from 'lucide-react';
 import * as api from './jiraApi';
 import {
-    JiraIssue, JiraApiLogEntry, JiraTransition, jiraApiLog,
+    JiraIssue, JiraTransition,
     statusColor,
     isReleased,
 } from './jiraApi';

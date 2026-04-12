@@ -4,7 +4,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Copy, Terminal, CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react';

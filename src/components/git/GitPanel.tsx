@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle, GitCommitHorizontal, Zap } from 'lucide-react';
+import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle, GitCommitHorizontal } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
-import { GitDiffViewer } from './GitDiffViewer';
 import { GitHunkStaging } from './GitHunkStaging';
 import { GitConflictResolver } from './GitConflictResolver';
 
@@ -79,7 +78,7 @@ export const GitPanel: React.FC = () => {
         }
     }, [activeTab, state.projects, setUi]);
 
-    const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
+    const [activeDiffFile, setActiveDiffFile] = useState<ActiveDiff | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
     const [centerTab, setCenterTab] = useState<'timeline' | 'github'>('timeline');
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);

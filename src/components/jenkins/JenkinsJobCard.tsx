@@ -155,7 +155,7 @@ export function JenkinsJobCard({
     const toggleExpanded = () => setExpanded(v => !v);
 
     const jobPath = jobApiPath(jobUrl, baseUrl);
-    const { data: liveJob } = useJenkinsJobStatus(jobPath, live || expanded, live);
+    const { data: liveJob } = useJenkinsJobStatus(jobPath, live || expanded);
     const triggerMutation = useJenkinsTriggerBuild();
     const abortMutation = useJenkinsAbortBuild();
 
@@ -165,8 +165,8 @@ export function JenkinsJobCard({
     const lb = currentJob?.lastBuild ?? null;
     const isJobBuilding = lb?.building ?? (currentJob ? isBuilding(currentJob as any) : false);
 
-    const { data: children, isLoading: loadingChildren } = useJenkinsChildren(jobPath, expanded, live);
-    const { data: builds, isLoading: loadingBuilds } = useJenkinsBuilds(jobPath, expanded && !isContainer, live);
+    const { data: children, isLoading: loadingChildren } = useJenkinsChildren(jobPath, expanded);
+    const { data: builds, isLoading: loadingBuilds } = useJenkinsBuilds(jobPath, expanded && !isContainer);
 
     const dotBg = colorFromJobColor(color);
 

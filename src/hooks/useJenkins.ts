@@ -15,7 +15,7 @@ export function useJenkinsJobs() {
 }
 
 /** Hook to fetch children of a folder/multibranch */
-export function useJenkinsChildren(jobPath: string, enabled = false, live = false) {
+export function useJenkinsChildren(jobPath: string, enabled = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
@@ -27,7 +27,7 @@ export function useJenkinsChildren(jobPath: string, enabled = false, live = fals
 }
 
 /** Hook to fetch specific job status */
-export function useJenkinsJobStatus(jobPath: string, enabled = false, live = false) {
+export function useJenkinsJobStatus(jobPath: string, enabled = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({
@@ -39,7 +39,7 @@ export function useJenkinsJobStatus(jobPath: string, enabled = false, live = fal
 }
 
 /** Hook to fetch build history */
-export function useJenkinsBuilds(jobPath: string, enabled = false, live = false) {
+export function useJenkinsBuilds(jobPath: string, enabled = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
   return useQuery({

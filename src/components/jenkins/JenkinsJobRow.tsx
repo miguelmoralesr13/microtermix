@@ -92,7 +92,7 @@ export function JenkinsJobRow({
     const isBranch = !folder && !multi && depth > 0;
     const jobPath = jobApiPath(job.url, cfg.baseUrl);
 
-    const { data: liveJob } = useJenkinsJobStatus(jobPath, expanded, false);
+    const { data: liveJob } = useJenkinsJobStatus(jobPath, expanded);
     const currentJob = liveJob || job;
     const lb = currentJob.lastBuild;
 

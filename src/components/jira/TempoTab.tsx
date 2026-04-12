@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Plus, RefreshCw, AlertCircle, Search, Terminal, CheckCircle2, XCircle, Copy, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, RefreshCw, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTempoStore, formatDuration } from '../../stores/tempoStore';
