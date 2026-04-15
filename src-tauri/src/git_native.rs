@@ -577,20 +577,31 @@ pub struct AheadBehindResult {
     pub has_upstream: bool,
 }
 
-/// Build an `auth_git2` authenticator that reads from the system credential store
-/// (git config credential.helper, SSH agent, etc.).
+/// Build an `auth_git2` authenticator with the correct credentials for the given account.
+///
+/// HTTPS username rules:
+///   - GitLab: must be "oauth2" (PAT-based auth); the real username is rejected.
+///   - GitHub: any non-empty string works as username; token is the password.
+///   - SSH: handled by ssh_agent / default keys — username not relevant here.
 fn make_auth(account: Option<crate::workspace_config::GitAccount>) -> auth_git2::GitAuthenticator {
     let mut auth = auth_git2::GitAuthenticator::new_empty();
-    
-    // Si tenemos un token, lo inyectamos directamente.
+
     if let Some(acc) = account {
-        let domain = url::Url::parse(&acc.url).ok()
+        let domain = url::Url::parse(&acc.url)
+            .ok()
             .and_then(|u| u.host_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "*".to_string());
-            
-        // Para GitHub/GitLab vía HTTPS, el token suele ser la contraseña.
-        // Usamos "git" como usuario genérico o vacío.
-        auth = auth.add_plaintext_credentials(domain, "git", acc.token);
+
+        // Choose the username that each provider expects for HTTPS token auth.
+        // "git" is for SSH only — using it for HTTPS causes 401 on GitLab.
+        let username = if acc.provider.to_lowercase().contains("gitlab") {
+            "oauth2".to_string()
+        } else {
+            // GitHub, Gitea, Bitbucket, etc. accept any non-empty username.
+            "git-token".to_string()
+        };
+
+        auth = auth.add_plaintext_credentials(domain, username, acc.token);
     }
 
     auth.add_default_username()
@@ -602,9 +613,67 @@ fn make_auth(account: Option<crate::workspace_config::GitAccount>) -> auth_git2:
 pub fn fetch_remote_native(repo: &git2::Repository, remote_name: &str, account: Option<crate::workspace_config::GitAccount>) -> Result<(), String> {
     let auth = make_auth(account);
     let mut remote = repo.find_remote(remote_name).map_err(|e| e.to_string())?;
-    
+
     // auth.fetch is synchronous network I/O
     auth.fetch(repo, &mut remote, &[] as &[&str], None).map_err(|e| e.to_string())
+}
+
+/// Push the current branch to its configured upstream remote using the account
+/// token stored in microtermix.json. Avoids the system CLI (which picks the
+/// wrong Keychain credential when multiple accounts are configured).
+pub async fn git_push_native_impl(project_path: String, extra_args: Vec<String>) -> Result<String, String> {
+    let account = crate::workspace_config::get_account_for_project(&project_path);
+
+    tokio::task::spawn_blocking(move || {
+        let repo = repo_open(&project_path)?;
+
+        // Resolve the remote to push to. Honour an explicit "origin <branch>"
+        // passed from the frontend, otherwise fall back to the tracking remote.
+        let remote_name: String = extra_args
+            .iter()
+            .find(|a| *a != "origin" && !a.starts_with('-') && *a != "HEAD")
+            .cloned()
+            .unwrap_or_else(|| {
+                // Attempt to read the push remote from the current branch config.
+                let head = repo.head().ok();
+                let branch_name = head
+                    .as_ref()
+                    .and_then(|h| h.shorthand())
+                    .unwrap_or("HEAD");
+                repo.find_branch(branch_name, git2::BranchType::Local)
+                    .ok()
+                    .and_then(|_b| {
+                        let cfg = repo.config().ok()?;
+                        cfg.get_string(&format!("branch.{}.remote", branch_name)).ok()
+                    })
+                    .unwrap_or_else(|| "origin".to_string())
+            });
+
+        // Build the refspec: push current HEAD to its upstream tracking branch.
+        let head = repo.head().map_err(|e| e.to_string())?;
+        let branch_name = head.shorthand().ok_or("HEAD is detached — cannot push")?;
+
+        // If the frontend explicitly passed a refspec (e.g. "HEAD"), honour it;
+        // otherwise build "refs/heads/<branch>:refs/heads/<branch>".
+        let refspec = if extra_args.iter().any(|a| a == "HEAD") {
+            format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name)
+        } else {
+            // Check for an explicit remote branch name in extra_args.
+            extra_args
+                .iter()
+                .find(|a| a.contains(':'))
+                .cloned()
+                .unwrap_or_else(|| format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name))
+        };
+
+        let auth = make_auth(account);
+        let mut remote = repo.find_remote(&remote_name).map_err(|e| e.to_string())?;
+        auth.push(&repo, &mut remote, &[refspec.as_str()]).map_err(|e| e.to_string())?;
+
+        Ok(format!("Pushed '{}' to '{}'", branch_name, remote_name))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Compute ahead/behind using git2's graph API based on local data.

@@ -423,9 +423,19 @@ pub async fn git_execute_impl(
             }
         }
         "push" => {
-            // Prefer CLI for push as it handles interactive prompts and hook errors better than libgit2
-            // especially when the frontend is calling specific refs like 'origin HEAD'.
-            git_cli_fallback(&app_handle, &project_path, &args).await
+            // Use the native push implementation — injects the correct account token
+            // from microtermix.json, avoiding the system Keychain picking the wrong account.
+            let push_args = args[1..].to_vec(); // strip "push" from the front
+            let native_res = crate::git_native::git_push_native_impl(project_path.clone(), push_args).await;
+            match native_res {
+                Ok(msg) => Ok(GitResult { stdout: msg, stderr: String::new(), success: true }),
+                // If no account is configured (None path), fall back to CLI
+                // so repos without an assigned account still work via Keychain/ssh-agent.
+                Err(err) if err.contains("auth") || err.contains("authentication") || err.contains("credential") => {
+                    git_cli_fallback(&app_handle, &project_path, &args).await
+                }
+                Err(err) => Err(err),
+            }
         }
 
         // ── Fallback for everything else (reset, stash, rebase, merge…) ──

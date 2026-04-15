@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
-import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap } from 'lucide-react';
+import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap, UploadCloud } from 'lucide-react';
+
 import { GitStatusEntry } from '../../stores/gitStore';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -248,6 +249,100 @@ function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
     return toArray(root);
 }
 
+// ── Simple Commit & Push (no Jira, no Tempo) ──────────────────────────────────
+
+interface SimpleCommitPushButtonProps {
+    projectPath: string;
+    commitMessage: string;
+    isAnythingStaged: boolean;
+    onSuccess: () => void;
+}
+
+const SimpleCommitPushButton: React.FC<SimpleCommitPushButtonProps> = ({
+    projectPath,
+    commitMessage,
+    isAnythingStaged,
+    onSuccess,
+}) => {
+    const [step, setStep] = useState<'idle' | 'committing' | 'pushing' | 'done' | 'error'>('idle');
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    const isRunning = step === 'committing' || step === 'pushing';
+    const canRun = isAnythingStaged && !!commitMessage.trim() && !isRunning;
+
+    const handleCommitAndPush = async () => {
+        if (!canRun) return;
+        setErrorMsg(null);
+
+        try {
+            setStep('committing');
+            const commitResult: any = await invoke('git_execute', {
+                projectPath,
+                args: ['commit', '-m', commitMessage],
+            });
+            if (!commitResult.success) {
+                throw new Error(commitResult.stderr || 'Commit failed');
+            }
+
+            setStep('pushing');
+            const pushResult: any = await invoke('git_execute', {
+                projectPath,
+                args: ['push', 'origin', 'HEAD'],
+            });
+
+            const combinedOutput = ((pushResult.stdout ?? '') + '\n' + (pushResult.stderr ?? '')).toLowerCase();
+            const hasError = !pushResult.success ||
+                combinedOutput.includes('rejected') ||
+                combinedOutput.includes('error:') ||
+                combinedOutput.includes('failed');
+
+            if (hasError) {
+                throw new Error(pushResult.stderr || 'Push rejected by remote');
+            }
+
+            setStep('done');
+            onSuccess();
+            // Reset visual state after a brief "done" flash
+            setTimeout(() => setStep('idle'), 1500);
+        } catch (e: any) {
+            setErrorMsg(e?.message ?? 'Commit & Push failed');
+            setStep('error');
+        }
+    };
+
+    const stepLabel = () => {
+        if (step === 'committing') return 'Committing…';
+        if (step === 'pushing') return 'Pushing…';
+        if (step === 'done') return 'Done!';
+        return 'Commit & Push';
+    };
+
+    return (
+        <div className="mt-2">
+            <Button
+                onClick={handleCommitAndPush}
+                disabled={!canRun}
+                className="w-full h-8 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800/60 text-slate-100 text-xs font-bold rounded border border-slate-600 hover:border-slate-400 transition-all font-sans flex items-center justify-center gap-1.5"
+            >
+                {isRunning
+                    ? <><RefreshCw size={12} className="animate-spin" />{stepLabel()}</>
+                    : step === 'done'
+                        ? <><UploadCloud size={13} className="text-microtermix-success" />{stepLabel()}</>
+                        : <><UploadCloud size={13} />{stepLabel()}</>
+                }
+            </Button>
+            {step === 'error' && errorMsg && (
+                <div className="flex items-start gap-1.5 text-[10px] text-microtermix-danger mt-1.5 bg-microtermix-danger/5 p-1.5 rounded border border-microtermix-danger/10">
+                    <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                    <p className="leading-snug">{errorMsg}</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onOpenConflictModal }) => {
     const queryClient = useQueryClient();
     const { data: statusData, isLoading: loading } = useGitStatus(projectPath);
@@ -453,6 +548,16 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                     commitMessage={commitMessage}
                     isAnythingStaged={isAnythingStaged}
                     currentBranch={currentBranch}
+                    onSuccess={() => {
+                        setCommitMessage('');
+                        handleRefresh();
+                    }}
+                />
+
+                <SimpleCommitPushButton
+                    projectPath={projectPath}
+                    commitMessage={commitMessage}
+                    isAnythingStaged={isAnythingStaged}
                     onSuccess={() => {
                         setCommitMessage('');
                         handleRefresh();
