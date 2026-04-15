@@ -486,21 +486,48 @@ pub fn detect_project_in_path(path: &Path) -> Option<Project> {
 #[tauri::command]
 pub fn scan_path(path: String) -> Result<Vec<Project>, String> {
     let root = Path::new(&path);
-    let mut projects = Vec::new();
+    let mut projects: Vec<Project> = Vec::new();
+    let mut seen_paths = std::collections::HashSet::new();
 
-    // Check root
-    if let Some(p) = detect_project_in_path(root) { 
-        projects.push(p); 
+    // Check root itself first
+    if let Some(p) = detect_project_in_path(root) {
+        // The root IS a project — its subdirectories are part of this project,
+        // NOT separate projects. Return immediately with just the root project.
+        // (e.g. a Tauri app has src-tauri/ inside, but it's ONE project, not two)
+        seen_paths.insert(p.path.clone());
+        projects.push(p);
+        return Ok(projects);
     }
 
-    // Always scan children for sub-projects
+    // Root is NOT a project — it's a container folder (e.g. /projects/personal/).
+    // Scan its immediate children to find projects inside it.
     if let Ok(entries) = fs::read_dir(root) {
         for entry in entries.flatten() {
-            if let Some(p) = detect_project_in_path(&entry.path()) { projects.push(p); }
+            let entry_path = entry.path();
+            let dir_name = entry_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            // Skip hidden dirs and well-known non-project artifact dirs
+            if dir_name.starts_with('.') 
+                || dir_name == "node_modules" 
+                || dir_name == "target" 
+                || dir_name == "dist" 
+                || dir_name == ".git" 
+            {
+                continue;
+            }
+            if let Some(p) = detect_project_in_path(&entry_path) {
+                if seen_paths.insert(p.path.clone()) {
+                    projects.push(p);
+                }
+            }
         }
     }
+
     Ok(projects)
 }
+
 
 #[tauri::command]
 pub fn scan_projects(root_path: String) -> Result<Vec<Project>, String> { scan_path(root_path) }
