@@ -118,7 +118,15 @@ function AppContent() {
           applyWorkspaceConfig(config, state.currentPath, allPotentialPaths);
 
           if (config.allProjectPaths && Array.isArray(config.allProjectPaths)) {
-            addProjectsFromPaths(config.allProjectPaths, true);
+            // Only add paths that are OUTSIDE the current workspace root.
+            // Paths inside the workspace are already detected by scanWorkspace —
+            // re-adding them causes duplicates due to async race conditions.
+            const externalPaths = (config.allProjectPaths as string[]).filter(
+              (p) => !p.startsWith(state.currentPath)
+            );
+            if (externalPaths.length > 0) {
+              addProjectsFromPaths(externalPaths, true);
+            }
           }
         } else {
           // Generar archivo en automático si no existía (solo version + path)

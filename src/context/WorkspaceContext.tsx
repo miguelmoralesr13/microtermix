@@ -286,12 +286,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const scanWorkspace = useCallback(async (path: string): Promise<Project[]> => {
         try {
             const rootProjects: Project[] = await invoke('scan_projects', { rootPath: path });
-            let finalProjects = [...rootProjects];
 
             const currentProjects = state.projects;
             const externalPaths = currentProjects
                 .map(p => p.path as string)
                 .filter(p => !p.startsWith(path));
+
+            let finalProjects = [...rootProjects];
 
             if (externalPaths.length > 0) {
                 const updatedExternal: Project[] = [];
@@ -309,13 +310,23 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
                 finalProjects = [...finalProjects, ...updatedExternal];
             }
 
-            setState(prev => ({ ...prev, projects: finalProjects, currentPath: path }));
-            return finalProjects;
+            // Deduplicate by path — prevents duplicates when scanWorkspace is called
+            // multiple times during boot (App.tsx init + WorkspaceContext recovery + config load)
+            const seen = new Set<string>();
+            const deduped = finalProjects.filter(p => {
+                if (seen.has(p.path)) return false;
+                seen.add(p.path);
+                return true;
+            });
+
+            setState(prev => ({ ...prev, projects: deduped, currentPath: path }));
+            return deduped;
         } catch (e) {
             console.error('Failed to scan workspace', e);
             return [];
         }
     }, [state.projects]);
+
 
     const openFolderInThisWindow = useCallback(async () => {
         try {
