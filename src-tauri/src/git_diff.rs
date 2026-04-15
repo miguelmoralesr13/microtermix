@@ -197,10 +197,23 @@ async fn git_cli_fallback(
     let mut cmd = AsyncCommand::new("git");
     cmd.args(args);
     cmd.current_dir(project_path);
+
+    // For network operations (push, fetch, pull, clone) we must NOT set GIT_ASKPASS=echo
+    // because that breaks the macOS Keychain / Git Credential Manager — git would call
+    // `echo <prompt>` and use the prompt string itself as the credential (empty/wrong),
+    // causing the server to reset the connection with a 401.
+    //
+    // For local commands we set GIT_ASKPASS=echo to block interactive prompts in the
+    // Tauri process (there's no terminal to show them on).
+    let is_network_command = matches!(command, "push" | "fetch" | "pull" | "clone");
+    if !is_network_command {
+        cmd.env("GIT_ASKPASS", "echo");
+    }
+
     cmd
-        // Prevent interactive prompts
+        // Prevent interactive prompts (still safe without ASKPASS for network commands
+        // because GCM/Keychain handle auth silently).
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "echo")
         .env("GCM_INTERACTIVE", "never")
         // HTTPS: fail if transfer speed stays below 100 B/s for 10 s
         .env("GIT_HTTP_LOW_SPEED_LIMIT", "100")
@@ -429,9 +442,22 @@ pub async fn git_execute_impl(
             let native_res = crate::git_native::git_push_native_impl(project_path.clone(), push_args).await;
             match native_res {
                 Ok(msg) => Ok(GitResult { stdout: msg, stderr: String::new(), success: true }),
-                // If no account is configured (None path), fall back to CLI
-                // so repos without an assigned account still work via Keychain/ssh-agent.
-                Err(err) if err.contains("auth") || err.contains("authentication") || err.contains("credential") => {
+                // Fall back to CLI git in two cases:
+                //   1. Auth / credential errors — repo has no account assigned, use system Keychain
+                //   2. Network / protocol errors from libgit2 (class=Net) — e.g. "Connection reset
+                //      by peer" when the Tauri process can't reach the ssh-agent, or libgit2's SSH
+                //      stack has a negotiation issue. CLI git handles these natively via OpenSSH.
+                Err(err) if {
+                    let e = err.to_lowercase();
+                    e.contains("auth")
+                        || e.contains("authentication")
+                        || e.contains("credential")
+                        || e.contains("connection reset")
+                        || e.contains("class=net")
+                        || e.contains("timed out")
+                        || e.contains("ssl")
+                        || e.contains("certificate")
+                } => {
                     git_cli_fallback(&app_handle, &project_path, &args).await
                 }
                 Err(err) => Err(err),
