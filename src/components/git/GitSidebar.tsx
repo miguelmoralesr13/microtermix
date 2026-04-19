@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen, Eye, GitCompare } from 'lucide-react';
 import { GitlabBranchViewerModal } from '../gitlab/GitlabBranchViewerModal';
@@ -137,17 +137,19 @@ const DraggableBranchItem = ({
 const ActiveBranchDropZone = ({
     branchName,
     isDraggingAny,
+    isDraggingCommit,
     onCherryPickCommit,
 }: {
     branchName: string;
     isDraggingAny: boolean;
+    isDraggingCommit: boolean;
     onCherryPickCommit?: (hash: string) => void;
 }) => {
     const { isOver, setNodeRef } = useDroppable({ id: 'active-branch-drop' });
     const [isCommitDragOver, setIsCommitDragOver] = useState(false);
 
-    const isHighlighted = isDraggingAny && isOver;
-    const isDropReady = isDraggingAny && !isOver;
+    const isHighlighted = (isDraggingAny && isOver) || isCommitDragOver;
+    const isDropReady = (isDraggingAny && !isOver) || (isDraggingCommit && !isCommitDragOver);
 
     const handleDragOver = (e: React.DragEvent) => {
         if (e.dataTransfer.types.includes('application/commit')) {
@@ -171,32 +173,38 @@ const ActiveBranchDropZone = ({
     };
 
     return (
-        <div
-            ref={setNodeRef}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={`flex items-center justify-between px-4 py-1.5 text-xs group transition-all
-                ${isCommitDragOver
-                    ? 'text-amber-300 bg-amber-900/30 border border-amber-500/60 ring-1 ring-inset ring-amber-500/30'
-                    : isHighlighted
-                        ? 'text-microtermix-neon bg-green-900/40 border border-green-500/60 ring-1 ring-inset ring-green-500/30'
-                        : isDropReady
-                            ? 'text-microtermix-neon bg-slate-800/50 border border-dashed border-microtermix-neon/40'
-                            : 'text-microtermix-neon bg-slate-800/50'
-                }`}
-        >
-            <div className="flex items-center overflow-hidden min-w-0 flex-1">
-                <GitBranch size={12} className="mr-2 text-microtermix-neon shrink-0" />
-                <span className="truncate font-semibold">
-                    {isCommitDragOver ? `🍒 Cherry-pick → ${branchName}` : isHighlighted ? `⬇ Mergear aquí → ${branchName}` : branchName}
-                </span>
+        <div className="px-2 py-1">
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-2 mb-1">Rama Actual</p>
+            <div
+                ref={setNodeRef}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={cn(
+                    "flex items-center justify-between px-3 py-2 text-xs group transition-all rounded border select-none",
+                    isHighlighted 
+                        ? "text-amber-300 bg-amber-900/40 border-amber-500/60 ring-2 ring-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.3)]" 
+                        : isDropReady 
+                            ? "text-microtermix-neon bg-microtermix-neon/10 border-dashed border-microtermix-neon/50 animate-pulse scale-[1.02]" 
+                            : "text-microtermix-neon bg-slate-900 border-slate-800 shadow-inner"
+                )}
+            >
+                <div className="flex items-center gap-2 overflow-hidden flex-1">
+                    <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        isHighlighted ? "bg-amber-400 animate-pulse shadow-[0_0_5px_rgba(245,158,11,0.8)]" : "bg-microtermix-neon shadow-[0_0_5px_rgba(34,197,94,0.5)]"
+                    )} />
+                    <GitBranch size={14} className={isHighlighted ? "text-amber-400" : "text-microtermix-neon"} />
+                    <span className="font-bold truncate text-[13px]">
+                        {isHighlighted && isCommitDragOver ? `🍒 Cherry-pick` : branchName}
+                    </span>
+                </div>
+                {isHighlighted ? (
+                    <span className="text-[10px] font-bold text-amber-400 animate-bounce">¡SUELTA!</span>
+                ) : isDropReady ? (
+                    <span className="text-[9px] text-microtermix-neon font-bold animate-pulse">DROP HERE</span>
+                ) : null}
             </div>
-            {(isDraggingAny || isCommitDragOver) && (
-                <span className="text-[9px] ml-1 shrink-0 font-bold uppercase tracking-wider text-microtermix-neon/60">
-                    {isCommitDragOver ? 'Cherry-pick' : isHighlighted ? '¡Suelta!' : 'Drop target'}
-                </span>
-            )}
         </div>
     );
 };
@@ -225,7 +233,31 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const [showPushModal, setShowPushModal] = useState(false);
     const [showMergeModal, setShowMergeModal] = useState<string | null>(null);
     const [isDraggingAny, setIsDraggingAny] = useState(false);
+    const [isGlobalDraggingCommit, setIsGlobalDraggingCommit] = useState(false);
     const [activeDragLabel, setActiveDragLabel] = useState<string>('');
+
+    // Global drag listener for native HTML5 drag (commits)
+    useEffect(() => {
+        const handleGlobalDragStart = (e: DragEvent) => {
+            if (e.dataTransfer?.types.includes('application/commit')) {
+                setIsGlobalDraggingCommit(true);
+            }
+        };
+        const handleGlobalDragEnd = () => {
+            setIsGlobalDraggingCommit(false);
+        };
+
+        window.addEventListener('dragenter', handleGlobalDragStart);
+        window.addEventListener('dragend', handleGlobalDragEnd);
+        window.addEventListener('drop', handleGlobalDragEnd);
+
+        return () => {
+            window.removeEventListener('dragenter', handleGlobalDragStart);
+            window.removeEventListener('dragend', handleGlobalDragEnd);
+            window.removeEventListener('drop', handleGlobalDragEnd);
+        };
+    }, []);
+
     const [pullError, setPullError] = useState<{ message: string; raw: string } | null>(null);
     const [isResolvingPull, setIsResolvingPull] = useState(false);
     const [isPulling, setIsPulling] = useState(false);
@@ -270,10 +302,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
     const handleCheckout = async (branch: string, isRemote: boolean) => {
         try {
-            // Normalize path
             const normalizedPath = projectPath.replace(/\/+$/, '');
-            
-            // Extraemos el nombre limpio de la rama (ej: de 'origin/main' sacamos 'main')
             const parts = branch.split('/');
             const branchName = isRemote ? parts.slice(1).join('/') : branch;
 
@@ -287,7 +316,6 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                 return;
             }
             
-            // Wait a bit for filesystem to settle before refreshing
             setTimeout(() => {
                 handleRefresh();
             }, 300);
@@ -340,7 +368,6 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     };
 
     const handleDeleteRemoteBranch = async (branchName: string) => {
-        // Remove "origin/" or similar prefix before pushing delete
         const cleanName = branchName.replace(/^[^/]+\//, '');
         setConfirmState({
             isOpen: true,
@@ -541,14 +568,26 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                 </div>
 
                 <div className="flex-1 overflow-y-auto py-2">
+                    {/* ZONA FIJA PARA LA RAMA ACTIVA - SIEMPRE VISIBLE */}
+                    {activeBranch && (
+                        <div className="mb-4">
+                            <ActiveBranchDropZone 
+                                branchName={activeBranch.name} 
+                                isDraggingAny={isDraggingAny} 
+                                isDraggingCommit={isGlobalDraggingCommit} 
+                                onCherryPickCommit={handleCherryPickOnBranch} 
+                            />
+                        </div>
+                    )}
+
                     {(branchFilter === 'all' || branchFilter === 'local') && (
                         <>
-                            <SectionHeader title="Local" count={filteredLocal.length} isExpanded={showLocal} onToggle={() => setShowLocal(!showLocal)} />
+                            <SectionHeader title="Local Branches" count={filteredLocal.length} isExpanded={showLocal} onToggle={() => setShowLocal(!showLocal)} />
                             {showLocal && (
                                 <div className="mb-2">
-                                    {filteredLocal.map(b => b.active ? <ActiveBranchDropZone key={b.name} branchName={b.name} isDraggingAny={isDraggingAny} onCherryPickCommit={handleCherryPickOnBranch} /> :
+                                    {filteredLocal.map(b => !b.active && (
                                         <DraggableBranchItem key={b.name} id={`local-${b.name}`} branchName={b.name} handleCheckout={handleCheckout} handleDeleteLocalBranch={handleDeleteLocalBranch} handleDeleteRemoteBranch={handleDeleteRemoteBranch} setShowMergeModal={setShowMergeModal} onCompare={setCompareBranch} />
-                                    )}
+                                    ))}
                                 </div>
                             )}
                         </>
@@ -556,7 +595,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
 
                     {(branchFilter === 'all' || branchFilter === 'remote') && (
                         <>
-                            <SectionHeader title="Remote" count={filteredRemote.length} isExpanded={showRemote} onToggle={() => setShowRemote(!showRemote)} />
+                            <SectionHeader title="Remote Branches" count={filteredRemote.length} isExpanded={showRemote} onToggle={() => setShowRemote(!showRemote)} />
                             {showRemote && (
                                 <div className="mb-2">
                                     {filteredRemote.map(r => <DraggableBranchItem key={r} id={`remote-${r}`} branchName={r} isRemote handleCheckout={handleCheckout} handleDeleteRemoteBranch={handleDeleteRemoteBranch} setShowMergeModal={setShowMergeModal} showViewCode={activeAccount?.provider === 'gitlab'} onViewCode={(b) => setViewCodeBranch(b.split('/').slice(1).join('/') || b)} />)}

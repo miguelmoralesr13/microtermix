@@ -637,9 +637,9 @@ pub async fn git_squash_into_parent_impl(
     };
 
     let result = if is_head {
-        // Fast path: reset soft + recommit with new combined message
+        // Fast path: reset soft to the target parent + recommit with new combined message
         let mut cmd = AsyncCommand::new("git");
-        cmd.args(&["reset", "--soft", "HEAD~1"]);
+        cmd.args(&["reset", "--soft", &parent_short_hash]);
         cmd.current_dir(&project_path);
         cmd.env("GIT_TERMINAL_PROMPT", "0");
         #[cfg(target_os = "windows")]

@@ -11,8 +11,9 @@ import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
-import { useGitStatus, gitKeys } from '../../hooks/queries/useGitQueries';
+import { useGitStatus, useGitAheadBehind, gitKeys } from '../../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
+import { GitSquashModal } from './GitSquashModal';
 
 interface ArrayTreeNode {
     name: string;
@@ -365,6 +366,7 @@ const SimpleCommitPushButton: React.FC<SimpleCommitPushButtonProps> = ({
 export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onOpenConflictModal }) => {
     const queryClient = useQueryClient();
     const { data: statusData, isLoading: loading } = useGitStatus(projectPath);
+    const { data: aheadBehind } = useGitAheadBehind(projectPath);
 
     const files = statusData?.files || [];
     const currentBranch = statusData?.currentBranch || '';
@@ -376,6 +378,9 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
     const [isAmendModalOpen, setIsAmendModalOpen] = useState(false);
+    const [isSquashModalOpen, setIsSquashModalOpen] = useState(false);
+
+    const aheadCount = aheadBehind?.ahead || 0;
 
     const tree = useMemo(() => buildTree(files), [files]);
     const totalFiles = files.length;
@@ -556,14 +561,26 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                         Mensaje
                     </span>
-                    <button
-                        onClick={() => setIsAmendModalOpen(true)}
-                        className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
-                        title="Amend last commit (opens modal)"
-                    >
-                        <Pencil size={9} />
-                        Amend
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                        {aheadCount > 1 && (
+                            <button
+                                onClick={() => setIsSquashModalOpen(true)}
+                                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300"
+                                title={`Squash local commits into one`}
+                            >
+                                <GitMerge size={9} />
+                                Squash
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setIsAmendModalOpen(true)}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                            title="Amend last commit (opens modal)"
+                        >
+                            <Pencil size={9} />
+                            Amend
+                        </button>
+                    </div>
                 </div>
                 <Textarea
                     value={commitMessage}
@@ -611,6 +628,16 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 isOpen={isAmendModalOpen}
                 onOpenChange={setIsAmendModalOpen}
                 projectPath={projectPath}
+                onSuccess={handleRefresh}
+            />
+        )}
+
+        {isSquashModalOpen && (
+            <GitSquashModal
+                isOpen={isSquashModalOpen}
+                onOpenChange={setIsSquashModalOpen}
+                projectPath={projectPath}
+                maxCommits={aheadCount}
                 onSuccess={handleRefresh}
             />
         )}
