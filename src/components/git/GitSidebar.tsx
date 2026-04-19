@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen, Eye } from 'lucide-react';
+import { GitBranch, GitMerge, Download, UploadCloud, RefreshCw, Folder, Play, Trash2, Search, DownloadCloud, AlertTriangle, Archive, PackageOpen, Eye, GitCompare } from 'lucide-react';
 import { GitlabBranchViewerModal } from '../gitlab/GitlabBranchViewerModal';
 import { toast } from 'sonner';
 import { PushPreviewModal } from './PushPreviewModal';
+import { BranchDiffModal } from './BranchDiffModal';
 import { useGitStore } from '../../stores/gitStore';
 import { MergeConfirmModal } from './MergeConfirmModal';
 import { PRSection } from './PRSection';
@@ -13,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '../ui/context-menu';
 import { cn } from '../../lib/utils';
 import { useGitBranches, useGitAheadBehind, gitKeys } from '../../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
@@ -43,18 +45,22 @@ const DraggableBranchItem = ({
     isRemote,
     handleCheckout,
     handleDeleteLocalBranch,
+    handleDeleteRemoteBranch,
     setShowMergeModal,
     showViewCode,
     onViewCode,
+    onCompare,
 }: {
     id: string;
     branchName: string;
     isRemote?: boolean;
     handleCheckout: (b: string, remote: boolean) => void;
     handleDeleteLocalBranch?: (b: string) => void;
+    handleDeleteRemoteBranch?: (b: string) => void;
     setShowMergeModal: (b: string) => void;
     showViewCode?: boolean;
     onViewCode?: (b: string) => void;
+    onCompare?: (b: string) => void;
 }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id,
@@ -62,85 +68,71 @@ const DraggableBranchItem = ({
     });
 
     return (
-        <div
-            ref={setNodeRef}
-            {...listeners}
-            {...attributes}
-            onDoubleClick={() => handleCheckout(branchName, !!isRemote)}
-            className={cn(
-                "flex items-center justify-between px-3 py-1 text-xs cursor-grab active:cursor-grabbing group transition-all text-slate-400 hover:bg-slate-800/50 hover:text-slate-200",
-                isDragging && "opacity-40"
-            )}
-        >
-            <div className="flex items-center overflow-hidden min-w-0 flex-1">
-                {isRemote
-                    ? <GitMerge size={12} className="mr-2 text-slate-600 shrink-0" />
-                    : <GitBranch size={12} className="mr-2 text-slate-500 shrink-0" />
-                }
-                <span className="truncate">{branchName}</span>
-            </div>
-            <div className="flex items-center shrink-0 ml-1 gap-0.5" onPointerDown={(e) => e.stopPropagation()}>
-                <Tooltip>
-                    <TooltipTrigger render={
-                        <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => { e.stopPropagation(); setShowMergeModal(branchName); }}
-                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-accent hover:bg-slate-700/50 transition-opacity"
-                        >
-                            <GitMerge size={12} />
-                        </Button>
-                    } />
-                    <TooltipContent>Merge into current branch</TooltipContent>
-                </Tooltip>
-
+        <ContextMenu>
+            <ContextMenuTrigger>
+                <div
+                    ref={setNodeRef}
+                    {...listeners}
+                    {...attributes}
+                    onDoubleClick={() => handleCheckout(branchName, !!isRemote)}
+                    className={cn(
+                        "flex items-center px-3 py-1 text-xs cursor-grab active:cursor-grabbing transition-all text-slate-400 hover:bg-slate-800/50 hover:text-slate-200",
+                        isDragging && "opacity-40"
+                    )}
+                >
+                    {isRemote
+                        ? <GitMerge size={12} className="mr-2 text-slate-600 shrink-0" />
+                        : <GitBranch size={12} className="mr-2 text-slate-500 shrink-0" />
+                    }
+                    <span className="truncate">{branchName}</span>
+                </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+                <ContextMenuItem onClick={() => handleCheckout(branchName, !!isRemote)}>
+                    <Play size={12} className="mr-2 text-microtermix-neon" />
+                    {isRemote ? 'Checkout (remoto)' : 'Checkout'}
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => setShowMergeModal(branchName)}>
+                    <GitMerge size={12} className="mr-2 text-microtermix-accent" />
+                    Merge into current
+                </ContextMenuItem>
+                {!isRemote && onCompare && (
+                    <ContextMenuItem onClick={() => onCompare(branchName)}>
+                        <GitCompare size={12} className="mr-2 text-purple-400" />
+                        Comparar con current
+                    </ContextMenuItem>
+                )}
                 {showViewCode && onViewCode && (
-                    <Tooltip>
-                        <TooltipTrigger render={
-                            <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                onClick={(e) => { e.stopPropagation(); onViewCode(branchName); }}
-                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-neon hover:bg-slate-700/50 transition-opacity"
-                            >
-                                <Eye size={12} />
-                            </Button>
-                        } />
-                        <TooltipContent>Ver código en GitLab (remoto)</TooltipContent>
-                    </Tooltip>
+                    <ContextMenuItem onClick={() => onViewCode(branchName)}>
+                        <Eye size={12} className="mr-2 text-microtermix-neon" />
+                        Ver código en GitLab
+                    </ContextMenuItem>
                 )}
-
-                <Tooltip>
-                    <TooltipTrigger render={
-                        <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={(e) => { e.stopPropagation(); handleCheckout(branchName, !!isRemote); }}
-                            className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-neon hover:bg-slate-700/50 transition-opacity"
-                        >
-                            <Play size={12} />
-                        </Button>
-                    } />
-                    <TooltipContent>{isRemote ? 'Checkout Remote' : 'Checkout'}</TooltipContent>
-                </Tooltip>
-
-                {!isRemote && handleDeleteLocalBranch && (
-                    <Tooltip>
-                        <TooltipTrigger render={
-                            <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                onClick={(e) => { e.stopPropagation(); handleDeleteLocalBranch(branchName); }}
-                                className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-slate-500 hover:text-microtermix-danger hover:bg-slate-700/50 transition-opacity"
+                {(!isRemote && (handleDeleteLocalBranch || handleDeleteRemoteBranch)) && (
+                    <>
+                        <ContextMenuSeparator />
+                        {handleDeleteLocalBranch && (
+                            <ContextMenuItem
+                                onClick={() => handleDeleteLocalBranch(branchName)}
+                                className="text-red-400 hover:text-red-300"
                             >
-                                <Trash2 size={12} />
-                            </Button>
-                        } />
-                        <TooltipContent>Delete local branch</TooltipContent>
-                    </Tooltip>
+                                <Trash2 size={12} className="mr-2" />
+                                Eliminar rama local
+                            </ContextMenuItem>
+                        )}
+                        {handleDeleteRemoteBranch && (
+                            <ContextMenuItem
+                                onClick={() => handleDeleteRemoteBranch(branchName)}
+                                className="text-orange-400 hover:text-orange-300"
+                            >
+                                <Trash2 size={12} className="mr-2" />
+                                Eliminar de origin
+                            </ContextMenuItem>
+                        )}
+                    </>
                 )}
-            </div>
-        </div>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 };
 
@@ -149,35 +141,64 @@ const DraggableBranchItem = ({
 const ActiveBranchDropZone = ({
     branchName,
     isDraggingAny,
+    onCherryPickCommit,
 }: {
     branchName: string;
     isDraggingAny: boolean;
+    onCherryPickCommit?: (hash: string) => void;
 }) => {
     const { isOver, setNodeRef } = useDroppable({ id: 'active-branch-drop' });
+    const [isCommitDragOver, setIsCommitDragOver] = useState(false);
 
     const isHighlighted = isDraggingAny && isOver;
     const isDropReady = isDraggingAny && !isOver;
 
+    const handleDragOver = (e: React.DragEvent) => {
+        if (e.dataTransfer.types.includes('application/commit')) {
+            e.preventDefault();
+            setIsCommitDragOver(true);
+        }
+    };
+
+    const handleDragLeave = () => setIsCommitDragOver(false);
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsCommitDragOver(false);
+        const data = e.dataTransfer.getData('application/commit');
+        if (data && onCherryPickCommit) {
+            try {
+                const { hash } = JSON.parse(data);
+                onCherryPickCommit(hash);
+            } catch { /* no-op */ }
+        }
+    };
+
     return (
         <div
             ref={setNodeRef}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={`flex items-center justify-between px-4 py-1.5 text-xs group transition-all
-                ${isHighlighted
-                    ? 'text-microtermix-neon bg-green-900/40 border border-green-500/60 ring-1 ring-inset ring-green-500/30'
-                    : isDropReady
-                        ? 'text-microtermix-neon bg-slate-800/50 border border-dashed border-microtermix-neon/40'
-                        : 'text-microtermix-neon bg-slate-800/50'
+                ${isCommitDragOver
+                    ? 'text-amber-300 bg-amber-900/30 border border-amber-500/60 ring-1 ring-inset ring-amber-500/30'
+                    : isHighlighted
+                        ? 'text-microtermix-neon bg-green-900/40 border border-green-500/60 ring-1 ring-inset ring-green-500/30'
+                        : isDropReady
+                            ? 'text-microtermix-neon bg-slate-800/50 border border-dashed border-microtermix-neon/40'
+                            : 'text-microtermix-neon bg-slate-800/50'
                 }`}
         >
             <div className="flex items-center overflow-hidden min-w-0 flex-1">
                 <GitBranch size={12} className="mr-2 text-microtermix-neon shrink-0" />
                 <span className="truncate font-semibold">
-                    {isHighlighted ? `⬇ Mergear aquí → ${branchName}` : branchName}
+                    {isCommitDragOver ? `🍒 Cherry-pick → ${branchName}` : isHighlighted ? `⬇ Mergear aquí → ${branchName}` : branchName}
                 </span>
             </div>
-            {isDraggingAny && (
-                <span className="text-[9px] text-microtermix-neon/60 ml-1 shrink-0 font-bold uppercase tracking-wider">
-                    {isHighlighted ? '¡Suelta!' : 'Drop target'}
+            {(isDraggingAny || isCommitDragOver) && (
+                <span className="text-[9px] ml-1 shrink-0 font-bold uppercase tracking-wider text-microtermix-neon/60">
+                    {isCommitDragOver ? 'Cherry-pick' : isHighlighted ? '¡Suelta!' : 'Drop target'}
                 </span>
             )}
         </div>
@@ -214,6 +235,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     const [isPulling, setIsPulling] = useState(false);
     const [viewCodeBranch, setViewCodeBranch] = useState<string | null>(null);
     const [viewStash, setViewStash] = useState<string | null>(null);
+    const [compareBranch, setCompareBranch] = useState<string | null>(null);
 
     const [confirmState, setConfirmState] = useState<{
         isOpen: boolean;
@@ -321,6 +343,30 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
         });
     };
 
+    const handleDeleteRemoteBranch = async (branchName: string) => {
+        setConfirmState({
+            isOpen: true,
+            title: 'Eliminar del Remoto',
+            description: `¿Eliminar "${branchName}" de origin? Esta acción no se puede deshacer.`,
+            confirmLabel: 'Eliminar de origin',
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    const result: any = await invoke('git_execute', { projectPath, args: ['push', 'origin', '--delete', branchName] });
+                    if (result?.success !== false) {
+                        toast.success(`Rama "${branchName}" eliminada de origin`);
+                        handleRefresh();
+                    } else {
+                        toast.error('Error al eliminar del remoto', { description: result?.stderr });
+                    }
+                } catch (e: any) {
+                    toast.error('Error', { description: e?.toString() });
+                }
+                setConfirmState(s => ({ ...s, isOpen: false }));
+            }
+        });
+    };
+
     const handleDeleteLocalBranch = async (branchName: string) => {
         if (!branchName || localBranches.some(b => b.name === branchName && b.active)) return;
 
@@ -402,6 +448,20 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             setPullError({ message: "Action Failed", raw: e.message || String(e) });
         } finally {
             setIsResolvingPull(false);
+        }
+    };
+
+    const handleCherryPickOnBranch = async (commitHash: string) => {
+        try {
+            const result: any = await invoke('git_execute', { projectPath, args: ['cherry-pick', commitHash] });
+            if (!result?.success) {
+                toast.error('Cherry-pick fallido', { description: result?.stderr });
+            } else {
+                toast.success('Cherry-pick aplicado');
+                handleRefresh();
+            }
+        } catch (e: any) {
+            toast.error('Error', { description: e?.toString() });
         }
     };
 
@@ -488,8 +548,8 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                             <SectionHeader title="Local" count={filteredLocal.length} isExpanded={showLocal} onToggle={() => setShowLocal(!showLocal)} />
                             {showLocal && (
                                 <div className="mb-2">
-                                    {filteredLocal.map(b => b.active ? <ActiveBranchDropZone key={b.name} branchName={b.name} isDraggingAny={isDraggingAny} /> : 
-                                        <DraggableBranchItem key={b.name} id={`local-${b.name}`} branchName={b.name} handleCheckout={handleCheckout} handleDeleteLocalBranch={handleDeleteLocalBranch} setShowMergeModal={setShowMergeModal} />
+                                    {filteredLocal.map(b => b.active ? <ActiveBranchDropZone key={b.name} branchName={b.name} isDraggingAny={isDraggingAny} onCherryPickCommit={handleCherryPickOnBranch} /> :
+                                        <DraggableBranchItem key={b.name} id={`local-${b.name}`} branchName={b.name} handleCheckout={handleCheckout} handleDeleteLocalBranch={handleDeleteLocalBranch} handleDeleteRemoteBranch={handleDeleteRemoteBranch} setShowMergeModal={setShowMergeModal} onCompare={setCompareBranch} />
                                     )}
                                 </div>
                             )}
@@ -534,6 +594,15 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
             {showMergeModal && <MergeConfirmModal projectPath={projectPath} sourceBranch={showMergeModal} currentBranch={activeBranch?.name || ''} onClose={() => setShowMergeModal(null)} onMergeComplete={handleRefresh} />}
             {viewCodeBranch && activeAccount && <GitlabBranchViewerModal isOpen={!!viewCodeBranch} onClose={() => setViewCodeBranch(null)} projectPath={projectPath} token={activeAccount.token} branch={viewCodeBranch} apiUrl={activeAccount.url} />}
             {viewStash && <StashDiffModal isOpen={!!viewStash} onClose={() => setViewStash(null)} projectPath={projectPath} stashRef={viewStash.split(':')[0]} />}
+            {compareBranch && (
+                <BranchDiffModal
+                    projectPath={projectPath}
+                    initialBase={compareBranch}
+                    initialHead={activeBranch?.name || 'HEAD'}
+                    branches={[...(localBranches?.map(b => b.name) ?? []), ...(remoteBranches ?? [])]}
+                    onClose={() => setCompareBranch(null)}
+                />
+            )}
 
             <ConfirmationDialog
                 isOpen={confirmState.isOpen}

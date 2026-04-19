@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { RefreshCw, Search, X, GitBranch, Tag, Archive, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, X, GitBranch, Tag, Archive, Pencil, Trash2, AlertTriangle, GitMerge, Copy } from 'lucide-react';
 import { useGitStore, RawCommit } from '../../stores/gitStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,6 +10,7 @@ import { useGitTimeline, gitKeys } from '../../hooks/queries/useGitQueries';
 import { useQueryClient } from '@tanstack/react-query';
 import { ConfirmationDialog, ConfirmType } from '../ui/ConfirmationDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '../ui/context-menu';
 
 // ── Constants ──
 const ROW_H = 34;
@@ -84,6 +85,64 @@ const RewordModal: React.FC<{
                         className="bg-microtermix-neon text-microtermix-darker font-bold hover:bg-microtermix-neon/80 min-w-[100px]"
                     >
                         {working ? <RefreshCw size={14} className="animate-spin" /> : 'Guardar Cambios'}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+const SquashModal: React.FC<{
+    isOpen: boolean;
+    commitMessage: string;
+    parentMessage: string;
+    onClose: () => void;
+    onSave: (newMessage: string) => Promise<void>;
+}> = ({ isOpen, commitMessage, parentMessage, onClose, onSave }) => {
+    const [message, setMessage] = useState('');
+    const [working, setWorking] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) setMessage(`${parentMessage}\n\n${commitMessage}`);
+    }, [isOpen, commitMessage, parentMessage]);
+
+    const handleSave = async () => {
+        if (!message.trim()) return;
+        setWorking(true);
+        await onSave(message);
+        setWorking(false);
+        onClose();
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="max-w-xl bg-slate-900 border-slate-800 shadow-2xl">
+                <DialogHeader>
+                    <DialogTitle className="text-slate-100 text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                        <GitMerge size={14} className="text-purple-400" />
+                        Squash — Combinar con Padre
+                    </DialogTitle>
+                </DialogHeader>
+                <div className="py-4 space-y-3">
+                    <p className="text-xs text-slate-500">Este commit se fusionará con su padre. Editá el mensaje resultante:</p>
+                    <textarea
+                        className="w-full bg-black/40 border border-slate-800 rounded-md p-3 text-slate-200 text-sm font-sans min-h-[120px] focus:outline-none focus:border-purple-400/40 transition-colors resize-none"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        autoFocus
+                    />
+                    <p className="text-[10px] text-slate-600 italic font-mono">
+                        Esto reescribirá la historia del repositorio.
+                    </p>
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="ghost" onClick={onClose} disabled={working} className="text-slate-400 hover:text-white">Cancelar</Button>
+                    <Button
+                        onClick={handleSave}
+                        disabled={working || !message.trim()}
+                        className="bg-purple-600 hover:bg-purple-500 text-white font-bold min-w-[120px]"
+                    >
+                        {working ? <RefreshCw size={14} className="animate-spin" /> : 'Squash & Combinar'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -210,6 +269,7 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
     const [alertState, setAlertState] = useState<{ isOpen: boolean; title: string; message: string }>({ isOpen: false, title: '', message: '' });
     const [confirmState, setConfirmState] = useState<{ isOpen: boolean; title: string; description: string; confirmLabel?: string; type?: ConfirmType; onConfirm: () => void }>({ isOpen: false, title: '', description: '', onConfirm: () => { } });
     const [rewordState, setRewordState] = useState<{ isOpen: boolean; commit: GraphNode | null }>({ isOpen: false, commit: null });
+    const [squashState, setSquashState] = useState<{ isOpen: boolean; commit: GraphNode | null; parentMessage: string }>({ isOpen: false, commit: null, parentMessage: '' });
 
     useEffect(() => {
         if (!projectPath) return;
@@ -300,6 +360,52 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
         });
     }, [nodes, projectPath, handleRefresh]);
 
+    const handleCherryPick = useCallback(async (n: GraphNode) => {
+        try {
+            const res: any = await invoke('git_execute', { projectPath, args: ['cherry-pick', n.hash] });
+            if (!res?.success) {
+                setAlertState({ isOpen: true, title: 'Cherry-pick fallido', message: res?.stderr ?? 'Unknown error' });
+            } else {
+                handleRefresh();
+            }
+        } catch (e: any) {
+            setAlertState({ isOpen: true, title: 'Error', message: e?.toString() || 'Connection error' });
+        }
+    }, [projectPath, handleRefresh]);
+
+    const handleOpenSquash = useCallback(async (n: GraphNode) => {
+        if (!n.parents[0]) {
+            setAlertState({ isOpen: true, title: 'Squash imposible', message: 'Este commit no tiene padre. No se puede hacer squash.' });
+            return;
+        }
+        // Get parent commit message for the combined message default
+        try {
+            const res: any = await invoke('git_execute', { projectPath, args: ['log', '--format=%B', '-n', '1', n.parents[0]] });
+            const parentMsg = res?.stdout?.trim() ?? '';
+            setSquashState({ isOpen: true, commit: n, parentMessage: parentMsg });
+        } catch {
+            setSquashState({ isOpen: true, commit: n, parentMessage: '' });
+        }
+    }, [projectPath]);
+
+    const handleSquashSave = useCallback(async (n: GraphNode, newMessage: string) => {
+        try {
+            const res: any = await invoke('git_squash_into_parent', {
+                projectPath,
+                commitHash: n.hash,
+                parentShortHash: n.parents[0],
+                newMessage: newMessage.trim(),
+            });
+            if (!res?.success) {
+                setAlertState({ isOpen: true, title: 'Squash fallido', message: res?.stderr ?? 'Unknown error' });
+            } else {
+                handleRefresh();
+            }
+        } catch (e: any) {
+            setAlertState({ isOpen: true, title: 'Error', message: e?.toString() || 'Connection error' });
+        }
+    }, [projectPath, handleRefresh]);
+
     const isMatch = useCallback((n: GraphNode): boolean => {
         const searchLower = searchText.trim().toLowerCase();
         if (filter === 'mine' && currentUser && !n.author.toLowerCase().includes(currentUser.toLowerCase())) return false;
@@ -351,37 +457,59 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                         const refs = parseRefs(n.refs);
                         const isSelected = selectedHash === n.hash;
                         const isLocal = localHashes.has(n.hash);
+                        const hasParent = n.parents.length > 0;
                         return (
-                            <div key={n.hash} style={{ position: 'absolute', top: n.rowIndex * ROW_H, left: 0, right: 0, height: ROW_H, paddingLeft: svgW }} className={cn("flex items-center gap-2 pr-2 border-b border-slate-900/50 transition-colors group", isSelected ? 'bg-microtermix-neon/8 border-microtermix-neon/20' : 'hover:bg-slate-800/40')}>
-                                <span className="font-mono text-[10px] text-slate-500 shrink-0 w-14 cursor-pointer" onClick={() => { setSelectedHash(n.hash); onCommitSelect?.(n.hash, n.message, n.author, n.date); }}>{n.shortHash}</span>
-                                {refs.length > 0 && <div className="flex items-center gap-0.5 shrink-0 overflow-hidden" style={{ maxWidth: 140 }}>{refs.slice(0, 2).map((r, i) => <RefBadge key={i} ref={r} />)}</div>}
-                                {commitStatuses[n.hash] && <div className="shrink-0 ml-1 flex items-center">{commitStatuses[n.hash] === 'success' ? <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_4px_theme(colors.emerald.500)]" /> : commitStatuses[n.hash] === 'pending' ? <RefreshCw size={10} className="text-yellow-500 animate-spin" /> : <X size={10} strokeWidth={3} className="text-red-500" />}</div>}
-                                <span className={cn("flex-1 text-xs truncate cursor-pointer", isSelected ? "text-white font-medium" : "text-slate-400 group-hover:text-slate-200")} onClick={() => { setSelectedHash(n.hash); onCommitSelect?.(n.hash, n.message, n.author, n.date); }}>{n.message}</span>
-                                <span className="text-[10px] text-slate-600 shrink-0 truncate max-w-[80px] hidden lg:block">{n.author}</span>
-                                <span className="text-[10px] text-slate-600 shrink-0 whitespace-nowrap hidden xl:block">{n.date}</span>
-                                {isLocal && (
-                                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                            onClick={e => { 
-                                                e.stopPropagation(); 
-                                                setRewordState({ isOpen: true, commit: n });
-                                            }} 
-                                            className="p-1 text-slate-500 hover:text-microtermix-neon"
-                                        >
-                                            <Pencil size={11} />
-                                        </button>
-                                        <button 
-                                            onClick={e => { 
-                                                e.stopPropagation(); 
-                                                handleDelete(n);
-                                            }} 
-                                            className="p-1 text-slate-500 hover:text-microtermix-danger"
-                                        >
-                                            <Trash2 size={11} />
-                                        </button>
+                            <ContextMenu key={n.hash}>
+                                <ContextMenuTrigger>
+                                    <div
+                                        style={{ position: 'absolute', top: n.rowIndex * ROW_H, left: 0, right: 0, height: ROW_H, paddingLeft: svgW }}
+                                        className={cn("flex items-center gap-2 pr-2 border-b border-slate-900/50 transition-colors cursor-pointer", isSelected ? 'bg-microtermix-neon/8 border-microtermix-neon/20' : 'hover:bg-slate-800/40')}
+                                        onClick={() => { setSelectedHash(n.hash); onCommitSelect?.(n.hash, n.message, n.author, n.date); }}
+                                        draggable
+                                        onDragStart={(e) => {
+                                            e.dataTransfer.setData('application/commit', JSON.stringify({ hash: n.hash, shortHash: n.shortHash, message: n.message }));
+                                            e.dataTransfer.effectAllowed = 'copy';
+                                        }}
+                                    >
+                                        <span className="font-mono text-[10px] text-slate-500 shrink-0 w-14">{n.shortHash}</span>
+                                        {refs.length > 0 && <div className="flex items-center gap-0.5 shrink-0 overflow-hidden" style={{ maxWidth: 140 }}>{refs.slice(0, 2).map((r, i) => <RefBadge key={i} ref={r} />)}</div>}
+                                        {commitStatuses[n.hash] && <div className="shrink-0 ml-1 flex items-center">{commitStatuses[n.hash] === 'success' ? <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_4px_theme(colors.emerald.500)]" /> : commitStatuses[n.hash] === 'pending' ? <RefreshCw size={10} className="text-yellow-500 animate-spin" /> : <X size={10} strokeWidth={3} className="text-red-500" />}</div>}
+                                        <span className={cn("flex-1 text-xs truncate", isSelected ? "text-white font-medium" : "text-slate-400")}>{n.message}</span>
+                                        <span className="text-[10px] text-slate-600 shrink-0 truncate max-w-[80px] hidden lg:block">{n.author}</span>
+                                        <span className="text-[10px] text-slate-600 shrink-0 whitespace-nowrap hidden xl:block">{n.date}</span>
                                     </div>
-                                )}
-                            </div>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent>
+                                    {isLocal && (
+                                        <ContextMenuItem onClick={() => setRewordState({ isOpen: true, commit: n })}>
+                                            <Pencil size={12} className="mr-2 text-microtermix-neon" />
+                                            {nodes[0]?.hash === n.hash ? 'Amend (editar mensaje)' : 'Reword (editar mensaje)'}
+                                        </ContextMenuItem>
+                                    )}
+                                    {isLocal && hasParent && (
+                                        <ContextMenuItem onClick={() => handleOpenSquash(n)}>
+                                            <GitMerge size={12} className="mr-2 text-purple-400" />
+                                            Squash into parent
+                                        </ContextMenuItem>
+                                    )}
+                                    <ContextMenuItem onClick={() => handleCherryPick(n)}>
+                                        <Copy size={12} className="mr-2 text-amber-400" />
+                                        Cherry-pick
+                                    </ContextMenuItem>
+                                    {isLocal && (
+                                        <>
+                                            <ContextMenuSeparator />
+                                            <ContextMenuItem
+                                                onClick={() => handleDelete(n)}
+                                                className="text-red-400 hover:text-red-300"
+                                            >
+                                                <Trash2 size={12} className="mr-2" />
+                                                Eliminar commit
+                                            </ContextMenuItem>
+                                        </>
+                                    )}
+                                </ContextMenuContent>
+                            </ContextMenu>
                         );
                     })}
                 </div>
@@ -412,6 +540,15 @@ export const GitTimeline: React.FC<GitTimelineProps> = ({ projectPath, onCommitS
                     currentMessage={rewordState.commit.message}
                     onClose={() => setRewordState({ isOpen: false, commit: null })}
                     onSave={(newMsg) => handleEditSave(rewordState.commit!, newMsg)}
+                />
+            )}
+            {squashState.commit && (
+                <SquashModal
+                    isOpen={squashState.isOpen}
+                    commitMessage={squashState.commit.message}
+                    parentMessage={squashState.parentMessage}
+                    onClose={() => setSquashState({ isOpen: false, commit: null, parentMessage: '' })}
+                    onSave={(newMsg) => handleSquashSave(squashState.commit!, newMsg)}
                 />
             )}
         </div>

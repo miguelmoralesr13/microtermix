@@ -22,6 +22,10 @@ export const gitKeys = {
     workflowRuns: (path: string) => [...gitKeys.repo(path), 'workflow-runs'] as const,
     workflowRunJobs: (path: string, runId: number) => [...gitKeys.repo(path), 'workflow-run-jobs', runId] as const,
     workflowJobLogs: (path: string, jobId: number) => ['workflow-job-logs', path, jobId] as const,
+    fileHistory: (path: string, filePath: string) => [...gitKeys.repo(path), 'file-history', filePath] as const,
+    branchDiffFiles: (path: string, base: string, head: string) => [...gitKeys.repo(path), 'branch-diff-files', base, head] as const,
+    branchDiffFileContent: (path: string, base: string, head: string, filePath: string) => [...gitKeys.repo(path), 'branch-diff-content', base, head, filePath] as const,
+    protectedBranches: (path: string) => [...gitKeys.repo(path), 'protected-branches'] as const,
 };
 
 export function useGitRepoCheck(path: string | null) {
@@ -126,6 +130,48 @@ export function useGitWatcher(projectPaths: string[]) {
             });
         };
     }, [projectPaths, queryClient]);
+}
+
+interface FileLogResult {
+    commits: { hash: string; shortHash: string; author: string; date: string; message: string; refs: string }[];
+    localHashes: string[];
+}
+
+interface BranchDiffFilesResult {
+    files: { status: string; path: string; oldPath?: string | null }[];
+    base: string;
+    head: string;
+}
+
+export function useFileHistory(path: string | null, filePath: string | null) {
+    return useQuery({
+        queryKey: gitKeys.fileHistory(path || '', filePath || ''),
+        queryFn: () => invoke<FileLogResult>('git_file_log_native', { projectPath: path, filePath }),
+        enabled: !!path && !!filePath,
+        staleTime: 60_000,
+    });
+}
+
+export function useBranchDiffFiles(path: string | null, base: string, head: string) {
+    return useQuery({
+        queryKey: gitKeys.branchDiffFiles(path || '', base, head),
+        queryFn: () => invoke<BranchDiffFilesResult>('git_branch_diff_files', { projectPath: path, base, head }),
+        enabled: !!path && !!base && !!head,
+        staleTime: 30_000,
+    });
+}
+
+export function useProtectedBranches(path: string | null) {
+    return useQuery({
+        queryKey: gitKeys.protectedBranches(path || ''),
+        queryFn: async () => {
+            const res: any = await invoke('git_execute', { projectPath: path, args: ['config', 'microtermix.protectedBranches'] });
+            if (!res?.success || !res.stdout?.trim()) return [] as string[];
+            return res.stdout.trim().split(',').map((b: string) => b.trim()).filter(Boolean) as string[];
+        },
+        enabled: !!path,
+        staleTime: 5 * 60_000,
+    });
 }
 
 export function useWorkflowRuns(path: string | null, enabled: boolean) {

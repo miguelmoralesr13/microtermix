@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
-import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap, UploadCloud } from 'lucide-react';
+import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap, UploadCloud, History, Pencil } from 'lucide-react';
+import { FileHistoryModal } from './FileHistoryModal';
 
 import { GitStatusEntry } from '../../stores/gitStore';
 import { Button } from '../ui/button';
@@ -38,9 +39,10 @@ interface FileTreeNodeItemProps {
     onDiscardNode: (node: ArrayTreeNode) => Promise<void>;
     onDiffRequest?: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
     onRollbackToggle: (path: string) => void;
+    onHistoryRequest?: (filePath: string) => void;
 }
 
-const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selectedForRollback, onToggleNode, onDiscardNode, onDiffRequest, onRollbackToggle }) => {
+const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selectedForRollback, onToggleNode, onDiscardNode, onDiffRequest, onRollbackToggle, onHistoryRequest }) => {
     const [expanded, setExpanded] = useState(true);
 
     const CheckIcon = node.checkState === 'checked' ? CheckSquare : (node.checkState === 'partial' ? MinusSquare : Square);
@@ -128,6 +130,21 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             </Tooltip>
                         )}
 
+                        {/* File History Button */}
+                        <Tooltip>
+                            <TooltipTrigger render={
+                                <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    onClick={(e) => { e.stopPropagation(); onHistoryRequest?.(f.file); }}
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-microtermix-accent hover:bg-microtermix-accent/10"
+                                >
+                                    <History size={12} />
+                                </Button>
+                            } />
+                            <TooltipContent>Ver historial del archivo</TooltipContent>
+                        </Tooltip>
+
                         <Button
                             variant="ghost"
                             size="icon-xs"
@@ -195,6 +212,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             onDiscardNode={onDiscardNode}
                             onDiffRequest={onDiffRequest}
                             onRollbackToggle={onRollbackToggle}
+                            onHistoryRequest={onHistoryRequest}
                         />
                     ))}
                 </div>
@@ -346,15 +364,17 @@ const SimpleCommitPushButton: React.FC<SimpleCommitPushButtonProps> = ({
 export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onOpenConflictModal }) => {
     const queryClient = useQueryClient();
     const { data: statusData, isLoading: loading } = useGitStatus(projectPath);
-    
+
     const files = statusData?.files || [];
     const currentBranch = statusData?.currentBranch || '';
     const isMergeInProgress = statusData?.isMergeInProgress || false;
 
+    const [historyFile, setHistoryFile] = useState<string | null>(null);
     const [commitMessage, setCommitMessage] = useState('');
     const [isCommitting, setIsCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
+    const [isAmendMode, setIsAmendMode] = useState(false);
 
     const tree = useMemo(() => buildTree(files), [files]);
     const totalFiles = files.length;
@@ -446,6 +466,37 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
         }
     }, [commitMessage, projectPath, isAnythingStaged, handleRefresh]);
 
+    const handleToggleAmend = useCallback(async () => {
+        if (!isAmendMode) {
+            // Load HEAD message into textarea
+            try {
+                const res: any = await invoke('git_execute', { projectPath, args: ['log', '--format=%B', '-n', '1', 'HEAD'] });
+                if (res?.stdout) setCommitMessage(res.stdout.trim());
+            } catch { /* no-op */ }
+        }
+        setIsAmendMode(a => !a);
+    }, [isAmendMode, projectPath]);
+
+    const handleAmend = useCallback(async () => {
+        if (!commitMessage.trim()) return;
+        setIsCommitting(true);
+        setError(null);
+        try {
+            const hashRes: any = await invoke('git_execute', { projectPath, args: ['rev-parse', 'HEAD'] });
+            const headHash = hashRes?.stdout?.trim();
+            if (!headHash) { setError('No se pudo obtener el hash de HEAD'); return; }
+            const res: any = await invoke('git_reword_commit', { projectPath, commitHash: headHash, newMessage: commitMessage.trim() });
+            if (!res?.success) {
+                setError(res?.stderr || 'Amend fallido');
+            } else {
+                setIsAmendMode(false);
+                handleRefresh();
+            }
+        } finally {
+            setIsCommitting(false);
+        }
+    }, [commitMessage, projectPath, handleRefresh]);
+
     const handleAbortMerge = useCallback(async () => {
         try {
             const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
@@ -455,6 +506,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     }, [projectPath, handleRefresh]);
 
     return (
+        <>
         <div className="flex flex-col h-full min-w-0 bg-slate-950 border-l border-slate-800 w-full">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/50 block">
                 <h3 className="text-sm font-bold text-slate-300 flex items-center">
@@ -506,6 +558,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                                 onDiscardNode={handleDiscardNode}
                                 onDiffRequest={onDiffRequest}
                                 onRollbackToggle={toggleSelectedForRollback}
+                                onHistoryRequest={setHistoryFile}
                             />
                         ))}
                     </div>
@@ -529,13 +582,48 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                         )}
                     </div>
                 )}
+                <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                        {isAmendMode ? 'Amendando HEAD' : 'Mensaje'}
+                    </span>
+                    <button
+                        onClick={handleToggleAmend}
+                        className={cn(
+                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors",
+                            isAmendMode
+                                ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
+                                : "bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                        )}
+                    >
+                        <Pencil size={9} />
+                        Amend
+                    </button>
+                </div>
                 <Textarea
                     value={commitMessage}
                     onChange={(e: any) => setCommitMessage(e.target.value)}
-                    placeholder="Commit message (Ctrl+Enter)"
-                    className="w-full bg-slate-950 border-slate-800 text-sm text-slate-200 focus-visible:ring-1 focus-visible:ring-microtermix-accent min-h-[80px] mb-3 resize-none"
-                    onKeyDown={(e: any) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCommit(); }}
+                    placeholder={isAmendMode ? "Nuevo mensaje para HEAD..." : "Commit message (Ctrl+Enter)"}
+                    className={cn(
+                        "w-full bg-slate-950 text-sm text-slate-200 focus-visible:ring-1 min-h-[80px] mb-3 resize-none",
+                        isAmendMode
+                            ? "border-amber-500/30 focus-visible:ring-amber-500/40"
+                            : "border-slate-800 focus-visible:ring-microtermix-accent"
+                    )}
+                    onKeyDown={(e: any) => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            isAmendMode ? handleAmend() : handleCommit();
+                        }
+                    }}
                 />
+                {isAmendMode ? (
+                    <Button
+                        onClick={handleAmend}
+                        disabled={isCommitting || !commitMessage.trim()}
+                        className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold mb-3 flex items-center justify-center font-sans"
+                    >
+                        {isCommitting ? <><RefreshCw size={14} className="animate-spin mr-2" />Amendando...</> : <><Pencil size={14} className="mr-2" />Amend HEAD</>}
+                    </Button>
+                ) : (
                 <Button
                     onClick={handleCommit}
                     disabled={isCommitting || !isAnythingStaged || !commitMessage.trim()}
@@ -543,6 +631,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 >
                     {isCommitting ? <>Committing...</> : <><GitCommit size={16} className="mr-2" /> Commit</>}
                 </Button>
+                )}
                 <GitJiraCommitButton
                     projectPath={projectPath}
                     commitMessage={commitMessage}
@@ -565,5 +654,14 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 />
             </div>
         </div>
+
+        {historyFile && (
+            <FileHistoryModal
+                projectPath={projectPath}
+                filePath={historyFile}
+                onClose={() => setHistoryFile(null)}
+            />
+        )}
+        </>
     );
 };

@@ -1096,6 +1096,144 @@ pub async fn git_get_stash_diff(project_path: String, index: usize) -> Result<cr
     git_get_stash_diff_native(project_path, index)
 }
 
+// ── File History ─────────────────────────────────────────────────────────────
+
+/// Returns the commit history for a specific file, following renames (--follow).
+pub fn git_file_log_native_impl(project_path: String, file_path: String) -> Result<LogResult, String> {
+    let output = std::process::Command::new("git")
+        .current_dir(&project_path)
+        .args([
+            "log",
+            "--follow",
+            "--format=%H\x1f%h\x1f%an\x1f%ar\x1f%s\x1f%D",
+            "--",
+            &file_path,
+        ])
+        .output()
+        .map_err(|e| format!("git log: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let commits: Vec<CommitEntry> = stdout
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            let parts: Vec<&str> = line.splitn(6, '\x1f').collect();
+            CommitEntry {
+                hash: parts.first().unwrap_or(&"").to_string(),
+                short_hash: parts.get(1).unwrap_or(&"").to_string(),
+                parents: vec![],
+                author: parts.get(2).unwrap_or(&"").to_string(),
+                date: parts.get(3).unwrap_or(&"").to_string(),
+                message: parts.get(4).unwrap_or(&"").to_string(),
+                refs: parts.get(5).unwrap_or(&"").to_string(),
+            }
+        })
+        .collect();
+
+    Ok(LogResult { commits, local_hashes: vec![] })
+}
+
+// ── Branch Diff ───────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchDiffFile {
+    pub status: String,
+    pub path: String,
+    pub old_path: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchDiffFilesResult {
+    pub files: Vec<BranchDiffFile>,
+    pub base: String,
+    pub head: String,
+}
+
+#[derive(Serialize)]
+pub struct BranchDiffContent {
+    pub original: String,
+    pub modified: String,
+}
+
+/// Returns the list of files changed between two refs (base...head).
+pub fn git_branch_diff_files_impl(project_path: String, base: String, head: String) -> Result<BranchDiffFilesResult, String> {
+    let repo = repo_open(&project_path)?;
+
+    let base_obj = repo.revparse_single(&base).map_err(|e| format!("base ref '{}': {}", base, e))?;
+    let head_obj = repo.revparse_single(&head).map_err(|e| format!("head ref '{}': {}", head, e))?;
+
+    let base_tree = base_obj.peel_to_tree().map_err(|e| e.to_string())?;
+    let head_tree = head_obj.peel_to_tree().map_err(|e| e.to_string())?;
+
+    let diff = repo
+        .diff_tree_to_tree(Some(&base_tree), Some(&head_tree), None)
+        .map_err(|e| e.to_string())?;
+
+    let mut files: Vec<BranchDiffFile> = Vec::new();
+
+    diff.foreach(
+        &mut |delta, _progress| {
+            let status = match delta.status() {
+                git2::Delta::Added    => "A",
+                git2::Delta::Deleted  => "D",
+                git2::Delta::Renamed  => "R",
+                git2::Delta::Copied   => "C",
+                _                     => "M",
+            };
+
+            let path = delta
+                .new_file()
+                .path()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            let old_path = if delta.status() == git2::Delta::Renamed {
+                delta.old_file().path().map(|p| p.to_string_lossy().to_string())
+            } else {
+                None
+            };
+
+            files.push(BranchDiffFile { status: status.to_string(), path, old_path });
+            true
+        },
+        None,
+        None,
+        None,
+    ).map_err(|e| e.to_string())?;
+
+    Ok(BranchDiffFilesResult { files, base, head })
+}
+
+/// Returns the raw file content at `base:<file>` and `head:<file>` for diff rendering.
+pub fn git_branch_diff_file_content_impl(
+    project_path: String,
+    base: String,
+    head: String,
+    file_path: String,
+) -> Result<BranchDiffContent, String> {
+    let repo = repo_open(&project_path)?;
+
+    let get_content = |rev: &str, path: &str| -> String {
+        let rev_path = format!("{}:{}", rev, path);
+        repo.revparse_single(&rev_path)
+            .ok()
+            .and_then(|obj| obj.peel_to_blob().ok())
+            .map(|blob| String::from_utf8_lossy(blob.content()).into_owned())
+            .unwrap_or_default()
+    };
+
+    Ok(BranchDiffContent {
+        original: get_content(&base, &file_path),
+        modified: get_content(&head, &file_path),
+    })
+}
+
 // ── Internal helpers (git2) ───────────────────────────────────────────────────
 
 fn collect_local_oids(repo: &Repository) -> HashSet<git2::Oid> {
