@@ -108,28 +108,24 @@ const DraggableBranchItem = ({
                         Ver código en GitLab
                     </ContextMenuItem>
                 )}
-                {(!isRemote && (handleDeleteLocalBranch || handleDeleteRemoteBranch)) && (
-                    <>
-                        <ContextMenuSeparator />
-                        {handleDeleteLocalBranch && (
-                            <ContextMenuItem
-                                onClick={() => handleDeleteLocalBranch(branchName)}
-                                className="text-red-400 hover:text-red-300"
-                            >
-                                <Trash2 size={12} className="mr-2" />
-                                Eliminar rama local
-                            </ContextMenuItem>
-                        )}
-                        {handleDeleteRemoteBranch && (
-                            <ContextMenuItem
-                                onClick={() => handleDeleteRemoteBranch(branchName)}
-                                className="text-orange-400 hover:text-orange-300"
-                            >
-                                <Trash2 size={12} className="mr-2" />
-                                Eliminar de origin
-                            </ContextMenuItem>
-                        )}
-                    </>
+                <ContextMenuSeparator />
+                {!isRemote && handleDeleteLocalBranch && (
+                    <ContextMenuItem
+                        onClick={() => handleDeleteLocalBranch(branchName)}
+                        className="text-red-400 hover:text-red-300"
+                    >
+                        <Trash2 size={12} className="mr-2" />
+                        Eliminar rama local
+                    </ContextMenuItem>
+                )}
+                {handleDeleteRemoteBranch && (
+                    <ContextMenuItem
+                        onClick={() => handleDeleteRemoteBranch(branchName)}
+                        className="text-orange-400 hover:text-orange-300"
+                    >
+                        <Trash2 size={12} className="mr-2" />
+                        Eliminar de origin
+                    </ContextMenuItem>
                 )}
             </ContextMenuContent>
         </ContextMenu>
@@ -344,17 +340,19 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
     };
 
     const handleDeleteRemoteBranch = async (branchName: string) => {
+        // Remove "origin/" or similar prefix before pushing delete
+        const cleanName = branchName.replace(/^[^/]+\//, '');
         setConfirmState({
             isOpen: true,
             title: 'Eliminar del Remoto',
-            description: `¿Eliminar "${branchName}" de origin? Esta acción no se puede deshacer.`,
+            description: `¿Eliminar "${cleanName}" de origin? Esta acción no se puede deshacer.`,
             confirmLabel: 'Eliminar de origin',
             type: 'danger',
             onConfirm: async () => {
                 try {
-                    const result: any = await invoke('git_execute', { projectPath, args: ['push', 'origin', '--delete', branchName] });
+                    const result: any = await invoke('git_execute', { projectPath, args: ['push', 'origin', '--delete', cleanName] });
                     if (result?.success !== false) {
-                        toast.success(`Rama "${branchName}" eliminada de origin`);
+                        toast.success(`Rama "${cleanName}" eliminada de origin`);
                         handleRefresh();
                     } else {
                         toast.error('Error al eliminar del remoto', { description: result?.stderr });
@@ -561,7 +559,7 @@ export const GitSidebar: React.FC<GitSidebarProps> = ({ projectPath, onRefreshRe
                             <SectionHeader title="Remote" count={filteredRemote.length} isExpanded={showRemote} onToggle={() => setShowRemote(!showRemote)} />
                             {showRemote && (
                                 <div className="mb-2">
-                                    {filteredRemote.map(r => <DraggableBranchItem key={r} id={`remote-${r}`} branchName={r} isRemote handleCheckout={handleCheckout} setShowMergeModal={setShowMergeModal} showViewCode={activeAccount?.provider === 'gitlab'} onViewCode={(b) => setViewCodeBranch(b.split('/').slice(1).join('/') || b)} />)}
+                                    {filteredRemote.map(r => <DraggableBranchItem key={r} id={`remote-${r}`} branchName={r} isRemote handleCheckout={handleCheckout} handleDeleteRemoteBranch={handleDeleteRemoteBranch} setShowMergeModal={setShowMergeModal} showViewCode={activeAccount?.provider === 'gitlab'} onViewCode={(b) => setViewCodeBranch(b.split('/').slice(1).join('/') || b)} />)}
                                 </div>
                             )}
                         </>

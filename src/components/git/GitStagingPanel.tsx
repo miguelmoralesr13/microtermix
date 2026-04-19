@@ -3,6 +3,7 @@ import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
 import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap, UploadCloud, History, Pencil } from 'lucide-react';
 import { FileHistoryModal } from './FileHistoryModal';
+import { GitAmendModal } from './GitAmendModal';
 
 import { GitStatusEntry } from '../../stores/gitStore';
 import { Button } from '../ui/button';
@@ -374,7 +375,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     const [isCommitting, setIsCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
-    const [isAmendMode, setIsAmendMode] = useState(false);
+    const [isAmendModalOpen, setIsAmendModalOpen] = useState(false);
 
     const tree = useMemo(() => buildTree(files), [files]);
     const totalFiles = files.length;
@@ -466,37 +467,6 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
         }
     }, [commitMessage, projectPath, isAnythingStaged, handleRefresh]);
 
-    const handleToggleAmend = useCallback(async () => {
-        if (!isAmendMode) {
-            // Load HEAD message into textarea
-            try {
-                const res: any = await invoke('git_execute', { projectPath, args: ['log', '--format=%B', '-n', '1', 'HEAD'] });
-                if (res?.stdout) setCommitMessage(res.stdout.trim());
-            } catch { /* no-op */ }
-        }
-        setIsAmendMode(a => !a);
-    }, [isAmendMode, projectPath]);
-
-    const handleAmend = useCallback(async () => {
-        if (!commitMessage.trim()) return;
-        setIsCommitting(true);
-        setError(null);
-        try {
-            const hashRes: any = await invoke('git_execute', { projectPath, args: ['rev-parse', 'HEAD'] });
-            const headHash = hashRes?.stdout?.trim();
-            if (!headHash) { setError('No se pudo obtener el hash de HEAD'); return; }
-            const res: any = await invoke('git_reword_commit', { projectPath, commitHash: headHash, newMessage: commitMessage.trim() });
-            if (!res?.success) {
-                setError(res?.stderr || 'Amend fallido');
-            } else {
-                setIsAmendMode(false);
-                handleRefresh();
-            }
-        } finally {
-            setIsCommitting(false);
-        }
-    }, [commitMessage, projectPath, handleRefresh]);
-
     const handleAbortMerge = useCallback(async () => {
         try {
             const res: { stdout: string, stderr: string, success: boolean } = await invoke('git_execute', { projectPath, args: ['merge', '--abort'] });
@@ -584,16 +554,12 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 )}
                 <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                        {isAmendMode ? 'Amendando HEAD' : 'Mensaje'}
+                        Mensaje
                     </span>
                     <button
-                        onClick={handleToggleAmend}
-                        className={cn(
-                            "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors",
-                            isAmendMode
-                                ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
-                                : "bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
-                        )}
+                        onClick={() => setIsAmendModalOpen(true)}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                        title="Amend last commit (opens modal)"
                     >
                         <Pencil size={9} />
                         Amend
@@ -602,28 +568,14 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 <Textarea
                     value={commitMessage}
                     onChange={(e: any) => setCommitMessage(e.target.value)}
-                    placeholder={isAmendMode ? "Nuevo mensaje para HEAD..." : "Commit message (Ctrl+Enter)"}
-                    className={cn(
-                        "w-full bg-slate-950 text-sm text-slate-200 focus-visible:ring-1 min-h-[80px] mb-3 resize-none",
-                        isAmendMode
-                            ? "border-amber-500/30 focus-visible:ring-amber-500/40"
-                            : "border-slate-800 focus-visible:ring-microtermix-accent"
-                    )}
+                    placeholder="Commit message (Ctrl+Enter)"
+                    className="w-full bg-slate-950 text-sm text-slate-200 focus-visible:ring-1 min-h-[80px] mb-3 resize-none border-slate-800 focus-visible:ring-microtermix-accent"
                     onKeyDown={(e: any) => {
                         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                            isAmendMode ? handleAmend() : handleCommit();
+                            handleCommit();
                         }
                     }}
                 />
-                {isAmendMode ? (
-                    <Button
-                        onClick={handleAmend}
-                        disabled={isCommitting || !commitMessage.trim()}
-                        className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold mb-3 flex items-center justify-center font-sans"
-                    >
-                        {isCommitting ? <><RefreshCw size={14} className="animate-spin mr-2" />Amendando...</> : <><Pencil size={14} className="mr-2" />Amend HEAD</>}
-                    </Button>
-                ) : (
                 <Button
                     onClick={handleCommit}
                     disabled={isCommitting || !isAnythingStaged || !commitMessage.trim()}
@@ -631,7 +583,6 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 >
                     {isCommitting ? <>Committing...</> : <><GitCommit size={16} className="mr-2" /> Commit</>}
                 </Button>
-                )}
                 <GitJiraCommitButton
                     projectPath={projectPath}
                     commitMessage={commitMessage}
@@ -654,6 +605,15 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                 />
             </div>
         </div>
+
+        {isAmendModalOpen && (
+            <GitAmendModal
+                isOpen={isAmendModalOpen}
+                onOpenChange={setIsAmendModalOpen}
+                projectPath={projectPath}
+                onSuccess={handleRefresh}
+            />
+        )}
 
         {historyFile && (
             <FileHistoryModal
