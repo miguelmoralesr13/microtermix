@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
-import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle, GitCommitHorizontal, Zap } from 'lucide-react';
+import { Settings, RefreshCw, Github, Gitlab, Download, AlertCircle, GitCommitHorizontal, Cloud } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GitTimeline } from './GitTimeline';
 import { GitStagingPanel } from './GitStagingPanel';
-import { GitDiffViewer } from './GitDiffViewer';
 import { GitHunkStaging } from './GitHunkStaging';
 import { GitConflictResolver } from './GitConflictResolver';
+import { CloudRepoExplorer } from './CloudRepoExplorer';
 
 interface ActiveDiff {
     file: string;
@@ -79,12 +79,13 @@ export const GitPanel: React.FC = () => {
         }
     }, [activeTab, state.projects, setUi]);
 
-    const [activeDiffFile, setActiveDiffFile] = useState<{ file: string; mode: 'staged' | 'unstaged' | 'conflicted'; line?: number } | null>(null);
+    const [activeDiffFile, setActiveDiffFile] = useState<ActiveDiff | null>(null);
     const [selectedCommit, setSelectedCommit] = useState<{ hash: string; message: string; author: string; date: string } | null>(null);
     const [centerTab, setCenterTab] = useState<'timeline' | 'github'>('timeline');
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
     const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+    const [isCloudExplorerOpen, setIsCloudExplorerOpen] = useState(false);
     const [detectedAccounts, setDetectedAccounts] = useState<typeof accounts>([]);
     
     const activeAccount = activeTab ? getActiveAccount(activeTab) : undefined;
@@ -212,6 +213,24 @@ export const GitPanel: React.FC = () => {
                         } />
                         <TooltipContent>Clonar repositorio desde URL</TooltipContent>
                     </Tooltip>
+
+                    {/* Cloud Explorer button — only visible when accounts are configured */}
+                    {accounts.length > 0 && (
+                        <Tooltip>
+                            <TooltipTrigger render={
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setIsCloudExplorerOpen(true)}
+                                    className="h-7 gap-1.5 px-2.5 bg-slate-800/50 hover:bg-slate-800 text-slate-300 border border-slate-800/50"
+                                >
+                                    <Cloud size={13} />
+                                    <span className="text-[11px] font-bold">Cloud</span>
+                                </Button>
+                            } />
+                            <TooltipContent>Explorar repositorios remotos (GitHub / GitLab)</TooltipContent>
+                        </Tooltip>
+                    )}
 
                     {/* Badge de cuenta activa */}
                     {activeTab && (
@@ -490,6 +509,10 @@ export const GitPanel: React.FC = () => {
                     onClose={() => setIsConflictModalOpen(false)}
                     onRefreshAll={handleRefreshAll}
                 />
+            )}
+
+            {isCloudExplorerOpen && (
+                <CloudRepoExplorer onClose={() => setIsCloudExplorerOpen(false)} />
             )}
         </div>
     );

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, devtools } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

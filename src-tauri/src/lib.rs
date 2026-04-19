@@ -229,6 +229,17 @@ async fn git_reword_commit(
 }
 
 #[tauri::command]
+async fn git_squash_into_parent(
+    app_handle: AppHandle,
+    project_path: String,
+    commit_hash: String,
+    parent_short_hash: String,
+    new_message: String,
+) -> Result<GitResult, String> {
+    git_diff::git_squash_into_parent_impl(app_handle, project_path, commit_hash, parent_short_hash, new_message).await
+}
+
+#[tauri::command]
 async fn git_apply_patch(
     app_handle: AppHandle,
     project_path: String,
@@ -257,6 +268,21 @@ fn git_status_native(project_path: String) -> Result<git_native::StatusResult, S
 #[tauri::command]
 fn git_log_native(project_path: String) -> Result<git_native::LogResult, String> {
     git_native::git_log_native_impl(project_path)
+}
+
+#[tauri::command]
+fn git_file_log_native(project_path: String, file_path: String) -> Result<git_native::LogResult, String> {
+    git_native::git_file_log_native_impl(project_path, file_path)
+}
+
+#[tauri::command]
+fn git_branch_diff_files(project_path: String, base: String, head: String) -> Result<git_native::BranchDiffFilesResult, String> {
+    git_native::git_branch_diff_files_impl(project_path, base, head)
+}
+
+#[tauri::command]
+fn git_branch_diff_file_content(project_path: String, base: String, head: String, file_path: String) -> Result<git_native::BranchDiffContent, String> {
+    git_native::git_branch_diff_file_content_impl(project_path, base, head, file_path)
 }
 
 #[tauri::command]
@@ -382,11 +408,15 @@ pub fn run() {
             git_get_status,
             git_apply_patch,
             git_reword_commit,
+            git_squash_into_parent,
             git_get_stash_diff,
             git_is_repo_native,
             git_branches_native,
             git_status_native,
             git_log_native,
+            git_file_log_native,
+            git_branch_diff_files,
+            git_branch_diff_file_content,
             git_ahead_behind_native,
             git_get_diff_model_native,
             watch_repo,

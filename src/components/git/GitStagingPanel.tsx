@@ -1,7 +1,10 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { GitJiraCommitButton } from './GitJiraCommitButton';
 import { invoke } from '@tauri-apps/api/core';
-import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap } from 'lucide-react';
+import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquare, Trash2, ChevronRight, ChevronDown, Folder, File, RotateCcw, AlertTriangle, Zap, UploadCloud, History, Pencil } from 'lucide-react';
+import { FileHistoryModal } from './FileHistoryModal';
+import { GitAmendModal } from './GitAmendModal';
+
 import { GitStatusEntry } from '../../stores/gitStore';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -23,7 +26,7 @@ interface ArrayTreeNode {
 
 interface GitStagingPanelProps {
     projectPath: string;
-    onDiffRequest: (file: string, mode: 'staged' | 'unstaged', line?: number) => void;
+    onDiffRequest: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
     onOpenConflictModal: () => void;
 }
 
@@ -37,9 +40,10 @@ interface FileTreeNodeItemProps {
     onDiscardNode: (node: ArrayTreeNode) => Promise<void>;
     onDiffRequest?: (file: string, mode: 'staged' | 'unstaged' | 'conflicted', line?: number) => void;
     onRollbackToggle: (path: string) => void;
+    onHistoryRequest?: (filePath: string) => void;
 }
 
-const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selectedForRollback, onToggleNode, onDiscardNode, onDiffRequest, onRollbackToggle }) => {
+const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selectedForRollback, onToggleNode, onDiscardNode, onDiffRequest, onRollbackToggle, onHistoryRequest }) => {
     const [expanded, setExpanded] = useState(true);
 
     const CheckIcon = node.checkState === 'checked' ? CheckSquare : (node.checkState === 'partial' ? MinusSquare : Square);
@@ -127,6 +131,21 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             </Tooltip>
                         )}
 
+                        {/* File History Button */}
+                        <Tooltip>
+                            <TooltipTrigger render={
+                                <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    onClick={(e) => { e.stopPropagation(); onHistoryRequest?.(f.file); }}
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-slate-500 hover:text-microtermix-accent hover:bg-microtermix-accent/10"
+                                >
+                                    <History size={12} />
+                                </Button>
+                            } />
+                            <TooltipContent>Ver historial del archivo</TooltipContent>
+                        </Tooltip>
+
                         <Button
                             variant="ghost"
                             size="icon-xs"
@@ -194,6 +213,7 @@ const FileTreeNodeItem = React.memo<FileTreeNodeItemProps>(({ node, level, selec
                             onDiscardNode={onDiscardNode}
                             onDiffRequest={onDiffRequest}
                             onRollbackToggle={onRollbackToggle}
+                            onHistoryRequest={onHistoryRequest}
                         />
                     ))}
                 </div>
@@ -248,18 +268,114 @@ function buildTree(fileList: GitStatusEntry[]): ArrayTreeNode[] {
     return toArray(root);
 }
 
+// ── Simple Commit & Push (no Jira, no Tempo) ──────────────────────────────────
+
+interface SimpleCommitPushButtonProps {
+    projectPath: string;
+    commitMessage: string;
+    isAnythingStaged: boolean;
+    onSuccess: () => void;
+}
+
+const SimpleCommitPushButton: React.FC<SimpleCommitPushButtonProps> = ({
+    projectPath,
+    commitMessage,
+    isAnythingStaged,
+    onSuccess,
+}) => {
+    const [step, setStep] = useState<'idle' | 'committing' | 'pushing' | 'done' | 'error'>('idle');
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+    const isRunning = step === 'committing' || step === 'pushing';
+    const canRun = isAnythingStaged && !!commitMessage.trim() && !isRunning;
+
+    const handleCommitAndPush = async () => {
+        if (!canRun) return;
+        setErrorMsg(null);
+
+        try {
+            setStep('committing');
+            const commitResult: any = await invoke('git_execute', {
+                projectPath,
+                args: ['commit', '-m', commitMessage],
+            });
+            if (!commitResult.success) {
+                throw new Error(commitResult.stderr || 'Commit failed');
+            }
+
+            setStep('pushing');
+            const pushResult: any = await invoke('git_execute', {
+                projectPath,
+                args: ['push', 'origin', 'HEAD'],
+            });
+
+            const combinedOutput = ((pushResult.stdout ?? '') + '\n' + (pushResult.stderr ?? '')).toLowerCase();
+            const hasError = !pushResult.success ||
+                combinedOutput.includes('rejected') ||
+                combinedOutput.includes('error:') ||
+                combinedOutput.includes('failed');
+
+            if (hasError) {
+                throw new Error(pushResult.stderr || 'Push rejected by remote');
+            }
+
+            setStep('done');
+            onSuccess();
+            // Reset visual state after a brief "done" flash
+            setTimeout(() => setStep('idle'), 1500);
+        } catch (e: any) {
+            setErrorMsg(e?.message ?? 'Commit & Push failed');
+            setStep('error');
+        }
+    };
+
+    const stepLabel = () => {
+        if (step === 'committing') return 'Committing…';
+        if (step === 'pushing') return 'Pushing…';
+        if (step === 'done') return 'Done!';
+        return 'Commit & Push';
+    };
+
+    return (
+        <div className="mt-2">
+            <Button
+                onClick={handleCommitAndPush}
+                disabled={!canRun}
+                className="w-full h-8 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-800/60 text-slate-100 text-xs font-bold rounded border border-slate-600 hover:border-slate-400 transition-all font-sans flex items-center justify-center gap-1.5"
+            >
+                {isRunning
+                    ? <><RefreshCw size={12} className="animate-spin" />{stepLabel()}</>
+                    : step === 'done'
+                        ? <><UploadCloud size={13} className="text-microtermix-success" />{stepLabel()}</>
+                        : <><UploadCloud size={13} />{stepLabel()}</>
+                }
+            </Button>
+            {step === 'error' && errorMsg && (
+                <div className="flex items-start gap-1.5 text-[10px] text-microtermix-danger mt-1.5 bg-microtermix-danger/5 p-1.5 rounded border border-microtermix-danger/10">
+                    <AlertTriangle size={11} className="shrink-0 mt-0.5" />
+                    <p className="leading-snug">{errorMsg}</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
 export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, onDiffRequest, onOpenConflictModal }) => {
     const queryClient = useQueryClient();
     const { data: statusData, isLoading: loading } = useGitStatus(projectPath);
-    
+
     const files = statusData?.files || [];
     const currentBranch = statusData?.currentBranch || '';
     const isMergeInProgress = statusData?.isMergeInProgress || false;
 
+    const [historyFile, setHistoryFile] = useState<string | null>(null);
     const [commitMessage, setCommitMessage] = useState('');
     const [isCommitting, setIsCommitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedForRollback, setSelectedForRollback] = useState<Set<string>>(new Set());
+    const [isAmendModalOpen, setIsAmendModalOpen] = useState(false);
 
     const tree = useMemo(() => buildTree(files), [files]);
     const totalFiles = files.length;
@@ -360,6 +476,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
     }, [projectPath, handleRefresh]);
 
     return (
+        <>
         <div className="flex flex-col h-full min-w-0 bg-slate-950 border-l border-slate-800 w-full">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/50 block">
                 <h3 className="text-sm font-bold text-slate-300 flex items-center">
@@ -411,6 +528,7 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                                 onDiscardNode={handleDiscardNode}
                                 onDiffRequest={onDiffRequest}
                                 onRollbackToggle={toggleSelectedForRollback}
+                                onHistoryRequest={setHistoryFile}
                             />
                         ))}
                     </div>
@@ -434,12 +552,29 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                         )}
                     </div>
                 )}
+                <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                        Mensaje
+                    </span>
+                    <button
+                        onClick={() => setIsAmendModalOpen(true)}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border transition-colors bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600"
+                        title="Amend last commit (opens modal)"
+                    >
+                        <Pencil size={9} />
+                        Amend
+                    </button>
+                </div>
                 <Textarea
                     value={commitMessage}
                     onChange={(e: any) => setCommitMessage(e.target.value)}
                     placeholder="Commit message (Ctrl+Enter)"
-                    className="w-full bg-slate-950 border-slate-800 text-sm text-slate-200 focus-visible:ring-1 focus-visible:ring-microtermix-accent min-h-[80px] mb-3 resize-none"
-                    onKeyDown={(e: any) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleCommit(); }}
+                    className="w-full bg-slate-950 text-sm text-slate-200 focus-visible:ring-1 min-h-[80px] mb-3 resize-none border-slate-800 focus-visible:ring-microtermix-accent"
+                    onKeyDown={(e: any) => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            handleCommit();
+                        }
+                    }}
                 />
                 <Button
                     onClick={handleCommit}
@@ -458,7 +593,35 @@ export const GitStagingPanel: React.FC<GitStagingPanelProps> = ({ projectPath, o
                         handleRefresh();
                     }}
                 />
+
+                <SimpleCommitPushButton
+                    projectPath={projectPath}
+                    commitMessage={commitMessage}
+                    isAnythingStaged={isAnythingStaged}
+                    onSuccess={() => {
+                        setCommitMessage('');
+                        handleRefresh();
+                    }}
+                />
             </div>
         </div>
+
+        {isAmendModalOpen && (
+            <GitAmendModal
+                isOpen={isAmendModalOpen}
+                onOpenChange={setIsAmendModalOpen}
+                projectPath={projectPath}
+                onSuccess={handleRefresh}
+            />
+        )}
+
+        {historyFile && (
+            <FileHistoryModal
+                projectPath={projectPath}
+                filePath={historyFile}
+                onClose={() => setHistoryFile(null)}
+            />
+        )}
+        </>
     );
 };

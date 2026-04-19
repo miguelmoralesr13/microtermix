@@ -742,3 +742,81 @@ export async function rerunFailedJobs(
         throw new Error(`GitHub API Error ${res.status}: ${body?.message || res.statusText}`);
     }
 }
+
+// ── Cloud Explorer helpers ─────────────────────────────────────────────────────
+
+export interface RemoteCompareFile {
+    filename: string;
+    previousFilename?: string;
+    status: string;
+    additions: number;
+    deletions: number;
+    changes: number;
+    patch?: string;
+}
+
+export interface RemoteComparison {
+    aheadBy: number;
+    behindBy: number;
+    totalCommits: number;
+    status: string;
+    files: RemoteCompareFile[];
+}
+
+export async function fetchRepoBranches(
+    owner: string,
+    repo: string,
+    token: string,
+    apiBase?: string,
+): Promise<{ name: string; protected: boolean }[]> {
+    const base = (apiBase || GITHUB_API_BASE).replace(/\/$/, '');
+    const branches: { name: string; protected: boolean }[] = [];
+    for (let page = 1; page <= 10; page++) {
+        const res = await fetch(`${base}/repos/${owner}/${repo}/branches?per_page=100&page=${page}`, {
+            headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' },
+        });
+        if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+        const data: { name: string; protected: boolean }[] = await res.json();
+        branches.push(...data);
+        if (data.length < 100) break;
+    }
+    return branches;
+}
+
+export async function fetchRemoteBranchComparison(
+    owner: string,
+    repo: string,
+    base: string,
+    head: string,
+    token: string,
+    apiBase?: string,
+): Promise<RemoteComparison> {
+    const apiBaseUrl = (apiBase || GITHUB_API_BASE).replace(/\/$/, '');
+    const res = await fetch(
+        `${apiBaseUrl}/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+        { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } },
+    );
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    const data: {
+        ahead_by: number;
+        behind_by: number;
+        total_commits: number;
+        status: string;
+        files?: { filename: string; previous_filename?: string; status: string; additions: number; deletions: number; changes: number; patch?: string }[];
+    } = await res.json();
+    return {
+        aheadBy: data.ahead_by,
+        behindBy: data.behind_by,
+        totalCommits: data.total_commits,
+        status: data.status,
+        files: (data.files || []).map(f => ({
+            filename: f.filename,
+            previousFilename: f.previous_filename,
+            status: f.status,
+            additions: f.additions,
+            deletions: f.deletions,
+            changes: f.changes,
+            patch: f.patch,
+        })),
+    };
+}

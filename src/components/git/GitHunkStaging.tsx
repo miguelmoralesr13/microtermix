@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X, Check, RefreshCw, Zap, Loader2, FileCode, MousePointer2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Checkbox } from '../ui/Checkbox';
+// import { Checkbox } from '../ui/Checkbox'; // Reemplazado por div interactivo pro
 import { Tooltip, TooltipTrigger, TooltipContent } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
-import { parseUnifiedDiff, buildPatch, Hunk, DiffLine } from './utils/diffParser';
+import { parseUnifiedDiff, buildPatch, Hunk } from './utils/diffParser';
 
 export interface GitHunkStagingProps {
     projectPath: string;

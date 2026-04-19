@@ -197,10 +197,23 @@ async fn git_cli_fallback(
     let mut cmd = AsyncCommand::new("git");
     cmd.args(args);
     cmd.current_dir(project_path);
+
+    // For network operations (push, fetch, pull, clone) we must NOT set GIT_ASKPASS=echo
+    // because that breaks the macOS Keychain / Git Credential Manager — git would call
+    // `echo <prompt>` and use the prompt string itself as the credential (empty/wrong),
+    // causing the server to reset the connection with a 401.
+    //
+    // For local commands we set GIT_ASKPASS=echo to block interactive prompts in the
+    // Tauri process (there's no terminal to show them on).
+    let is_network_command = matches!(command, "push" | "fetch" | "pull" | "clone");
+    if !is_network_command {
+        cmd.env("GIT_ASKPASS", "echo");
+    }
+
     cmd
-        // Prevent interactive prompts
+        // Prevent interactive prompts (still safe without ASKPASS for network commands
+        // because GCM/Keychain handle auth silently).
         .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "echo")
         .env("GCM_INTERACTIVE", "never")
         // HTTPS: fail if transfer speed stays below 100 B/s for 10 s
         .env("GIT_HTTP_LOW_SPEED_LIMIT", "100")
@@ -328,8 +341,13 @@ pub async fn git_execute_impl(
                 }).await.map_err(|e| e.to_string())?
             }
         }
-        "config" if args.get(1).map(|a| !a.starts_with("--")).unwrap_or(false) => {
-            let key = args.get(1).cloned().unwrap_or_default();
+        "config" => {
+            // Handles both `git config <key>` and `git config --get <key>`
+            let key = if args.get(1).map(|a| a == "--get").unwrap_or(false) {
+                args.get(2).cloned().unwrap_or_default()
+            } else {
+                args.get(1).cloned().unwrap_or_default()
+            };
             tokio::task::spawn_blocking({
                 let p = project_path.clone();
                 move || crate::git_native::git_config_get_impl(p, key)
@@ -423,9 +441,39 @@ pub async fn git_execute_impl(
             }
         }
         "push" => {
-            // Prefer CLI for push as it handles interactive prompts and hook errors better than libgit2
-            // especially when the frontend is calling specific refs like 'origin HEAD'.
-            git_cli_fallback(&app_handle, &project_path, &args).await
+            // `git push <remote> --delete <branch>` and `git push --set-upstream …`
+            // can't be handled by the native push implementation (libgit2 doesn't
+            // manage tracking config). Delegate directly to CLI.
+            if args.iter().any(|a| a == "--delete" || a == "-d" || a == "--set-upstream" || a == "-u") {
+                return git_cli_fallback(&app_handle, &project_path, &args).await;
+            }
+
+            // Use the native push implementation — injects the correct account token
+            // from microtermix.json, avoiding the system Keychain picking the wrong account.
+            let push_args = args[1..].to_vec(); // strip "push" from the front
+            let native_res = crate::git_native::git_push_native_impl(project_path.clone(), push_args).await;
+            match native_res {
+                Ok(msg) => Ok(GitResult { stdout: msg, stderr: String::new(), success: true }),
+                // Fall back to CLI git in two cases:
+                //   1. Auth / credential errors — repo has no account assigned, use system Keychain
+                //   2. Network / protocol errors from libgit2 (class=Net) — e.g. "Connection reset
+                //      by peer" when the Tauri process can't reach the ssh-agent, or libgit2's SSH
+                //      stack has a negotiation issue. CLI git handles these natively via OpenSSH.
+                Err(err) if {
+                    let e = err.to_lowercase();
+                    e.contains("auth")
+                        || e.contains("authentication")
+                        || e.contains("credential")
+                        || e.contains("connection reset")
+                        || e.contains("class=net")
+                        || e.contains("timed out")
+                        || e.contains("ssl")
+                        || e.contains("certificate")
+                } => {
+                    git_cli_fallback(&app_handle, &project_path, &args).await
+                }
+                Err(err) => Err(err),
+            }
         }
 
         // ── Fallback for everything else (reset, stash, rebase, merge…) ──
@@ -559,6 +607,127 @@ pub async fn git_reword_commit_impl(
     let _ = tauri::Emitter::emit(&app_handle, "git-log", GitLogPayload {
         project_path: project_path.clone(),
         command: format!("git reword {} \"{}...\"", short_hash, &new_message[..new_message.len().min(40)]),
+        stdout: result.stdout.clone(),
+        stderr: result.stderr.clone(),
+    });
+
+    Ok(result)
+}
+
+/// Squashes a commit into its parent. Supports HEAD and non-HEAD commits.
+/// - HEAD: `git reset --soft HEAD~1` + `git commit -m new_message`
+/// - Non-HEAD: `git rebase -i <parent>^` with the commit marked as `fixup`
+///   and a pre-written combined message replacing the parent's.
+pub async fn git_squash_into_parent_impl(
+    app_handle: AppHandle,
+    project_path: String,
+    commit_hash: String,
+    parent_short_hash: String,
+    new_message: String,
+) -> Result<GitResult, String> {
+    use git2::Repository;
+
+    let short_hash = &commit_hash[..commit_hash.len().min(7)];
+
+    let is_head = {
+        let repo = Repository::discover(&project_path).map_err(|e| e.to_string())?;
+        let head_id = repo.head().map_err(|e| e.to_string())?.peel_to_commit().map_err(|e| e.to_string())?.id();
+        let head_short = &head_id.to_string()[..7];
+        commit_hash.starts_with(head_short) || short_hash == head_short
+    };
+
+    let result = if is_head {
+        // Fast path: reset soft + recommit with new combined message
+        let mut cmd = AsyncCommand::new("git");
+        cmd.args(&["reset", "--soft", "HEAD~1"]);
+        cmd.current_dir(&project_path);
+        cmd.env("GIT_TERMINAL_PROMPT", "0");
+        #[cfg(target_os = "windows")]
+        { cmd.creation_flags(0x08000000); }
+        let reset_out = cmd.output().await.map_err(|e| e.to_string())?;
+        if !reset_out.status.success() {
+            let stderr = String::from_utf8_lossy(&reset_out.stderr).to_string();
+            return Ok(GitResult { stdout: String::new(), stderr, success: false });
+        }
+
+        // Commit again with combined message
+        let msg = new_message.clone();
+        tokio::task::spawn_blocking({
+            let p = project_path.clone();
+            move || crate::git_native::git_commit_native_impl(p, msg, false)
+        }).await.map_err(|e| e.to_string())??;
+
+        GitResult { stdout: "[squashed] commits combined".into(), stderr: String::new(), success: true }
+    } else {
+        // Non-HEAD: rebase -i squash using temp scripts
+        let msg_path = format!("{}/.microtermix_squash_msg.txt", project_path);
+        fs::write(&msg_path, &new_message).map_err(|e| e.to_string())?;
+
+        // Sequence editor: changes `pick <short_hash>` to `fixup <short_hash>`
+        #[cfg(target_os = "windows")]
+        let (seq_script, seq_ext) = (
+            format!("@echo off\r\npowershell -Command \"(Get-Content '%1') -replace 'pick {short}', 'fixup {short}' | Set-Content '%1'\"\r\n", short = short_hash),
+            ".cmd",
+        );
+        #[cfg(not(target_os = "windows"))]
+        let (seq_script, seq_ext) = (
+            format!("#!/bin/sh\nsed -i 's/pick {short}/fixup {short}/' \"$1\"\n", short = short_hash),
+            ".sh",
+        );
+        let seq_path = format!("{}/.microtermix_squash_seq{}", project_path, seq_ext);
+        fs::write(&seq_path, &seq_script).map_err(|e| e.to_string())?;
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&seq_path, fs::Permissions::from_mode(0o755)).ok();
+        }
+
+        // Editor script to replace the parent commit's message
+        #[cfg(target_os = "windows")]
+        let editor_script = format!(
+            "@echo off\r\npowershell -Command \"Set-Content -Path '%1' -Value (Get-Content -Raw '{}')\"\r\n",
+            msg_path.replace('\\', "/")
+        );
+        #[cfg(not(target_os = "windows"))]
+        let editor_script = format!("#!/bin/sh\ncp '{}' \"$1\"\n", msg_path);
+
+        let editor_path = format!("{}/.microtermix_squash_editor{}", project_path, seq_ext);
+        fs::write(&editor_path, &editor_script).map_err(|e| e.to_string())?;
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&editor_path, fs::Permissions::from_mode(0o755)).ok();
+        }
+
+        let seq_abs = Path::new(&seq_path).canonicalize().map(|p| p.display().to_string()).unwrap_or(seq_path.clone());
+        let editor_abs = Path::new(&editor_path).canonicalize().map(|p| p.display().to_string()).unwrap_or(editor_path.clone());
+
+        // Rebase starting from parent's parent so that both parent and target are in scope
+        let parent_ref = format!("{}^", parent_short_hash);
+        let mut cmd = AsyncCommand::new("git");
+        cmd.args(&["rebase", "-i", &parent_ref]);
+        cmd.current_dir(&project_path);
+        cmd.env("GIT_SEQUENCE_EDITOR", &seq_abs);
+        cmd.env("GIT_EDITOR", &editor_abs);
+        cmd.env("GIT_TERMINAL_PROMPT", "0");
+        cmd.env("GIT_PAGER", "cat");
+        cmd.env("TERM", "dumb");
+        #[cfg(target_os = "windows")]
+        { cmd.creation_flags(0x08000000); }
+        let out = cmd.output().await.map_err(|e| e.to_string())?;
+
+        let _ = fs::remove_file(&seq_path);
+        let _ = fs::remove_file(&editor_path);
+        let _ = fs::remove_file(&msg_path);
+
+        let stdout_str = String::from_utf8_lossy(&out.stdout).to_string();
+        let stderr_str = String::from_utf8_lossy(&out.stderr).to_string();
+        GitResult { stdout: stdout_str, stderr: stderr_str, success: out.status.success() }
+    };
+
+    let _ = tauri::Emitter::emit(&app_handle, "git-log", GitLogPayload {
+        project_path: project_path.clone(),
+        command: format!("git squash {} into {}", short_hash, parent_short_hash),
         stdout: result.stdout.clone(),
         stderr: result.stderr.clone(),
     });

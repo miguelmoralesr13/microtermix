@@ -32,11 +32,13 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
     const [pushSuccess, setPushSuccess] = useState(false);
     const [selectedCommit, setSelectedCommit] = useState<PendingCommit | null>(null);
     const [currentBranch, setCurrentBranch] = useState('');
+    const [noUpstream, setNoUpstream] = useState(false);
 
     const loadPendingCommits = useCallback(async () => {
         setLoading(true);
         setError(null);
         setPushSuccess(false);
+        setNoUpstream(false);
         try {
             // Get current branch name
             const branchRes: any = await invoke('git_execute', {
@@ -46,43 +48,46 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
             const branch = branchRes?.stdout?.trim() ?? '';
             setCurrentBranch(branch);
 
-            // Get commits not yet pushed (ahead of remote tracking branch)
+            const parseCommits = (stdout: string): PendingCommit[] =>
+                stdout.split('\n').filter((l: string) => l.trim()).map((line: string) => {
+                    const [hash, shortHash, author, date, ...msgParts] = line.split('|');
+                    return { hash, shortHash, author, date, message: msgParts.join('|') };
+                });
+
+            // 1. Try upstream tracking branch (@{u}..HEAD)
             const logRes: any = await invoke('git_execute', {
                 projectPath,
                 args: ['log', '@{u}..HEAD', '--pretty=format:%H|%h|%an|%ar|%s']
             });
 
-            if (logRes?.success && logRes.stdout?.trim()) {
-                const list: PendingCommit[] = logRes.stdout
-                    .split('\n')
-                    .filter((l: string) => l.trim())
-                    .map((line: string) => {
-                        const [hash, shortHash, author, date, ...msgParts] = line.split('|');
-                        return { hash, shortHash, author, date, message: msgParts.join('|') };
-                    });
-                setCommits(list);
-            } else if (!logRes?.success) {
-                // No upstream set yet — just show all local commits from HEAD
-                const fallbackRes: any = await invoke('git_execute', {
-                    projectPath,
-                    args: ['log', '-20', '--pretty=format:%H|%h|%an|%ar|%s']
-                });
-                if (fallbackRes?.success && fallbackRes.stdout?.trim()) {
-                    const list: PendingCommit[] = fallbackRes.stdout
-                        .split('\n')
-                        .filter((l: string) => l.trim())
-                        .map((line: string) => {
-                            const [hash, shortHash, author, date, ...msgParts] = line.split('|');
-                            return { hash, shortHash, author, date, message: msgParts.join('|') };
-                        });
-                    setCommits(list);
-                    setError('No hay rama remota configurada. Se muestran los últimos commits locales.');
-                } else {
-                    setCommits([]);
-                }
-            } else {
-                setCommits([]);
+            if (logRes?.success) {
+                // Upstream tracking ref exists — show commits ahead of it
+                setCommits(logRes.stdout?.trim() ? parseCommits(logRes.stdout) : []);
+                return;
             }
+
+            // 2. @{u} failed — try origin/{branch} directly (branch exists on remote but tracking not configured)
+            const originLogRes: any = branch ? await invoke('git_execute', {
+                projectPath,
+                args: ['log', `origin/${branch}..HEAD`, '--pretty=format:%H|%h|%an|%ar|%s']
+            }) : null;
+
+            if (originLogRes?.success) {
+                // Branch exists on origin, just missing local tracking config
+                setNoUpstream(false);
+                setCommits(originLogRes.stdout?.trim() ? parseCommits(originLogRes.stdout) : []);
+                return;
+            }
+
+            // 3. Branch doesn't exist on origin yet — show commits not in any remote
+            setNoUpstream(true);
+            const noRemoteRes: any = await invoke('git_execute', {
+                projectPath,
+                args: ['log', '--not', '--remotes', 'HEAD', '--pretty=format:%H|%h|%an|%ar|%s']
+            });
+            setCommits(noRemoteRes?.success && noRemoteRes.stdout?.trim()
+                ? parseCommits(noRemoteRes.stdout)
+                : []);
         } catch (e: any) {
             setError(e?.toString?.() ?? 'Error loading commits');
         } finally {
@@ -94,13 +99,20 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
         setPushing(true);
         setError(null);
         try {
+            // Always use --set-upstream when tracking is not configured
+            const pushArgs = currentBranch
+                ? ['push', '--set-upstream', 'origin', currentBranch]
+                : ['push'];
             const res: any = await invoke('git_execute', {
                 projectPath,
-                args: ['push']
+                args: pushArgs,
             });
             if (res?.success) {
                 setPushSuccess(true);
-                onRefreshRequest?.();
+                // Delay refresh so git has time to update local remote tracking refs
+                setTimeout(() => {
+                    onRefreshRequest?.();
+                }, 600);
                 setTimeout(() => {
                     onClose();
                 }, 1500);
@@ -177,7 +189,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                             <RefreshCw size={18} className="animate-spin mr-3" />
                             <span className="text-sm">Cargando commits pendientes...</span>
                         </div>
-                    ) : commits.length === 0 && !error ? (
+                    ) : commits.length === 0 && !noUpstream ? (
                         <div className="flex flex-col items-center justify-center py-16 text-slate-600 gap-3">
                             <CheckCircle size={32} className="text-microtermix-success/50" />
                             <div className="text-center">
@@ -225,6 +237,14 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                     )}
                 </div>
 
+                {/* No-upstream info banner */}
+                {noUpstream && !error && (
+                    <div className="px-4 py-2.5 bg-amber-500/8 border-t border-amber-500/20 flex items-start gap-2 text-xs text-amber-400/80 shrink-0">
+                        <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                        <span>Esta rama no tiene rama remota. El Push la creará en <span className="font-mono text-amber-300">origin/{currentBranch}</span>.</span>
+                    </div>
+                )}
+
                 {/* Error banner */}
                 {error && (
                     <div className="px-4 py-2.5 bg-microtermix-danger/10 border-t border-microtermix-danger/20 flex items-start gap-2 text-xs text-microtermix-danger shrink-0">
@@ -244,9 +264,11 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                 {/* Footer: Push button */}
                 <div className="px-5 py-4 border-t border-slate-800 bg-slate-900/40 shrink-0 flex items-center justify-between gap-3">
                     <span className="text-xs text-slate-500">
-                        {commits.length > 0
-                            ? `Se subirán ${commits.length} commit${commits.length !== 1 ? 's' : ''} a origin/${currentBranch}`
-                            : 'Nada que subir'
+                        {noUpstream
+                            ? `Configurará upstream → origin/${currentBranch}`
+                            : commits.length > 0
+                                ? `Se subirán ${commits.length} commit${commits.length !== 1 ? 's' : ''} a origin/${currentBranch}`
+                                : 'Nada que subir'
                         }
                     </span>
                     <div className="flex gap-2">
@@ -259,7 +281,7 @@ export const PushPreviewModal: React.FC<PushPreviewModalProps> = ({
                         </Button>
                         <Button
                             onClick={handlePush}
-                            disabled={pushing || pushSuccess || commits.length === 0}
+                            disabled={pushing || pushSuccess || (!noUpstream && commits.length === 0)}
                             className="bg-microtermix-accent text-white hover:bg-microtermix-accent/80 font-medium"
                         >
                             {pushing ? <RefreshCw size={14} className="animate-spin mr-2" /> : <UploadCloud size={14} className="mr-2" />}

@@ -87,11 +87,6 @@ export function useJenkinsProjectLinks(): UseJenkinsProjectLinksResult {
         setLinksMap(loadLinks(workspacePath));
     }, [workspacePath]);
 
-    const persist = useCallback((next: Record<string, JobLink>) => {
-        saveLinks(workspacePath, next);
-        setLinksMap(next);
-    }, [workspacePath]);
-
     const linkProject = useCallback((link: Omit<JobLink, 'linkedAt'>) => {
         setLinksMap(prev => {
             const next = { ...prev, [link.projectPath]: { ...link, linkedAt: Date.now() } };

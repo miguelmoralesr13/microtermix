@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
     ShieldAlert, ShieldCheck, Play, RefreshCw, 
     AlertTriangle, Bug, Lock, FileCode,
-    ChevronDown, ChevronRight, CheckCircle2,
+    ChevronRight, CheckCircle2,
     Activity, TerminalSquare
 } from 'lucide-react';
 import { useWorkspace } from '../../context/WorkspaceContext';

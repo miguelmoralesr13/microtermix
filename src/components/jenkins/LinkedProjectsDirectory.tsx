@@ -37,7 +37,7 @@ function LinkedProjectDetail({
     const jobPath = jobApiPath(link.jobUrl, config.baseUrl);
 
     // Live is always ON in detail view
-    const { data: liveJob } = useJenkinsJobStatus(jobPath, true, true);
+    const { data: liveJob } = useJenkinsJobStatus(jobPath, true);
     const triggerMutation = useJenkinsTriggerBuild();
     const abortMutation = useJenkinsAbortBuild();
 
@@ -48,8 +48,8 @@ function LinkedProjectDetail({
     const isJobBuilding = lb?.building ?? (currentJob ? isBuilding(currentJob as any) : false);
     const dotBg = colorFromJobColor(color);
 
-    const { data: children, isLoading: loadingChildren } = useJenkinsChildren(jobPath, true, true);
-    const { data: builds, isLoading: loadingBuilds } = useJenkinsBuilds(jobPath, !isContainer, true);
+    const { data: children, isLoading: loadingChildren } = useJenkinsChildren(jobPath, true);
+    const { data: builds, isLoading: loadingBuilds } = useJenkinsBuilds(jobPath, !isContainer);
 
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -187,7 +187,7 @@ function LinkedProjectRow({
 }) {
     const jobPath = jobApiPath(link.jobUrl, baseUrl);
     // Lightweight polling — only color/lastBuild
-    const { data: liveJob } = useJenkinsJobStatus(jobPath, isSelected, isSelected);
+    const { data: liveJob } = useJenkinsJobStatus(jobPath, isSelected);
 
     const color = liveJob?.color ?? link.color ?? 'grey';
     const lb = liveJob?.lastBuild ?? null;
