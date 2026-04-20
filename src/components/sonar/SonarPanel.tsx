@@ -226,7 +226,7 @@ export const SonarPanel: React.FC = () => {
     const projectName = currentProject?.name || '';
 
     return (
-        <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-slate-900 font-sans">
+        <div className="flex-1 flex flex-col h-full w-full overflow-hidden bg-background font-sans">
             <SonarHeader
                 isRunning={isRunning}
                 canRun={isProjectView}
@@ -246,14 +246,14 @@ export const SonarPanel: React.FC = () => {
                     onOpenSettings={() => setIsSettingsOpen(true)}
                 />
 
-                <div className="flex-1 flex flex-col bg-[#020617] overflow-hidden">
+                <div className="flex-1 flex flex-col bg-background overflow-hidden">
                     {selectedPath === 'dashboard' ? (
                         <SonarDashboard projects={projects} onSelectProject={setSelectedPath} />
                     ) : selectedPath === 'config' ? (
                         <SonarAccountsManager />
                     ) : (
                         <Tabs value={activeTab} onValueChange={val => setActiveTab(val as any)} className="flex-1 flex flex-col min-h-0">
-                            <div className="px-6 border-b border-white/5 flex items-center justify-between bg-slate-950/20 shrink-0">
+                            <div className="px-6 border-b border-border flex items-center justify-between bg-muted/20 shrink-0">
                                 <TabsList variant="line" className="h-10 gap-6 sm:gap-8">
                                     <TabsTrigger value="server" className="gap-2 px-0 text-[10px] font-black uppercase tracking-widest data-active:text-blue-400"><Globe size={14} /> Cloud</TabsTrigger>
                                     <TabsTrigger value="analysis" className="gap-2 px-0 text-[10px] font-black uppercase tracking-widest data-active:text-blue-400"><TerminalSquare size={14} /> Terminal</TabsTrigger>
@@ -263,25 +263,25 @@ export const SonarPanel: React.FC = () => {
                                         <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[8px] uppercase px-2 py-0.5 rounded-md flex items-center gap-1 group relative">
                                             <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
                                             Auto-Config
-                                            <div className="absolute top-full right-0 mt-2 p-2 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-400 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none shadow-2xl">
+                                            <div className="absolute top-full right-0 mt-2 p-2 bg-card border border-border rounded-lg text-[10px] text-muted-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none shadow-2xl">
                                                 Usando server: <span className="text-blue-300 font-mono">{normalizeSonarUrl(localConfig.serverUrl || '')}</span>
                                             </div>
                                         </Badge>
                                     )}
                                     <Button variant="ghost" size="sm" onClick={handleCopyUrl} className="h-6 px-2 text-[8px] font-black uppercase text-slate-600 hover:text-blue-400 hover:bg-blue-400/5 gap-1"><ExternalLink size={10} /> API URL</Button>
-                                    <Badge title={`Raw Key: ${projectKey}`} variant="outline" className="bg-slate-900 text-[8px] font-mono border-white/5 text-slate-500 px-3 py-1 uppercase rounded-md tracking-widest font-black leading-none">{projectKey}</Badge>
+                                    <Badge title={`Raw Key: ${projectKey}`} variant="outline" className="bg-muted text-[8px] font-mono border-border text-muted-foreground px-3 py-1 uppercase rounded-md tracking-widest font-black leading-none">{projectKey}</Badge>
                                 </div>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-8">
                                 {activeTab === 'analysis' ? (
                                     <div className="h-full flex flex-col gap-6 animate-in fade-in duration-500">
-                                        <div className="bg-[#05070a] p-4 rounded-2xl border border-white/5 font-mono text-[10px] text-blue-300 flex items-center gap-4 relative group text-left">
+                                        <div className="bg-muted p-4 rounded-2xl border border-border font-mono text-[10px] text-blue-400 flex items-center gap-4 relative group text-left">
                                             <span className="text-blue-500 font-black opacity-40 select-none">$</span>
                                             <span className="flex-1 break-all leading-relaxed">{effectiveCommand}</span>
                                             <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)} className="h-8 w-8 text-slate-500 hover:text-blue-400 shrink-0 hover:bg-white/5 rounded-lg"><Settings size={14} /></Button>
                                         </div>
-                                        <div className="flex-1 border border-white/5 rounded-2xl overflow-hidden bg-black/40">
+                                        <div className="flex-1 border border-border rounded-2xl overflow-hidden bg-muted/40">
                                             <Terminal
                                                 key={serviceId}
                                                 mode="log-stream"
@@ -294,7 +294,7 @@ export const SonarPanel: React.FC = () => {
                                 ) : (
                                     <div className="space-y-10 animate-in fade-in duration-700">
                                         {loadingMetrics ? (
-                                            <div className="flex flex-col items-center py-40 gap-4 text-slate-700">
+                                            <div className="flex flex-col items-center py-40 gap-4 text-muted-foreground">
                                                 <RefreshCw className="animate-spin" size={32} strokeWidth={1} />
                                                 <p className="text-[10px] font-black uppercase tracking-widest">Sincronizando...</p>
                                             </div>
@@ -306,15 +306,15 @@ export const SonarPanel: React.FC = () => {
                                                     <SonarMetricCard label="Code Smells" value={metrics.codeSmells} rating={metrics.maintainability} icon={FileSearch} colorClass="text-blue-400" />
                                                 </div>
 
-                                                <div className="pt-8 border-t border-white/5">
+                                                <div className="pt-8 border-t border-border">
                                                     <div className="flex items-center justify-between mb-8">
-                                                        <h3 className="text-[9px] font-black text-slate-600 uppercase tracking-[0.3em]">Detalle de Hallazgos ({issues.length})</h3>
-                                                        <Badge className="bg-blue-500/10 text-blue-400 border-white/5 text-[8px] uppercase px-2 py-0.5 rounded-md">Varios Severidades</Badge>
+                                                        <h3 className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em]">Detalle de Hallazgos ({issues.length})</h3>
+                                                        <Badge className="bg-blue-500/10 text-blue-400 border-border text-[8px] uppercase px-2 py-0.5 rounded-md">Varios Severidades</Badge>
                                                     </div>
 
                                                     <div className="space-y-3">
                                                         {issues.length === 0 ? (
-                                                            <div className="py-20 flex flex-col items-center justify-center bg-slate-900/10 border border-dashed border-white/5 rounded-[2rem] text-slate-700 gap-4">
+                                                            <div className="py-20 flex flex-col items-center justify-center bg-muted/10 border border-dashed border-border rounded-[2rem] text-muted-foreground gap-4">
                                                                 <Check size={40} strokeWidth={1} className="opacity-10" />
                                                                 <p className="text-[10px] font-black uppercase tracking-widest">Reporte Limpio</p>
                                                             </div>
@@ -323,22 +323,22 @@ export const SonarPanel: React.FC = () => {
                                                             if (group.length === 0) return null;
                                                             const style = SEV_STYLE[s];
                                                             return (
-                                                                <div key={s} className={cn("rounded-2xl border overflow-hidden transition-all bg-slate-900/20", style.border)}>
+                                                                <div key={s} className={cn("rounded-2xl border overflow-hidden transition-all bg-card/50", style.border)}>
                                                                     <div className={cn("px-4 py-2 flex items-center justify-between", style.bg)}>
                                                                         <span className={cn("text-[9px] font-black uppercase tracking-widest", style.text)}>{s} ({group.length})</span>
                                                                     </div>
-                                                                    <div className="divide-y divide-white/5 bg-slate-900/10">
+                                                                    <div className="divide-y divide-border bg-background/50">
                                                                         {group.map(i => (
-                                                                            <div key={i.key} onClick={() => setRemediatingIssue(i)} className="px-6 py-3 hover:bg-white/5 transition-colors cursor-pointer group/item text-left">
+                                                                            <div key={i.key} onClick={() => setRemediatingIssue(i)} className="px-6 py-3 hover:bg-muted/50 transition-colors cursor-pointer group/item text-left">
                                                                                 <div className="flex items-start gap-4">
                                                                                     <Badge className={cn("shrink-0 text-[8px] font-black uppercase h-5 px-2 rounded-md", style.bg, style.text)}>{i.type}</Badge>
                                                                                     <div className="flex-1 min-w-0 space-y-1">
-                                                                                        <p className="text-xs text-slate-200 font-medium truncate">{i.message}</p>
+                                                                                        <p className="text-xs text-foreground font-medium truncate">{i.message}</p>
                                                                                         <div className="flex items-center gap-2">
-                                                                                            <span className="text-[9px] text-slate-600 font-mono truncate">{i.component}:{i.line}</span>
+                                                                                            <span className="text-[9px] text-muted-foreground font-mono truncate">{i.component}:{i.line}</span>
                                                                                         </div>
                                                                                     </div>
-                                                                                    <ExternalLink size={12} className="text-slate-700 group-hover/item:text-blue-400 transition-all shrink-0 mt-1" />
+                                                                                    <ExternalLink size={12} className="text-muted-foreground/50 group-hover/item:text-blue-400 transition-all shrink-0 mt-1" />
                                                                                 </div>
                                                                             </div>
                                                                         ))}

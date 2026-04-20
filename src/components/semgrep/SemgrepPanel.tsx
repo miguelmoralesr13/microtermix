@@ -7,11 +7,11 @@ import {
 } from 'lucide-react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useSemgrepStore, SemgrepFinding } from '../../stores/semgrepStore';
-import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { SemgrepFindingRemediator } from './SemgrepFindingRemediator';
+import { SemgrepSidebarList } from './SemgrepSidebarList';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useSemgrepInstalled, useSemgrepScan } from '../../hooks/queries/useSemgrepQueries';
 import { Terminal } from '../ui/terminal/Terminal';
@@ -192,34 +192,11 @@ export const SemgrepPanel: React.FC = () => {
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
                 {/* Sidebar: Proyectos */}
-                <div className="w-64 shrink-0 border-r border-slate-800 flex flex-col overflow-hidden bg-slate-950/20">
-                    <div className="p-3 border-b border-slate-800/60 bg-slate-950/40 flex items-center justify-between">
-                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Workspace</p>
-                        <Badge variant="outline" className="text-[9px] border-slate-700 text-slate-500">{projects.length}</Badge>
-                    </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar">
-                        {projects.map(p => (
-                            <div
-                                key={p.path as string}
-                                onClick={() => setSelectedPath(p.path as string)}
-                                className={cn(
-                                    "flex items-center justify-between px-4 py-3 cursor-pointer transition-all border-l-2 group",
-                                    selectedPath === p.path 
-                                        ? "bg-emerald-500/5 border-emerald-500 text-emerald-400" 
-                                        : "border-transparent text-slate-400 hover:bg-slate-800/40"
-                                )}
-                            >
-                                <div className="min-w-0">
-                                    <p className="text-xs font-bold truncate">{p.name}</p>
-                                    <p className="text-[9px] text-slate-600 font-mono truncate">{findingsCache[p.path as string]?.length || 0} issues</p>
-                                </div>
-                                {findingsCache[p.path as string]?.length > 0 && (
-                                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-sm shadow-red-900/50" />
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                <SemgrepSidebarList
+                    projects={projects}
+                    selectedPath={selectedPath}
+                    onSelectPath={setSelectedPath}
+                />
 
                 {/* Content Area */}
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-slate-900/30">

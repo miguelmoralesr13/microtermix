@@ -102,6 +102,52 @@ body {
   height: 100vh;
 }
 
+/* ── Light mode — inverts the slate scale + overrides semantic tokens ─── */
+.light-mode {
+  color-scheme: light;
+
+  /* Invert Tailwind's slate scale so bg-slate-950 → near-white, text-slate-300 → dark */
+  --color-slate-50:  #020617;
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-600: #94a3b8;
+  --color-slate-700: #cbd5e1;
+  --color-slate-800: #e2e8f0;
+  --color-slate-900: #f1f5f9;
+  --color-slate-950: #f8fafc;
+
+  /* Microtermix base tokens */
+  --color-microtermix-dark:   #f1f5f9;
+  --color-microtermix-darker: #f8fafc;
+
+  /* shadcn/ui semantic tokens */
+  --color-background:            #f8fafc;
+  --color-foreground:            #0f172a;
+  --color-card:                  #ffffff;
+  --color-card-foreground:       #0f172a;
+  --color-popover:               #ffffff;
+  --color-popover-foreground:    #0f172a;
+  --color-secondary:             #f1f5f9;
+  --color-secondary-foreground:  #334155;
+  --color-muted:                 #f1f5f9;
+  --color-muted-foreground:      #64748b;
+  --color-accent:                #e2e8f0;
+  --color-accent-foreground:     #0f172a;
+  --color-border:                #e2e8f0;
+  --color-input:                 #f1f5f9;
+  --color-primary-foreground:    #f8fafc;
+
+  /* Layout custom props */
+  --background:             #f8fafc;
+  --foreground:             #0f172a;
+  --scrollbar-track:        #f1f5f9;
+  --scrollbar-thumb:        #cbd5e1;
+  --scrollbar-thumb-hover:  #94a3b8;
+}
+
 /* react-diff-view dark theme + layout fix */
 .react-diff-view-dark {
   --diff-background-color: #0f172a;

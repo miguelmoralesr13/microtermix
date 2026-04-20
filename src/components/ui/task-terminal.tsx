@@ -4,45 +4,38 @@ import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
 import { ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { Button } from '@/components//ui/button';
+import { useUIStore } from '@/stores/uiStore';
+import { getTerminalTheme } from '@/lib/terminalThemes';
 import 'xterm/css/xterm.css';
 
 interface TaskTerminalProps {
     taskId: string;
+    /** Override the global terminal theme for this instance. */
     theme?: ITheme;
     fontSize?: number;
     className?: string;
     onClear?: () => void;
 }
 
-const DEFAULT_THEME: ITheme = {
-    background: '#020617',
-    foreground: '#f8fafc',
-    cursor: '#38bdf8',
-    black: '#020617',
-    red: '#ff5555',
-    green: '#50fa7b',
-    yellow: '#f1fa8c',
-    blue: '#bd93f9',
-    magenta: '#ff79c6',
-    cyan: '#8be9fd',
-    white: '#f8fafc',
-};
-
-export const TaskTerminal: React.FC<TaskTerminalProps> = ({ 
-    taskId, 
-    theme = DEFAULT_THEME, 
+export const TaskTerminal: React.FC<TaskTerminalProps> = ({
+    taskId,
+    theme,
     fontSize = 13,
     className = "",
     onClear
 }) => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const xtermRef = useRef<Terminal | null>(null);
+    const terminalThemeId = useUIStore(s => s.terminalThemeId);
 
     useEffect(() => {
         if (!terminalRef.current) return;
 
+        // Use explicit override if provided, otherwise read from store at init time
+        const initTheme = theme ?? getTerminalTheme(useUIStore.getState().terminalThemeId).theme;
+
         const term = new Terminal({
-            theme,
+            theme: initTheme,
             fontSize,
             fontFamily: 'Consolas, "Courier New", monospace',
             convertEol: true,
@@ -80,7 +73,16 @@ export const TaskTerminal: React.FC<TaskTerminalProps> = ({
             term.dispose();
             xtermRef.current = null;
         };
-    }, [taskId, theme, fontSize]);
+        // theme is intentionally excluded: hot-swap is handled by the effect below
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [taskId, fontSize]);
+
+    // Hot-swap del tema sin recrear la instancia
+    useEffect(() => {
+        const term = xtermRef.current;
+        if (!term) return;
+        term.options.theme = theme ?? getTerminalTheme(terminalThemeId).theme;
+    }, [terminalThemeId, theme]);
 
     return (
         <div className={`relative group w-full h-full min-h-[200px] bg-[#020617] rounded-lg overflow-hidden border border-slate-800 ${className}`}>

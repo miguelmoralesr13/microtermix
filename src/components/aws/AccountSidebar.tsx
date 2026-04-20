@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    User, ShieldCheck, Trash2, ChevronRight, RefreshCw
-} from 'lucide-react';
+import { User, ShieldCheck, Trash2, ChevronRight, RefreshCw } from 'lucide-react';
 import { useAwsStore } from '../../stores/awsStore';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
@@ -12,10 +10,10 @@ import { AccountCreateDialog } from './AccountCreateDialog';
 import { ssmCheckPlugin } from '../../services/cloudwatchApi';
 
 export const AccountSidebar: React.FC = () => {
-    const { 
-        accounts, 
-        activeAccountId, 
-        setActiveAccount, 
+    const {
+        accounts,
+        activeAccountId,
+        setActiveAccount,
         removeAccount,
         globalSettings,
         updateGlobalSettings
@@ -27,7 +25,7 @@ export const AccountSidebar: React.FC = () => {
     const detectPlugin = async () => {
         setIsDetecting(true);
         try {
-            const version = await ssmCheckPlugin(); 
+            const version = await ssmCheckPlugin();
             if (version && version.includes('(')) {
                 const match = version.match(/\(([^)]+)\)/);
                 if (match && match[1]) {
@@ -37,94 +35,104 @@ export const AccountSidebar: React.FC = () => {
                     }
                 }
             } else if (version) {
-                 setDetectedPath("System PATH / Default");
+                setDetectedPath("System PATH / Default");
             }
-        } catch (e) {
+        } catch {
             setDetectedPath(null);
         } finally {
             setIsDetecting(false);
         }
     };
 
-    // Auto-detect on mount if not set
     useEffect(() => {
         if (!globalSettings.ssmPluginPath) {
             detectPlugin();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return (
-        <div className="lg:col-span-4 space-y-6">
-            <div className="flex items-center justify-between px-2">
-                <Label className="text-[10px] uppercase font-black tracking-widest text-slate-500">Gestión de Perfiles ({accounts.length})</Label>
-                <AccountCreateDialog />
+        <div className="w-64 shrink-0 border-r border-border flex flex-col bg-card/50">
+            {/* Profiles header */}
+            <div className="p-4 border-b border-border">
+                <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em]">
+                    Perfiles ({accounts.length})
+                </p>
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+            {/* Account list */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {accounts.length === 0 ? (
-                    <div className="p-10 border-2 border-dashed border-white/5 rounded-3xl flex flex-col items-center justify-center text-center space-y-4 bg-black/20">
-                        <User className="w-8 h-8 text-slate-700" />
-                        <p className="text-xs text-slate-500 font-medium">No hay cuentas.<br/>Comienza creando una nueva.</p>
+                    <div className="p-6 flex flex-col items-center justify-center text-center gap-3">
+                        <User className="w-6 h-6 text-muted-foreground/30" />
+                        <p className="text-xs text-muted-foreground">Sin cuentas. Creá una nueva.</p>
                     </div>
                 ) : (
                     accounts.map(acc => (
-                        <div 
+                        <div
                             key={acc.id}
                             onClick={() => setActiveAccount(acc.id)}
                             className={cn(
-                                "group relative p-4 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center justify-between overflow-hidden",
-                                activeAccountId === acc.id 
-                                    ? (acc.status === 'expired' ? "bg-red-500/5 border-red-500/40 ring-1 ring-red-500/20" : "bg-microtermix-neon/10 border-microtermix-neon/40 shadow-2xl shadow-microtermix-neon/5 ring-1 ring-microtermix-neon/20")
-                                    : (acc.status === 'expired' ? "bg-red-950/20 border-red-500/20 hover:border-red-500/40" : "bg-slate-900/40 border-white/5 hover:border-white/10 hover:bg-slate-900/80")
+                                "group relative px-3 py-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between",
+                                activeAccountId === acc.id
+                                    ? acc.status === 'expired'
+                                        ? "bg-red-500/5 border-red-500/40 ring-1 ring-red-500/20"
+                                        : "bg-microtermix-neon/10 border-microtermix-neon/30 ring-1 ring-microtermix-neon/10"
+                                    : acc.status === 'expired'
+                                        ? "border-red-500/20 hover:border-red-500/40"
+                                        : "border-transparent hover:border-border hover:bg-muted/50"
                             )}
                         >
-                            <div className="flex items-center gap-4 relative z-10">
+                            <div className="flex items-center gap-3 min-w-0">
                                 <div className={cn(
-                                    "relative p-3 rounded-xl transition-all duration-500",
-                                    activeAccountId === acc.id 
-                                        ? (acc.status === 'expired' ? "bg-red-500 text-white shadow-lg shadow-red-500/30" : "bg-microtermix-neon text-microtermix-darker shadow-lg shadow-microtermix-neon/30 rotate-3 scale-110")
-                                        : (acc.status === 'expired' ? "bg-red-900/40 text-red-400" : "bg-slate-800/80 text-slate-500 group-hover:text-slate-300 group-hover:scale-105")
+                                    "relative p-2 rounded-lg shrink-0 transition-all",
+                                    activeAccountId === acc.id
+                                        ? acc.status === 'expired'
+                                            ? "bg-red-500 text-white"
+                                            : "bg-microtermix-neon text-microtermix-darker"
+                                        : acc.status === 'expired'
+                                            ? "bg-red-500/10 text-red-400"
+                                            : "bg-muted text-muted-foreground"
                                 )}>
-                                    <ShieldCheck className="w-5 h-5" />
+                                    <ShieldCheck className="w-4 h-4" />
                                     {activeAccountId === acc.id && (
                                         <div className={cn(
-                                            "absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-950 animate-pulse shadow-sm",
+                                            "absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-card animate-pulse",
                                             acc.status === 'expired' ? "bg-red-400" : "bg-emerald-400"
                                         )} />
                                     )}
                                 </div>
-                                <div className="flex-1 min-w-0">
+                                <div className="min-w-0">
                                     <p className={cn(
-                                        "text-[14px] font-black truncate leading-tight transition-colors tracking-tight",
-                                        activeAccountId === acc.id ? "text-white" : "text-slate-400 group-hover:text-slate-200",
+                                        "text-xs font-black truncate tracking-tight",
+                                        activeAccountId === acc.id ? "text-foreground" : "text-muted-foreground",
                                         acc.status === 'expired' && "text-red-400"
                                     )}>{acc.name}</p>
-                                    <div className="flex items-center gap-2 mt-1">
+                                    <div className="flex items-center gap-1.5 mt-0.5">
                                         <Badge variant="outline" className={cn(
-                                            "text-[9px] font-black border-white/10 py-0 px-1.5 h-4 bg-black/40 text-slate-500 uppercase tracking-widest",
-                                            acc.status === 'expired' && "border-red-500/30 text-red-500"
+                                            "text-[8px] font-black py-0 px-1 h-3.5 uppercase",
+                                            acc.status === 'expired'
+                                                ? "border-red-500/30 text-red-500"
+                                                : "border-border text-muted-foreground"
                                         )}>
-                                            {acc.status === 'expired' ? 'SESIÓN EXPIRADA' : acc.region}
+                                            {acc.status === 'expired' ? 'Expirada' : acc.region}
                                         </Badge>
-                                        <p className="text-[10px] text-slate-600 font-mono tracking-tighter opacity-80 uppercase">
-                                            key: {acc.accessKeyId.slice(-4)}
-                                        </p>
                                     </div>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1 relative z-10">
-                                <button 
+                            <div className="flex items-center gap-1 shrink-0">
+                                <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         if (confirm(`¿Eliminar cuenta "${acc.name}"?`)) removeAccount(acc.id);
                                     }}
-                                    className="opacity-0 group-hover:opacity-100 p-2 text-slate-600 hover:text-red-400 transition-all rounded-xl hover:bg-red-400/10 active:scale-90"
+                                    className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-400 transition-all rounded-lg hover:bg-red-400/10"
                                 >
-                                    <Trash2 className="w-4 h-4" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                                 <ChevronRight className={cn(
-                                    "w-5 h-5 transition-all duration-300",
-                                    activeAccountId === acc.id ? "text-microtermix-neon translate-x-1" : "text-slate-800 group-hover:text-slate-600"
+                                    "w-4 h-4 transition-all",
+                                    activeAccountId === acc.id ? "text-microtermix-neon translate-x-0.5" : "text-muted-foreground/30"
                                 )} />
                             </div>
                         </div>
@@ -132,40 +140,35 @@ export const AccountSidebar: React.FC = () => {
                 )}
             </div>
 
-            {/* Global System Settings */}
-            <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between px-2">
-                    <Label className="text-[10px] uppercase font-black tracking-widest text-slate-500">Configuración Global</Label>
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
+            {/* Add account */}
+            <div className="p-2 border-t border-border">
+                <AccountCreateDialog />
+            </div>
+
+            {/* SM Plugin global */}
+            <div className="p-3 border-t border-border space-y-2">
+                <div className="flex items-center justify-between">
+                    <Label className="text-[9px] uppercase font-black tracking-widest text-muted-foreground">SM Plugin</Label>
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={detectPlugin}
                         disabled={isDetecting}
-                        className="h-6 text-[9px] font-black uppercase tracking-widest text-microtermix-neon hover:bg-microtermix-neon/5 focus:ring-0"
+                        className="h-5 text-[8px] font-black uppercase tracking-widest text-microtermix-neon hover:bg-microtermix-neon/5 px-2"
                     >
-                        <RefreshCw className={cn("w-3 h-3 mr-1", isDetecting && "animate-spin")} /> Detectar
+                        <RefreshCw className={cn("w-2.5 h-2.5 mr-1", isDetecting && "animate-spin")} />
+                        Detectar
                     </Button>
                 </div>
-                
-                <div className="p-4 bg-slate-900/40 border border-white/5 rounded-2xl space-y-3">
-                    <div className="flex items-center justify-between">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-slate-600">SM Plugin (Sistema)</Label>
-                        {detectedPath ? (
-                            <Badge variant="outline" className="text-[8px] bg-emerald-400/5 text-emerald-400 border-emerald-400/20 py-0 h-4">DETECTADO</Badge>
-                        ) : (
-                            <Badge variant="outline" className="text-[8px] bg-amber-400/5 text-amber-400 border-amber-400/20 py-0 h-4">SISTEMA</Badge>
-                        )}
-                    </div>
-                    <Input 
-                        value={globalSettings.ssmPluginPath || ''} 
-                        onChange={e => updateGlobalSettings({ ssmPluginPath: e.target.value })}
-                        placeholder="Ruta absoluta (ej: /usr/local/bin/...)"
-                        className="bg-black/40 border-white/5 h-10 rounded-xl font-mono text-[10px] text-slate-400 focus:text-white"
-                    />
-                    {detectedPath && (
-                        <p className="text-[9px] text-slate-600 italic px-1 truncate">Ubicación: {detectedPath}</p>
-                    )}
-                </div>
+                <Input
+                    value={globalSettings.ssmPluginPath || ''}
+                    onChange={e => updateGlobalSettings({ ssmPluginPath: e.target.value })}
+                    placeholder="/usr/local/bin/..."
+                    className="h-7 rounded-lg font-mono text-[9px] border-border bg-background"
+                />
+                {detectedPath && (
+                    <p className="text-[8px] text-muted-foreground italic truncate">{detectedPath}</p>
+                )}
             </div>
         </div>
     );

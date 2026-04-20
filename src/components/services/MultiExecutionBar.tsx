@@ -1,10 +1,8 @@
-import React, { useState, useMemo } from 'react';
-import { Play, Square, RotateCcw, FileCode, Wand2, Coffee, Terminal } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Play, Square, RotateCcw, Coffee, Terminal } from 'lucide-react';
 import { Button } from '@/components//ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components//ui/select';
-import { Separator } from '@/components//ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components//ui/tooltip';
-import { CommandBuilderModal } from './CommandBuilderModal';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
 interface MultiExecutionBarProps {
@@ -17,7 +15,6 @@ interface MultiExecutionBarProps {
     onPlay: () => void;
     onStop: () => void;
     onRestart: () => void;
-    onOpenViteWrapper: () => void;
     selectedCount: number;
     activeSelectionType: string | null;
 }
@@ -32,18 +29,16 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
     onPlay,
     onStop,
     onRestart,
-    onOpenViteWrapper,
     selectedCount,
     activeSelectionType,
 }) => {
     const disabled = selectedCount === 0;
-    const [builderOpen, setBuilderOpen] = useState(false);
-    const { state, addSavedCommand } = useWorkspace();
+    const { state } = useWorkspace();
 
     const filteredSavedNames = useMemo(() => {
         return Object.keys(state.savedCommands || {}).filter(name => {
             const savedType = state.savedCommandTypes?.[name];
-            if (!savedType) return true; // Global
+            if (!savedType) return true;
             return savedType === activeSelectionType;
         });
     }, [state.savedCommands, state.savedCommandTypes, activeSelectionType]);
@@ -51,7 +46,6 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
     const extendedScripts = useMemo(() => {
         let list = [...new Set([...allScripts, ...filteredSavedNames])];
 
-        // Smart Filter by Active Selection Type
         if (activeSelectionType === 'java') {
             const javaKeywords = ['mvn', 'gradle', 'java', 'javac', 'jar', 'spring-boot', 'bootRun'];
             list = list.filter(s => {
@@ -60,10 +54,8 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
             });
         } else if (activeSelectionType === 'node' || activeSelectionType === 'bun') {
             const forbiddenKeywords = ['mvn', 'gradle', './gradlew', 'java -jar', 'javac', 'spring-boot', 'bootRun'];
-
             list = list.filter(s => {
                 const slc = s.toLowerCase();
-                // Hide Java stuff explicitly
                 if (forbiddenKeywords.some(kw => slc.includes(kw))) return false;
                 return true;
             });
@@ -75,24 +67,28 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
         return list;
     }, [allScripts, filteredSavedNames, activeSelectionType, multiScript]);
 
+    const isJava = activeSelectionType === 'java';
+
     return (
-        <div className={`bg-slate-900 border-b border-slate-800 px-3 py-2 shrink-0 transition-colors ${activeSelectionType === 'java' ? 'bg-orange-500/5 border-orange-500/20' : ''}`}>
+        <div className={`border-b border-slate-800/60 px-2 py-1.5 shrink-0 transition-colors ${isJava ? 'bg-orange-500/5 border-orange-500/20' : 'bg-slate-900/80'}`}>
             <TooltipProvider delay={400}>
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-950 border border-slate-800 shrink-0">
-                        {activeSelectionType === 'java' ? (
-                            <Coffee size={12} className="text-orange-400" />
+                <div className="flex items-center gap-1.5">
+                    {/* Type badge */}
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-950/60 border border-slate-800/50 shrink-0">
+                        {isJava ? (
+                            <Coffee size={10} className="text-orange-400" />
                         ) : (
-                            <Terminal size={12} className="text-microtermix-neon" />
+                            <Terminal size={10} className="text-microtermix-neon" />
                         )}
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                            {activeSelectionType || 'General'}
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">
+                            {activeSelectionType || 'All'}
                         </span>
                     </div>
 
+                    {/* Script select */}
                     <Select value={multiScript || undefined} onValueChange={(v) => v != null && onScriptChange(v)}>
-                        <SelectTrigger size="sm" className={`w-56 ${activeSelectionType === 'java' ? 'border-orange-500/30 text-orange-400' : ''}`}>
-                            <SelectValue placeholder="Comando por lote" />
+                        <SelectTrigger size="sm" className={`h-6 w-48 text-[11px] ${isJava ? 'border-orange-500/30 text-orange-400' : ''}`}>
+                            <SelectValue placeholder="Script" />
                         </SelectTrigger>
                         <SelectContent>
                             {extendedScripts.map((s: string) => (
@@ -101,18 +97,9 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
                         </SelectContent>
                     </Select>
 
-                    <Tooltip>
-                        <TooltipTrigger render={
-                            <Button variant="outline" size="icon-sm" onClick={() => setBuilderOpen(true)}
-                                className="text-slate-400 hover:text-microtermix-neon hover:border-microtermix-neon/50" />
-                        }>
-                            <Wand2 size={14} />
-                        </TooltipTrigger>
-                        <TooltipContent>Command Builder</TooltipContent>
-                    </Tooltip>
-
+                    {/* Env select */}
                     <Select value={globalEnvName} onValueChange={(v) => v != null && onEnvChange(v)}>
-                        <SelectTrigger size="sm" className="w-24">
+                        <SelectTrigger size="sm" className="h-6 w-20 text-[11px]">
                             <SelectValue placeholder="ENV" />
                         </SelectTrigger>
                         <SelectContent>
@@ -122,18 +109,20 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
                         </SelectContent>
                     </Select>
 
-                    <Separator orientation="vertical" className="h-6 mx-1" />
+                    {/* Spacer */}
+                    <div className="flex-1" />
 
-                    <div className="flex items-center gap-1">
+                    {/* Execution buttons */}
+                    <div className="flex items-center gap-0.5">
                         <Tooltip>
                             <TooltipTrigger render={
                                 <Button variant="ghost" size="sm" disabled={disabled} onClick={onPlay}
-                                    className="bg-microtermix-neon/10 text-microtermix-neon hover:bg-microtermix-neon/20 border border-microtermix-neon/30 hover:border-microtermix-neon/60 gap-1.5" />
+                                    className="h-6 px-2 bg-microtermix-neon/10 text-microtermix-neon hover:bg-microtermix-neon/20 border border-microtermix-neon/30 hover:border-microtermix-neon/60 gap-1 text-[10px]" />
                             }>
-                                <Play size={13} />
+                                <Play size={11} />
                                 <span>Run</span>
                                 {selectedCount > 0 && (
-                                    <span className="ml-0.5 bg-microtermix-neon text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                                    <span className="bg-microtermix-neon text-slate-900 text-[9px] font-bold px-1 py-0 rounded-full leading-tight">
                                         {selectedCount}
                                     </span>
                                 )}
@@ -143,45 +132,26 @@ export const MultiExecutionBar: React.FC<MultiExecutionBarProps> = ({
 
                         <Tooltip>
                             <TooltipTrigger render={
-                                <Button variant="destructive" size="icon-sm" disabled={disabled} onClick={onStop} />
+                                <Button variant="destructive" size="icon-xs" disabled={disabled} onClick={onStop}
+                                    className="h-6 w-6" />
                             }>
-                                <Square size={13} />
+                                <Square size={11} />
                             </TooltipTrigger>
                             <TooltipContent>Parar todos</TooltipContent>
                         </Tooltip>
 
                         <Tooltip>
                             <TooltipTrigger render={
-                                <Button variant="outline" size="icon-sm" disabled={disabled} onClick={onRestart}
-                                    className="text-slate-300 hover:text-white" />
+                                <Button variant="outline" size="icon-xs" disabled={disabled} onClick={onRestart}
+                                    className="h-6 w-6 text-slate-400 hover:text-white" />
                             }>
-                                <RotateCcw size={13} />
+                                <RotateCcw size={11} />
                             </TooltipTrigger>
                             <TooltipContent>Reiniciar todos</TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                            <TooltipTrigger render={
-                                <Button variant="ghost" size="icon-sm" onClick={onOpenViteWrapper}
-                                    className="text-slate-400 hover:text-microtermix-neon" />
-                            }>
-                                <FileCode size={13} />
-                            </TooltipTrigger>
-                            <TooltipContent>Vite wrapper (remotes MFE)</TooltipContent>
                         </Tooltip>
                     </div>
                 </div>
             </TooltipProvider>
-
-            <CommandBuilderModal
-                open={builderOpen}
-                onOpenChange={setBuilderOpen}
-                onSave={(name, cmd, steps, projectType) => {
-                    addSavedCommand(name, cmd, steps, projectType);
-                    onScriptChange(name);
-                    setBuilderOpen(false);
-                }}
-            />
         </div>
     );
 };

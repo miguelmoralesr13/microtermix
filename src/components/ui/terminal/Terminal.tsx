@@ -306,7 +306,7 @@ export const Terminal = React.forwardRef<TerminalRef, TerminalProps>(({
             <div
                 className={cn(
                     'group w-full h-full flex flex-col overflow-hidden rounded-lg',
-                    'border border-slate-800 bg-[#020617]',
+                    'border border-border bg-background',
                     className
                 )}
                 onKeyDown={handleKeyDown}

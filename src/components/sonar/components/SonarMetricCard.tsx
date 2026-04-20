@@ -18,14 +18,14 @@ export const SonarMetricCard: React.FC<SonarMetricCardProps> = ({
     icon: Icon, 
     colorClass 
 }) => (
-    <Card className="bg-slate-950/50 border-white/5 p-4 flex items-center gap-4 hover:border-slate-800 transition-all shadow-none">
-        <div className="p-3 rounded-lg bg-white/5">
+    <Card className="bg-card border-border p-4 flex items-center gap-4 hover:border-border/80 transition-all shadow-none">
+        <div className="p-3 rounded-lg bg-muted/50">
             <Icon className={colorClass} size={18} />
         </div>
         <div className="flex-1 min-w-0 text-left">
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest truncate">{label}</p>
+            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest truncate">{label}</p>
             <div className="flex items-baseline gap-2">
-                <span className="text-lg font-black text-slate-200 leading-none">{value}</span>
+                <span className="text-lg font-black text-foreground leading-none">{value}</span>
                 {rating && (
                     <Badge variant="outline" className={cn(
                         "text-[9px] font-black h-4 px-1.5 min-w-[18px] justify-center mt-0.5",

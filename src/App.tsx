@@ -13,6 +13,27 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { useAppLogStore } from './stores/appLogStore';
 import { useGitWatcher } from "./hooks/queries/useGitQueries";
+import { useUIStore } from './stores/uiStore';
+
+/** Applies theme-mode class and accent CSS vars to <html> whenever the store changes. */
+function ThemeApplicator() {
+  const themeMode   = useUIStore(s => s.themeMode);
+  const accentColor = useUIStore(s => s.accentColor);
+
+  React.useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('light-mode', themeMode === 'light');
+  }, [themeMode]);
+
+  React.useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--color-microtermix-neon', accentColor);
+    root.style.setProperty('--color-primary',          accentColor);
+    root.style.setProperty('--color-ring',             accentColor);
+  }, [accentColor]);
+
+  return null;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -250,6 +271,7 @@ function App() {
   useLinuxClipboardFix();
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeApplicator />
       <WorkspaceProvider>
         <AppContent />
         <Toaster position="bottom-right" theme="dark" richColors />

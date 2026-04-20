@@ -42,7 +42,7 @@ export function JenkinsBranchRow({
     };
 
     return (
-        <div className="bg-slate-900/50 rounded-lg overflow-hidden border border-transparent hover:border-white/5 transition-colors">
+        <div className="bg-card rounded-lg overflow-hidden border border-transparent hover:border-border transition-colors">
             {/* Branch header — click opens log of last build */}
             <div className="flex items-center p-2.5 group/branch">
                 {/* Main clickable area → open last build log */}
@@ -54,22 +54,22 @@ export function JenkinsBranchRow({
                 >
                     <JobColorDot color={branch.color} />
                     <div className="flex flex-col min-w-0">
-                        <span className="text-[11px] font-medium text-slate-200 truncate group-hover/branch:text-sky-300 transition-colors">
+                        <span className="text-[11px] font-medium text-foreground truncate group-hover/branch:text-sky-400 transition-colors">
                             {branch.displayName || branch.name}
                         </span>
                         {blb && (
-                            <span className="text-[9px] text-slate-500 font-mono">
+                            <span className="text-[9px] text-muted-foreground font-mono">
                                 #{blb.number} • {formatAgo(blb.timestamp)}
                             </span>
                         )}
                     </div>
-                    {blb && <Terminal size={10} className="text-slate-600 group-hover/branch:text-sky-400 transition-colors shrink-0 mr-1" />}
+                    {blb && <Terminal size={10} className="text-muted-foreground/50 group-hover/branch:text-sky-400 transition-colors shrink-0 mr-1" />}
                 </button>
 
                 {/* Separate expand toggle for history */}
                 <button
                     onClick={(e) => { e.stopPropagation(); setShowHistory(!showHistory); }}
-                    className="p-1 text-slate-600 hover:text-slate-400 rounded transition-colors shrink-0"
+                    className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors shrink-0"
                     title="Ver historial"
                 >
                     <History size={11} className={cn('transition-transform', showHistory ? 'rotate-180 text-microtermix-neon' : '')} />
@@ -77,24 +77,24 @@ export function JenkinsBranchRow({
             </div>
 
             {showHistory && (
-                <div className="px-2 pb-2 space-y-1 bg-black/20 animate-in slide-in-from-top-1 duration-200">
-                    {isLoading && <div className="py-3 text-center"><Loader2 size={12} className="animate-spin text-slate-700 mx-auto" /></div>}
+                <div className="px-2 pb-2 space-y-1 bg-muted/20 animate-in slide-in-from-top-1 duration-200">
+                    {isLoading && <div className="py-3 text-center"><Loader2 size={12} className="animate-spin text-muted-foreground/30 mx-auto" /></div>}
                     {!isLoading && (builds || []).slice(0, 5).map((b: any) => (
                         <div
                             key={b.number}
-                            className="flex items-center justify-between p-1.5 hover:bg-slate-800/60 hover:border-sky-900/30 border border-transparent rounded transition-all cursor-pointer group/run"
+                            className="flex items-center justify-between p-1.5 hover:bg-muted/50 hover:border-border border border-transparent rounded transition-all cursor-pointer group/run"
                             onClick={(e) => { e.stopPropagation(); onOpenLog({ jobName: branch.name, buildNumber: b.number, jobPath: branchPath, building: b.building }); }}
                         >
                             <div className="flex items-center gap-2 min-w-0">
                                 <ResultBadge result={b.result} building={b.building} />
-                                <span className="text-[9px] font-mono text-slate-400">#{b.number}</span>
-                                <span className="text-[9px] text-slate-600 hidden sm:block truncate opacity-60">{formatAgo(b.timestamp)}</span>
+                                <span className="text-[9px] font-mono text-muted-foreground">#{b.number}</span>
+                                <span className="text-[9px] text-muted-foreground/50 hidden sm:block truncate">{formatAgo(b.timestamp)}</span>
                             </div>
                             <div className="flex items-center gap-1">
-                                <Terminal size={10} className="text-slate-600 group-hover/run:text-sky-400 transition-colors" />
+                                <Terminal size={10} className="text-muted-foreground/50 group-hover/run:text-sky-400 transition-colors" />
                                 <button
                                     onClick={(e) => { e.stopPropagation(); openUrl(b.url); }}
-                                    className="p-0.5 text-slate-600 hover:text-slate-300 rounded"
+                                    className="p-0.5 text-muted-foreground/50 hover:text-foreground rounded"
                                     title="Abrir en Jenkins"
                                 >
                                     <ExternalLink size={10} />
@@ -103,7 +103,7 @@ export function JenkinsBranchRow({
                         </div>
                     ))}
                     {!isLoading && (!builds || builds.length === 0) && (
-                        <div className="py-2 text-center text-[9px] text-slate-700 italic">No hay historial disponible</div>
+                        <div className="py-2 text-center text-[9px] text-muted-foreground/50 italic">No hay historial disponible</div>
                     )}
                 </div>
             )}
@@ -141,7 +141,7 @@ export function JenkinsJobCard({
     jobUrl,
     displayName,
     subtitle,
-    subtitleColor = 'text-slate-500',
+    subtitleColor = 'text-muted-foreground',
     jobName,
     baseUrl,
     badgeLeft,
@@ -172,10 +172,10 @@ export function JenkinsJobCard({
 
     return (
         <div className={cn(
-            'bg-slate-900/40 border rounded-xl overflow-hidden transition-all duration-300',
+            'bg-card border rounded-xl overflow-hidden transition-all duration-300',
             live
                 ? 'border-microtermix-neon/40 ring-1 ring-microtermix-neon/20 shadow-[0_0_12px_rgba(34,211,238,0.08)]'
-                : 'border-slate-800 hover:border-slate-700',
+                : 'border-border hover:border-border/60',
         )}>
             {/* ── Compact single-row header ─────────────────────────── */}
             <div className="flex items-center gap-2 px-3 py-2.5 group/card">
@@ -187,7 +187,7 @@ export function JenkinsJobCard({
                         'p-1.5 rounded transition-all shrink-0',
                         expanded
                             ? 'text-microtermix-neon bg-microtermix-neon/10 animate-pulse'
-                            : 'text-slate-600 hover:text-slate-400',
+                            : 'text-muted-foreground hover:text-foreground',
                     )}
                     title={expanded ? 'Colapsar (desactiva Live)' : 'Expandir (activa Live)'}
                 >
@@ -211,7 +211,7 @@ export function JenkinsJobCard({
                 {/* Job info — grows */}
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-xs font-semibold text-slate-100 truncate">
+                        <span className="text-xs font-semibold text-foreground truncate">
                             {displayName}
                         </span>
                         {lb && <ResultBadge result={lb.result} building={lb.building} />}
@@ -223,7 +223,7 @@ export function JenkinsJobCard({
                                 {subtitle}
                             </span>
                             {lb && (
-                                <span className="text-[9px] text-slate-600 ml-1">
+                                <span className="text-[9px] text-muted-foreground/50 ml-1">
                                     #{lb.number} • {formatAgo(lb.timestamp)}
                                 </span>
                             )}
@@ -231,7 +231,7 @@ export function JenkinsJobCard({
                     )}
                     {!subtitle && lb && (
                         <div className="mt-0.5">
-                            <span className="text-[9px] text-slate-600">
+                            <span className="text-[9px] text-muted-foreground/50">
                                 #{lb.number} • {formatAgo(lb.timestamp)}
                             </span>
                         </div>
@@ -246,7 +246,7 @@ export function JenkinsJobCard({
                                 <button
                                     onClick={() => triggerMutation.mutate(jobPath)}
                                     disabled={triggerMutation.isPending}
-                                    className="p-1.5 text-slate-500 hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
+                                    className="p-1.5 text-muted-foreground hover:text-emerald-400 hover:bg-emerald-400/10 rounded transition-colors"
                                     title="Ejecutar build"
                                 >
                                     {triggerMutation.isPending
@@ -257,7 +257,7 @@ export function JenkinsJobCard({
                             ) : (
                                 <button
                                     onClick={() => lb && abortMutation.mutate({ jobPath, buildNumber: lb.number })}
-                                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                                    className="p-1.5 text-muted-foreground hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
                                     title="Abortar build"
                                 >
                                     <Square size={12} />
@@ -267,7 +267,7 @@ export function JenkinsJobCard({
                     {lb && (
                         <button
                             onClick={() => onOpenLog({ jobName, buildNumber: lb.number, jobPath, building: lb.building })}
-                            className="p-1.5 text-slate-500 hover:text-sky-400 hover:bg-sky-400/10 rounded transition-colors"
+                            className="p-1.5 text-muted-foreground hover:text-sky-400 hover:bg-sky-400/10 rounded transition-colors"
                             title="Ver logs"
                         >
                             <Terminal size={12} />
@@ -275,7 +275,7 @@ export function JenkinsJobCard({
                     )}
                     <button
                         onClick={() => openUrl(jobUrl)}
-                        className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded transition-colors"
+                        className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
                         title="Abrir en Jenkins"
                     >
                         <ExternalLink size={12} />
@@ -289,8 +289,8 @@ export function JenkinsJobCard({
 
             {/* ── Expanded section ──────────────────────────────────── */}
             {expanded && (
-                <div className="border-t border-slate-800 bg-slate-950/30 p-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                <div className="border-t border-border bg-muted/20 p-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
                         {isContainer ? <Layers size={10} /> : <History size={10} />}
                         {isContainer ? 'Ambientes (Ramas)' : 'Histórico'}
                     </span>
@@ -298,8 +298,8 @@ export function JenkinsJobCard({
                     <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
                         {(loadingBuilds || loadingChildren) && (
                             <div className="py-6 flex items-center justify-center gap-2">
-                                <Loader2 size={14} className="animate-spin text-slate-700" />
-                                <span className="text-[10px] text-slate-700 font-mono">Cargando...</span>
+                                <Loader2 size={14} className="animate-spin text-muted-foreground/40" />
+                                <span className="text-[10px] text-muted-foreground/40 font-mono">Cargando...</span>
                             </div>
                         )}
 
@@ -315,16 +315,16 @@ export function JenkinsJobCard({
                         {!isContainer && !loadingBuilds && (builds || []).slice(0, 15).map((b: any) => (
                             <div
                                 key={b.number}
-                                className="flex items-center justify-between p-2 bg-slate-900/50 rounded-lg group/row hover:bg-slate-800/50 border border-transparent hover:border-white/5 transition-colors"
+                                className="flex items-center justify-between p-2 bg-muted/30 rounded-lg group/row hover:bg-muted/50 border border-transparent hover:border-border transition-colors"
                             >
                                 <div className="flex items-center gap-3 min-w-0">
                                     <ResultBadge result={b.result} building={b.building} />
                                     <div className="flex flex-col min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-mono text-slate-300">#{b.number}</span>
-                                            <span className="text-[10px] text-slate-500 truncate">{b.displayName || 'Execution'}</span>
+                                            <span className="text-[10px] font-mono text-foreground">#{b.number}</span>
+                                            <span className="text-[10px] text-muted-foreground truncate">{b.displayName || 'Execution'}</span>
                                         </div>
-                                        <div className="flex items-center gap-1.5 text-[9px] text-slate-600">
+                                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/50">
                                             <Clock size={8} /> {formatDuration(b.duration)} • {formatAgo(b.timestamp)}
                                         </div>
                                     </div>
@@ -332,11 +332,11 @@ export function JenkinsJobCard({
                                 <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity">
                                     <button
                                         onClick={() => onOpenLog({ jobName, buildNumber: b.number, jobPath, building: b.building })}
-                                        className="p-1.5 text-slate-500 hover:text-sky-400"
+                                        className="p-1.5 text-muted-foreground hover:text-sky-400"
                                     >
                                         <Terminal size={11} />
                                     </button>
-                                    <button onClick={() => openUrl(b.url)} className="p-1.5 text-slate-500 hover:text-slate-300">
+                                    <button onClick={() => openUrl(b.url)} className="p-1.5 text-muted-foreground/50 hover:text-foreground">
                                         <ExternalLink size={11} />
                                     </button>
                                 </div>
@@ -346,7 +346,7 @@ export function JenkinsJobCard({
                         {!loadingBuilds && !loadingChildren && (
                             isContainer ? (children || []).length === 0 : (builds || []).length === 0
                         ) && (
-                                <div className="py-3 text-center text-[10px] text-slate-600 italic">
+                                <div className="py-3 text-center text-[10px] text-muted-foreground/50 italic">
                                     No hay ambientes o ejecuciones disponibles
                                 </div>
                             )}

@@ -3,6 +3,8 @@ import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { useUIStore } from '../../stores/uiStore';
+import { getTerminalTheme } from '../../lib/terminalThemes';
 import 'xterm/css/xterm.css';
 
 interface SsmTerminalProps {
@@ -21,18 +23,20 @@ export const SsmTerminal: React.FC<SsmTerminalProps> = ({ serviceId, onClose }) 
     const containerRef = useRef<HTMLDivElement>(null);
     const termRef = useRef<Terminal | null>(null);
     const fitRef = useRef<FitAddon | null>(null);
+    const terminalThemeId = useUIStore(s => s.terminalThemeId);
+
+    // Hot-swap del tema sin recrear la instancia
+    useEffect(() => {
+        const term = termRef.current;
+        if (!term) return;
+        term.options.theme = getTerminalTheme(terminalThemeId).theme;
+    }, [terminalThemeId]);
 
     useEffect(() => {
         if (!containerRef.current) return;
 
         const term = new Terminal({
-            theme: {
-                background: '#020617',
-                foreground: '#f8fafc',
-                cursor: '#38bdf8',
-                cursorAccent: '#020617',
-                selectionBackground: 'rgba(56, 189, 248, 0.3)',
-            },
+            theme: getTerminalTheme(useUIStore.getState().terminalThemeId).theme,
             fontFamily: 'Consolas, "Courier New", monospace',
             fontSize: 14,
             scrollback: 5000,

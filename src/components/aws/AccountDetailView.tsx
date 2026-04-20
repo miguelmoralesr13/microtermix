@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Edit2, RefreshCw, CheckCircle, Eye, EyeOff, 
-    ClipboardPaste 
-} from 'lucide-react';
+import { Edit2, RefreshCw, CheckCircle, Eye, EyeOff, ClipboardPaste } from 'lucide-react';
 import { useAwsStore, AwsAccount } from '../../stores/awsStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { cn } from '../../lib/utils';
 import { cwGetLogGroups, CwCredentials } from '../../services/cloudwatchApi';
 import { parseAwsCredentialBlock } from './cwUtils';
@@ -25,9 +23,8 @@ export const AccountDetailView: React.FC<AccountDetailViewProps> = ({ account, o
     const [draft, setDraft] = useState<Omit<AwsAccount, 'id'>>({ ...account });
     const [testing, setTesting] = useState(false);
     const [result, setResult] = useState<'ok' | 'error' | null>(null);
-    const [showPaste, setShowPaste] = useState(false);
-    const [pasteText, setPasteText] = useState('');
     const [showSecret, setShowSecret] = useState(false);
+    const [pasteText, setPasteText] = useState('');
     const [isAutoProcessing, setIsAutoProcessing] = useState(false);
 
     useEffect(() => {
@@ -40,177 +37,212 @@ export const AccountDetailView: React.FC<AccountDetailViewProps> = ({ account, o
         onSaved();
     };
 
+    const applyPaste = async (text: string) => {
+        const parsed = parseAwsCredentialBlock(text);
+        if (Object.keys(parsed).length === 0) return;
+        const newDraft = { ...draft, ...parsed } as Omit<AwsAccount, 'id'>;
+        setDraft(newDraft);
+        setPasteText('');
+        setIsAutoProcessing(true);
+        try {
+            await cwGetLogGroups(newDraft as CwCredentials, '');
+            setAccountStatus(account.id, 'valid');
+        } catch { /* allow save even if test fails */ }
+        handleSave(newDraft);
+        setIsAutoProcessing(false);
+    };
+
     const handleTest = async () => {
         setTesting(true);
         setResult(null);
         try {
             await cwGetLogGroups(draft as CwCredentials, '');
             setResult('ok');
-            // Restore status to valid on success
             setAccountStatus(account.id, 'valid');
-        } catch (e) {
+        } catch {
             setResult('error');
         } finally {
             setTesting(false);
         }
     };
 
-    async function applyPaste(text: string) {
-        const parsed = parseAwsCredentialBlock(text);
-        if (Object.keys(parsed).length === 0) return;
-        
-        const newDraft = { ...draft, ...parsed } as Omit<AwsAccount, 'id'>;
-        setDraft(newDraft);
-        setPasteText('');
-        setShowPaste(false);
-        
-        setIsAutoProcessing(true);
-        await handleTest();
-        setIsAutoProcessing(false);
-        handleSave(newDraft);
-    }
-
     return (
-        <div className="xl:col-span-3 space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300 max-w-xl">
+            {/* Account title + actions */}
             <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                    <h2 className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                    <h2 className="text-base font-black text-foreground tracking-tight flex items-center gap-2">
                         {account.name}
                         <Badge variant="outline" className={cn(
-                            "text-[10px] uppercase font-black tracking-widest",
-                            account.status === 'expired' ? "border-red-500 text-red-500 bg-red-500/10" : "border-white/5 text-slate-500"
+                            "text-[9px] uppercase font-black tracking-widest",
+                            account.status === 'expired'
+                                ? "border-red-500 text-red-500 bg-red-500/10"
+                                : "border-border text-muted-foreground"
                         )}>
-                            {account.status === 'expired' ? 'SESIÓN EXPIRADA' : account.region}
+                            {account.status === 'expired' ? 'Sesión Expirada' : account.region}
                         </Badge>
                     </h2>
-                    <p className="text-xs text-slate-600 font-mono">ID: {account.id}</p>
+                    <p className="text-[9px] text-muted-foreground font-mono">ID: {account.id}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <Button 
-                        variant={isEditing ? "ghost" : "outline"}
-                        size="sm"
-                        onClick={() => setIsEditing(!isEditing)}
-                        className={cn("h-8 gap-2 border-white/5", isEditing ? "text-slate-500" : "hover:bg-white/5")}
-                    >
-                        {isEditing ? "Cancelar" : <><Edit2 className="w-3.5 h-3.5" /> Editar</>}
-                    </Button>
-                </div>
+                <Button
+                    variant={isEditing ? "ghost" : "outline"}
+                    size="sm"
+                    onClick={() => setIsEditing(!isEditing)}
+                    className="h-8 gap-2"
+                >
+                    {isEditing ? "Cancelar" : <><Edit2 className="w-3.5 h-3.5" /> Editar</>}
+                </Button>
             </div>
 
+            {/* Main card */}
             <div className={cn(
-                "p-6 rounded-[2rem] border transition-all duration-300 bg-slate-900/20 backdrop-blur-md min-h-[300px]",
-                isEditing ? "border-microtermix-neon/20 ring-1 ring-microtermix-neon/10" : 
-                (account.status === 'expired' ? "border-red-500/30 ring-1 ring-red-500/10 shadow-[0_0_20px_-10px_rgba(239,68,68,0.3)]" : "border-white/5")
+                "p-5 rounded-2xl border transition-all bg-card",
+                isEditing
+                    ? "border-microtermix-neon/20 ring-1 ring-microtermix-neon/10"
+                    : account.status === 'expired'
+                        ? "border-red-500/30 ring-1 ring-red-500/10"
+                        : "border-border"
             )}>
                 {isEditing ? (
-                    <div className="space-y-6">
-                        <div className="flex justify-end">
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => setShowPaste(!showPaste)}
-                                className={cn("h-7 px-3 text-[10px] font-black uppercase tracking-widest gap-2", showPaste ? "text-microtermix-neon bg-microtermix-neon/10" : "text-slate-500")}
-                            >
-                                <ClipboardPaste className="w-3 h-3" /> Quick Paste
-                            </Button>
-                        </div>
+                    <Tabs defaultValue="manual" className="w-full flex-col">
+                        <TabsList className="bg-muted border border-border h-8 p-1 w-full grid grid-cols-2 mb-4">
+                            <TabsTrigger value="manual" className="text-[9px] uppercase font-black tracking-widest data-active:bg-microtermix-neon data-active:text-microtermix-darker">
+                                Manual
+                            </TabsTrigger>
+                            <TabsTrigger value="paste" className="text-[9px] uppercase font-black tracking-widest data-active:bg-microtermix-neon data-active:text-microtermix-darker gap-1.5">
+                                <ClipboardPaste className="w-3 h-3" /> Pegado Rápido
+                            </TabsTrigger>
+                        </TabsList>
 
-                        {showPaste && (
-                            <div className="relative group">
+                        {/* ── Manual ── */}
+                        <TabsContent value="manual" className="m-0 space-y-4 animate-in fade-in duration-200">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Región</Label>
+                                    <Input value={draft.region} onChange={e => setDraft({ ...draft, region: e.target.value })} className="h-9 rounded-xl text-xs" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Session Token</Label>
+                                    <Input placeholder="Opcional" value={draft.sessionToken || ''} onChange={e => setDraft({ ...draft, sessionToken: e.target.value })} className="h-9 rounded-xl text-xs" />
+                                </div>
+                                <div className="col-span-2 space-y-1.5">
+                                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Access Key ID</Label>
+                                    <Input value={draft.accessKeyId} onChange={e => setDraft({ ...draft, accessKeyId: e.target.value })} className="h-9 rounded-xl font-mono text-xs" />
+                                </div>
+                                <div className="col-span-2 space-y-1.5">
+                                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Secret Access Key</Label>
+                                    <div className="relative">
+                                        <Input
+                                            type={showSecret ? "text" : "password"}
+                                            value={draft.secretAccessKey}
+                                            onChange={e => setDraft({ ...draft, secretAccessKey: e.target.value })}
+                                            className="h-9 rounded-xl font-mono text-xs pr-10"
+                                        />
+                                        <button
+                                            onClick={() => setShowSecret(!showSecret)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        >
+                                            {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <Button
+                                onClick={() => handleSave()}
+                                className="w-full bg-microtermix-neon text-microtermix-darker font-black uppercase tracking-widest h-10 rounded-xl"
+                            >
+                                Guardar
+                            </Button>
+                        </TabsContent>
+
+                        {/* ── Quick paste ── */}
+                        <TabsContent value="paste" className="m-0 space-y-3 animate-in fade-in duration-200 relative">
+                            <div className="relative">
                                 <textarea
                                     autoFocus
                                     value={pasteText}
                                     onChange={e => setPasteText(e.target.value)}
                                     onPaste={(e) => applyPaste(e.clipboardData.getData('text'))}
-                                    placeholder={`aws_access_key_id=ASIA...\naws_secret_access_key=...`}
-                                    className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 text-xs font-mono text-microtermix-neon placeholder:text-slate-800 min-h-[160px] focus:ring-2 focus:ring-microtermix-neon/30 outline-none transition-all"
+                                    placeholder={`[default]\naws_access_key_id = AKIA...\naws_secret_access_key = ...`}
+                                    className="w-full bg-muted/50 border border-border rounded-2xl p-4 text-xs font-mono text-microtermix-neon placeholder:text-muted-foreground/40 min-h-[160px] focus:ring-2 focus:ring-microtermix-neon/30 outline-none transition-all resize-none"
                                 />
                                 {isAutoProcessing && (
-                                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center rounded-2xl gap-3">
-                                        <RefreshCw className="w-8 h-8 text-microtermix-neon animate-spin" />
-                                        <p className="text-[10px] font-black text-microtermix-neon animate-pulse uppercase tracking-[0.2em]">Configurando...</p>
+                                    <div className="absolute inset-0 bg-card/90 backdrop-blur-md flex flex-col items-center justify-center rounded-2xl gap-3 border border-microtermix-neon/20 animate-in fade-in duration-300">
+                                        <RefreshCw className="w-7 h-7 text-microtermix-neon animate-spin" />
+                                        <p className="text-[9px] font-black text-microtermix-neon uppercase tracking-[0.2em]">Sincronizando...</p>
                                     </div>
                                 )}
                             </div>
-                        )}
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">Región</Label>
-                                <Input value={draft.region} onChange={e => setDraft({...draft, region: e.target.value})} className="bg-black/40 border-white/5 h-10 rounded-xl" />
-                            </div>
-                            <div className="space-y-2 text-right">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">Session Token</Label>
-                                <Input placeholder="Opcional" value={draft.sessionToken || ''} onChange={e => setDraft({...draft, sessionToken: e.target.value})} className="bg-black/40 border-white/5 h-10 rounded-xl text-right" />
-                            </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">Access Key ID</Label>
-                                <Input value={draft.accessKeyId} onChange={e => setDraft({...draft, accessKeyId: e.target.value})} className="bg-black/40 border-white/5 h-10 rounded-xl font-mono text-xs" />
-                            </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">Secret Access Key</Label>
-                                <div className="relative">
-                                    <Input 
-                                        type={showSecret ? "text" : "password"} 
-                                        value={draft.secretAccessKey} 
-                                        onChange={e => setDraft({...draft, secretAccessKey: e.target.value})} 
-                                        className="bg-black/40 border-white/5 h-10 rounded-xl font-mono text-xs pr-10" 
-                                    />
-                                    <button onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400">{showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
-                                </div>
-                            </div>
-                        </div>
-                        <Button onClick={() => handleSave()} className="w-full bg-microtermix-neon text-microtermix-darker font-black uppercase tracking-widest h-11 rounded-xl shadow-lg shadow-microtermix-neon/10 hover:scale-[1.01] transition-all">
-                            Salvar Configuración
-                        </Button>
-                    </div>
+                            <p className="text-[9px] text-muted-foreground italic px-1">
+                                Pegá el bloque de <code className="text-microtermix-neon font-mono">~/.aws/credentials</code> — se guarda automáticamente.
+                            </p>
+                        </TabsContent>
+                    </Tabs>
                 ) : (
-                    <div className="space-y-8">
+                    <div className="space-y-4">
+                        {/* Auth status row */}
                         <div className={cn(
-                            "flex items-center justify-between p-5 bg-black/40 rounded-2xl border transition-all duration-500",
-                            account.status === 'expired' ? "border-red-500/50 bg-red-500/5" : "border-white/5"
+                            "flex items-center justify-between p-4 bg-muted/30 rounded-xl border transition-all",
+                            account.status === 'expired' ? "border-red-500/30 bg-red-500/5" : "border-border"
                         )}>
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3">
                                 <div className={cn(
-                                    "p-2.5 rounded-xl transition-all",
-                                    result === 'ok' ? "bg-emerald-500/10 text-emerald-400" : 
-                                    (account.status === 'expired' ? "bg-red-500/10 text-red-500" : "bg-slate-800 text-slate-500")
+                                    "p-2 rounded-lg",
+                                    result === 'ok'
+                                        ? "bg-emerald-500/10 text-emerald-400"
+                                        : account.status === 'expired'
+                                            ? "bg-red-500/10 text-red-500"
+                                            : "bg-muted text-muted-foreground"
                                 )}>
-                                    {result === 'ok' ? <CheckCircle className="w-5 h-5" /> : 
-                                    (account.status === 'expired' ? <RefreshCw className="w-5 h-5" /> : <RefreshCw className={cn("w-5 h-5", testing && "animate-spin")} />)}
+                                    {result === 'ok'
+                                        ? <CheckCircle className="w-4 h-4" />
+                                        : <RefreshCw className={cn("w-4 h-4", testing && "animate-spin")} />
+                                    }
                                 </div>
                                 <div>
-                                    <p className={cn("text-sm font-bold", account.status === 'expired' ? "text-red-400" : "text-white")}>Autenticación</p>
-                                    <p className={cn("text-[10px] uppercase font-black tracking-widest", account.status === 'expired' ? "text-red-500" : "text-slate-500")}>
-                                        {result === 'ok' ? "Credenciales Válidas" : (account.status === 'expired' ? "Sesión Expirada" : "Pendiente")}
+                                    <p className={cn(
+                                        "text-xs font-bold",
+                                        account.status === 'expired' ? "text-red-400" : "text-foreground"
+                                    )}>Autenticación</p>
+                                    <p className={cn(
+                                        "text-[9px] uppercase font-black tracking-widest",
+                                        account.status === 'expired' ? "text-red-500" : "text-muted-foreground"
+                                    )}>
+                                        {result === 'ok' ? "Credenciales Válidas" : account.status === 'expired' ? "Sesión Expirada" : "Pendiente"}
                                     </p>
                                 </div>
                             </div>
-                            <Button 
-                                onClick={handleTest} 
+                            <Button
+                                onClick={handleTest}
                                 disabled={testing}
-                                variant="ghost" 
+                                variant="ghost"
+                                size="sm"
                                 className={cn(
-                                    "text-xs font-black uppercase tracking-widest gap-2",
+                                    "text-[10px] font-black uppercase tracking-widest h-8",
                                     account.status === 'expired' ? "text-red-500 hover:bg-red-500/10" : "text-emerald-400 hover:bg-emerald-400/5"
                                 )}
                             >
-                                Probar ahora
+                                Probar
                             </Button>
                         </div>
 
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between px-1 border-b border-white/5 pb-4">
-                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-600">Access Key ID</Label>
-                                <p className="text-xs font-mono text-slate-400">{account.accessKeyId.substring(0, 16)}...</p>
+                        {/* Credentials summary */}
+                        <div className="space-y-2 px-1">
+                            <div className="flex items-center justify-between py-2 border-b border-border">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Access Key ID</Label>
+                                <p className="text-[11px] font-mono text-foreground">{account.accessKeyId.substring(0, 16)}...</p>
+                            </div>
+                            <div className="flex items-center justify-between py-2">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Región</Label>
+                                <p className="text-[11px] font-mono text-foreground">{account.region}</p>
                             </div>
                         </div>
                     </div>
                 )}
             </div>
 
-            <ProfileOverrideCard 
-                accountId={account.id} 
+            <ProfileOverrideCard
+                accountId={account.id}
                 draftPath={draft.ssmPluginPath || ''}
                 onDraftPathChange={(path) => setDraft(d => ({ ...d, ssmPluginPath: path }))}
                 isEditing={isEditing}

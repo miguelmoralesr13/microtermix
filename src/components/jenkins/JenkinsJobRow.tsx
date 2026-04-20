@@ -31,15 +31,15 @@ function BuildRow({
     const durDisplay = build.building ? Math.max(0, now - build.timestamp) : build.duration;
 
     return (
-        <div className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800/40 rounded transition-colors text-xs">
+        <div className="flex items-center gap-3 px-3 py-2 hover:bg-muted/40 rounded transition-colors text-xs">
             <ResultBadge result={build.result} building={build.building} />
-            <span className="font-mono text-slate-400 w-10 shrink-0">#{build.number}</span>
-            <span className="text-slate-400 w-20 shrink-0">{formatAgo(build.timestamp)}</span>
-            <span className="text-slate-500 w-16 shrink-0">{formatDuration(durDisplay)}</span>
+            <span className="font-mono text-muted-foreground w-10 shrink-0">#{build.number}</span>
+            <span className="text-muted-foreground w-20 shrink-0">{formatAgo(build.timestamp)}</span>
+            <span className="text-muted-foreground/70 w-16 shrink-0">{formatDuration(durDisplay)}</span>
             <div className="flex items-center gap-1.5 ml-auto">
                 <button
                     onClick={onOpenLog}
-                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-slate-700/60 hover:bg-slate-700 text-slate-300 rounded transition-colors"
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-muted hover:bg-muted/80 text-foreground rounded transition-colors"
                 >
                     <Terminal size={10} /> Log
                 </button>
@@ -53,7 +53,7 @@ function BuildRow({
                 )}
                 <button
                     onClick={() => openUrl(build.url + 'console').catch(() => { })}
-                    className="p-0.5 text-slate-600 hover:text-slate-400 transition-colors"
+                    className="p-0.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                     title="Open in browser"
                 >
                     <ExternalLink size={10} />
@@ -161,24 +161,24 @@ export function JenkinsJobRow({
     const isFav = !!favorites[normalizeUrl(job.url)];
 
     const headerClass = isTopLevel
-        ? 'flex items-center gap-2.5 px-3 py-2.5 bg-slate-900/60 hover:bg-slate-800/60 cursor-pointer transition-colors'
-        : 'flex items-center gap-2 px-3 py-2 hover:bg-slate-800/30 cursor-pointer transition-colors rounded';
+        ? 'flex items-center gap-2.5 px-3 py-2.5 bg-card hover:bg-muted/40 cursor-pointer transition-colors'
+        : 'flex items-center gap-2 px-3 py-2 hover:bg-muted/30 cursor-pointer transition-colors rounded';
 
     const nameClass = isTopLevel
-        ? 'text-sm text-slate-200 flex-1 truncate'
-        : 'text-xs text-slate-300 flex-1 font-mono truncate';
+        ? 'text-sm text-foreground flex-1 truncate'
+        : 'text-xs text-foreground flex-1 font-mono truncate';
 
     const icon = folder
         ? <Folder size={12} className="text-amber-400/70 shrink-0" />
         : multi
             ? <Layers size={12} className="text-microtermix-accent shrink-0" />
             : isBranch
-                ? <GitBranch size={11} className="text-slate-500 shrink-0" />
+                ? <GitBranch size={11} className="text-muted-foreground/70 shrink-0" />
                 : null;
 
     const rowContent = (
         <div className={headerClass} style={indentStyle} onClick={handleToggle}>
-            {expanded ? <ChevronDown size={isTopLevel ? 13 : 12} className="text-slate-500 shrink-0" /> : <ChevronRight size={isTopLevel ? 13 : 12} className="text-slate-500 shrink-0" />}
+            {expanded ? <ChevronDown size={isTopLevel ? 13 : 12} className="text-muted-foreground/70 shrink-0" /> : <ChevronRight size={isTopLevel ? 13 : 12} className="text-muted-foreground/70 shrink-0" />}
             {!folder && <JobColorDot color={currentJob.color} />}
             {icon}
             <span className={nameClass}>{highlightText(currentJob.displayName || currentJob.name, search)}</span>
@@ -186,33 +186,33 @@ export function JenkinsJobRow({
             {lb && !folder && (
                 <div className="flex items-center gap-2 shrink-0">
                     <ResultBadge result={lb.result} building={lb.building} />
-                    <span className="text-[10px] text-slate-500 hidden sm:block">{formatAgo(lb.timestamp)}</span>
+                    <span className="text-[10px] text-muted-foreground/70 hidden sm:block">{formatAgo(lb.timestamp)}</span>
                     {isTopLevel && (
-                        <span className="text-[10px] text-slate-500 hidden md:block">{formatDuration(lb.building ? Math.max(0, now - lb.timestamp) : lb.duration)}</span>
+                        <span className="text-[10px] text-muted-foreground/70 hidden md:block">{formatDuration(lb.building ? Math.max(0, now - lb.timestamp) : lb.duration)}</span>
                     )}
                 </div>
             )}
 
             <div className="flex items-center gap-1 ml-2" onClick={e => e.stopPropagation()}>
                 {!folder && !multi && (
-                    <button onClick={handleBuild} disabled={triggerMutation.isPending} className="p-1 rounded hover:bg-emerald-500/10 text-slate-500 hover:text-emerald-400 transition-colors">
+                    <button onClick={handleBuild} disabled={triggerMutation.isPending} className="p-1 rounded hover:bg-emerald-500/10 text-muted-foreground/70 hover:text-emerald-400 transition-colors">
                         {triggerMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Play size={11} />}
                     </button>
                 )}
                 {!folder && !multi && lb?.building && (
-                    <button onClick={handleAbort} className="p-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 transition-colors"><Square size={11} /></button>
+                    <button onClick={handleAbort} className="p-1 rounded hover:bg-red-500/10 text-muted-foreground/70 hover:text-red-400 transition-colors"><Square size={11} /></button>
                 )}
                 {!folder && !multi && lb && (
-                    <button onClick={handleOpenLastLog} className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 transition-colors"><Terminal size={11} /></button>
+                    <button onClick={handleOpenLastLog} className="p-1 rounded hover:bg-muted text-muted-foreground/70 hover:text-foreground transition-colors"><Terminal size={11} /></button>
                 )}
-                <button onClick={() => openUrl(currentJob.url)} className="p-1 rounded text-slate-600 hover:text-slate-400 transition-colors"><ExternalLink size={10} /></button>
+                <button onClick={() => openUrl(currentJob.url)} className="p-1 rounded text-muted-foreground/50 hover:text-muted-foreground transition-colors"><ExternalLink size={10} /></button>
 
                 {canFavorite && (
                     <button
                         onClick={(e) => { e.stopPropagation(); toggleFavorite(jobToFavorite(currentJob)); }}
                         className={cn(
                             "p-1.5 rounded transition-colors",
-                            isFav ? 'text-amber-400' : 'text-slate-600 hover:text-amber-400 hover:bg-amber-400/5'
+                            isFav ? 'text-amber-400' : 'text-muted-foreground/50 hover:text-amber-400 hover:bg-amber-400/5'
                         )}
                     >
                         <Star size={13} className={isFav ? 'fill-current' : ''} />
@@ -223,10 +223,10 @@ export function JenkinsJobRow({
     );
 
     const expandedContent = expanded && (
-        <div className={isTopLevel ? 'bg-slate-900/30 border-t border-slate-800' : 'border-l border-slate-800 ml-5 pl-1'}>
+        <div className={isTopLevel ? 'bg-muted/20 border-t border-border' : 'border-l border-border ml-5 pl-1'}>
             {(folder || multi) && (
                 <div className={isTopLevel ? 'p-2' : 'py-1'}>
-                    {loadingChildren && <div className="p-2 text-xs text-slate-500">Loading...</div>}
+                    {loadingChildren && <div className="p-2 text-xs text-muted-foreground">Loading...</div>}
                     {children?.map(child => (
                         <JenkinsJobRow
                             key={child.url}
@@ -242,7 +242,7 @@ export function JenkinsJobRow({
             )}
             {!folder && !multi && (
                 <div className={isTopLevel ? 'p-2' : 'py-1'}>
-                    {loadingBuilds && <div className="p-2 text-xs text-slate-500">Loading...</div>}
+                    {loadingBuilds && <div className="p-2 text-xs text-muted-foreground">Loading...</div>}
                     {builds?.map(b => (
                         <BuildRow key={b.number} build={b} onOpenLog={() => onOpenLog({ jobName: parentName ? `${parentName} / ${job.name}` : job.name, buildNumber: b.number, jobPath, building: b.building })} onAbort={() => abortMutation.mutate({ jobPath, buildNumber: b.number })} />
                     ))}
@@ -252,7 +252,7 @@ export function JenkinsJobRow({
     );
 
     return isTopLevel ? (
-        <div className="border border-slate-800 rounded-lg overflow-hidden mb-2">
+        <div className="border border-border rounded-xl overflow-hidden mb-2">
             {rowContent}
             {expandedContent}
         </div>

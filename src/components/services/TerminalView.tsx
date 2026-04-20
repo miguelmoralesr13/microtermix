@@ -4,6 +4,8 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useProcessStore } from '../../stores/processStore';
+import { useUIStore } from '../../stores/uiStore';
+import { getTerminalTheme } from '../../lib/terminalThemes';
 import { Search, X, ChevronUp, ChevronDown, Lightbulb, Zap, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -38,6 +40,7 @@ const EMPTY_LOGS: string[] = [];
 
 export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
     const logs = useProcessStore(s => s.activeProcesses[serviceId]?.logs || EMPTY_LOGS);
+    const terminalThemeId = useUIStore(s => s.terminalThemeId);
     const { parseLogLine } = useLogActions();
 
     const terminalRef = useRef<HTMLDivElement>(null);
@@ -64,27 +67,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
         if (!terminalRef.current) return;
 
         const term = new Terminal({
-            theme: {
-                background: '#020617',
-                foreground: '#f8fafc',
-                cursor: '#38bdf8',
-                black: '#020617',
-                red: '#ff5555',
-                green: '#50fa7b',
-                yellow: '#f1fa8c',
-                blue: '#bd93f9',
-                magenta: '#ff79c6',
-                cyan: '#8be9fd',
-                white: '#f8fafc',
-                brightBlack: '#6272a4',
-                brightRed: '#ff6e6e',
-                brightGreen: '#69ff94',
-                brightYellow: '#ffffa5',
-                brightBlue: '#d6acff',
-                brightMagenta: '#ff92df',
-                brightCyan: '#a4ffff',
-                brightWhite: '#ffffff',
-            },
+            theme: getTerminalTheme(useUIStore.getState().terminalThemeId).theme,
             fontFamily: 'Consolas, "Courier New", monospace',
             fontSize: 14,
             scrollback: 5000,
@@ -257,6 +240,13 @@ export const TerminalView: React.FC<TerminalViewProps> = ({ serviceId }) => {
     const handleClear = useCallback(() => {
         useProcessStore.getState().setLogs(serviceId, []);
     }, [serviceId]);
+
+    // Hot-swap del tema sin recrear la instancia
+    useEffect(() => {
+        const term = xtermRef.current;
+        if (!term) return;
+        term.options.theme = getTerminalTheme(terminalThemeId).theme;
+    }, [terminalThemeId]);
 
     useEffect(() => {
         const term = xtermRef.current;

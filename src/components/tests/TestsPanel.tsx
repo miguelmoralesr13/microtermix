@@ -4,6 +4,7 @@ import {
     FlaskConical, Play, Square, RefreshCw, ExternalLink,
     Settings, Monitor, TerminalSquare, X, Search,
 } from 'lucide-react';
+import { TestsSidebarList } from './TestsSidebarList';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { TaskTerminal } from '../ui/task-terminal';
 import { useTaskStore } from '../../stores/taskStore';
@@ -235,72 +236,11 @@ export const TestsPanel: React.FC = () => {
 
             <div className="flex-1 flex min-h-0 overflow-hidden">
                 {/* ── Left: project list ──────────────────────────────────── */}
-                <div className="w-56 shrink-0 border-r border-slate-800 flex flex-col overflow-hidden bg-slate-950/30">
-                    <div className="shrink-0 px-3 py-2 border-b border-slate-800/60 bg-slate-950/50">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                            Vistas & Proyectos
-                        </p>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        <div
-                            onClick={() => handleSelectProject('dashboard')}
-                            className={cn(
-                                'flex items-center justify-between px-3 py-2.5 cursor-pointer transition-colors border-l-2 mb-1 border-b border-b-slate-800/50',
-                                selectedPath === 'dashboard'
-                                    ? 'bg-microtermix-neon/10 border-microtermix-neon'
-                                    : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600',
-                            )}
-                        >
-                            <p className={cn('text-xs font-bold truncate', selectedPath === 'dashboard' ? 'text-microtermix-neon' : 'text-slate-300')}>
-                                📊 Dashboard General
-                            </p>
-                        </div>
-                        
-                        {projects.length === 0 && (
-                            <p className="px-3 py-4 text-xs text-slate-600 text-center">Sin proyectos</p>
-                        )}
-                        {projects.map(p => {
-                            const path = p.path as string;
-                            const cov = coverageMap[path];
-                            const linesP = cov ? pct(cov.lines) : null;
-                            const tid = `tests-${path.replace(/[/\\:]/g, '_')}`;
-                            const running = activeTasks[tid]?.status === 'running';
-                            const isSelected = selectedPath === path;
-                            return (
-                                <div
-                                    key={path}
-                                    onClick={() => handleSelectProject(path)}
-                                    className={cn(
-                                        'flex items-center justify-between px-3 py-2 cursor-pointer transition-colors border-l-2',
-                                        isSelected
-                                            ? 'bg-microtermix-neon/10 border-microtermix-neon'
-                                            : 'border-transparent hover:bg-slate-800/40 hover:border-slate-600',
-                                    )}
-                                >
-                                    <div className="flex-1 min-w-0">
-                                        <p className={cn('text-xs font-medium truncate', isSelected ? 'text-microtermix-neon' : 'text-slate-300')}>
-                                            {p.name as string}
-                                        </p>
-                                        {running && (
-                                            <span className="text-[9px] text-microtermix-success flex items-center gap-1 mt-0.5">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-microtermix-success animate-pulse inline-block" />
-                                                running
-                                            </span>
-                                        )}
-                                    </div>
-                                    {linesP !== null && (
-                                        <Badge className={cn(
-                                            'ml-2 shrink-0 text-[10px] font-bold border-0 rounded',
-                                            pctColor(linesP).text, 'bg-slate-800',
-                                        )}>
-                                            {linesP}%
-                                        </Badge>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                <TestsSidebarList
+                    projects={projects}
+                    selectedPath={selectedPath}
+                    onSelectPath={handleSelectProject}
+                />
 
                 {/* ── Right ─────────────────────────────────────────────── */}
                 {selectedPath === 'dashboard' ? (

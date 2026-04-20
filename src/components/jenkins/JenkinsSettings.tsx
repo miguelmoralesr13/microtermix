@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { CheckCircle2, AlertCircle, Loader2, Plus, Trash2, Server } from 'lucide-react';
 import { JenkinsConfig, jenkinsTestConnection } from '../../services/jenkinsApi';
 import { useJenkinsStore } from '../../stores/jenkinsStore';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 function AccountForm({
     account,
@@ -41,95 +44,99 @@ function AccountForm({
     };
 
     return (
-        <div className="bg-slate-900 border border-slate-800 p-4 rounded-lg space-y-4 relative">
+        <div className="bg-card border border-border p-5 rounded-2xl space-y-4 relative">
             {onDelete && (
-                <button
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={onDelete}
-                    className="absolute top-4 right-4 p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                    title="Delete Account"
+                    className="absolute top-4 right-4 text-muted-foreground hover:text-red-400 hover:bg-red-400/10"
+                    title="Eliminar cuenta"
                 >
                     <Trash2 size={14} />
-                </button>
+                </Button>
             )}
 
-            <h3 className="text-sm font-semibold text-slate-200">
-                {account ? 'Edit Account' : 'New Jenkins Account'}
+            <h3 className="text-sm font-black text-foreground uppercase tracking-widest">
+                {account ? 'Editar Cuenta' : 'Nueva Cuenta Jenkins'}
             </h3>
 
-            <div className="grid grid-cols-2 gap-4">
-                <label className="block col-span-2 sm:col-span-1">
-                    <span className="text-xs text-slate-400 mb-1 block">Account Name (e.g. Prod, Staging)</span>
-                    <input
-                        className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
-                        placeholder="My Jenkins"
+            <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 sm:col-span-1 space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Nombre</Label>
+                    <Input
+                        placeholder="Prod, Staging..."
                         value={draft.name}
                         onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                        className="h-9 rounded-xl text-xs"
                     />
-                </label>
-
-                <label className="block col-span-2 sm:col-span-1">
-                    <span className="text-xs text-slate-400 mb-1 block">Jenkins URL</span>
-                    <input
-                        className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
+                </div>
+                <div className="col-span-2 sm:col-span-1 space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Jenkins URL</Label>
+                    <Input
                         placeholder="https://jenkins.example.com"
                         value={draft.baseUrl}
                         onChange={e => setDraft(d => ({ ...d, baseUrl: e.target.value }))}
+                        className="h-9 rounded-xl text-xs font-mono"
                     />
-                </label>
-
-                <label className="block col-span-2 sm:col-span-1">
-                    <span className="text-xs text-slate-400 mb-1 block">Username</span>
-                    <input
-                        className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
+                </div>
+                <div className="col-span-2 sm:col-span-1 space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Usuario</Label>
+                    <Input
                         placeholder="admin"
                         value={draft.user}
                         onChange={e => setDraft(d => ({ ...d, user: e.target.value }))}
+                        className="h-9 rounded-xl text-xs"
                     />
-                </label>
-
-                <label className="block col-span-2 sm:col-span-1">
-                    <span className="text-xs text-slate-400 mb-1 block">API Token</span>
-                    <input
+                </div>
+                <div className="col-span-2 sm:col-span-1 space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">API Token</Label>
+                    <Input
                         type="password"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500/50"
-                        placeholder="11a2b3c4d5e6f7g8h9..."
+                        placeholder="11a2b3c4d5e6..."
                         value={draft.token}
                         onChange={e => setDraft(d => ({ ...d, token: e.target.value }))}
+                        className="h-9 rounded-xl text-xs font-mono"
                     />
-                </label>
+                </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
-                <button
+            <div className="flex items-center gap-2 pt-1">
+                <Button
+                    variant="outline"
+                    size="sm"
                     onClick={handleTest}
                     disabled={testing || !draft.baseUrl}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 rounded transition-colors"
+                    className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest"
                 >
-                    {testing ? <Loader2 size={13} className="animate-spin" /> : <Server size={13} />}
+                    {testing ? <Loader2 size={12} className="animate-spin" /> : <Server size={12} />}
                     Test
-                </button>
-                <button
+                </Button>
+                <Button
+                    size="sm"
                     onClick={() => onSave(draft)}
                     disabled={!draft.baseUrl || !draft.name}
-                    className="px-4 py-1.5 text-xs bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 border border-sky-500/30 rounded disabled:opacity-50 transition-colors"
+                    className="h-8 text-[10px] font-black uppercase tracking-widest bg-sky-500 hover:bg-sky-600 text-white"
                 >
-                    Save Account
-                </button>
-                <button
+                    Guardar
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={onCancel}
-                    className="px-4 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                    className="h-8 text-[10px] font-black uppercase tracking-widest text-muted-foreground"
                 >
-                    Cancel
-                </button>
+                    Cancelar
+                </Button>
 
                 <div className="ml-auto">
                     {result === 'ok' && (
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-                            <CheckCircle2 size={13} /> Connected ({version})
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-black">
+                            <CheckCircle2 size={13} /> Conectado ({version})
                         </div>
                     )}
                     {result === 'error' && (
-                        <div className="flex items-center gap-1.5 text-xs text-red-400 max-w-[200px] truncate" title={errMsg}>
+                        <div className="flex items-center gap-1.5 text-xs text-red-400 max-w-[200px] truncate font-black" title={errMsg}>
                             <AlertCircle size={13} className="shrink-0" /> {errMsg}
                         </div>
                     )}
@@ -148,88 +155,88 @@ export function JenkinsSettings({ onSaved }: { onSaved?: () => void }) {
     const [editingId, setEditingId] = useState<string | 'new' | null>(null);
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 bg-[#020617]">
-            <div className="max-w-3xl mx-auto space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 bg-background">
+            <div className="max-w-2xl mx-auto space-y-5">
 
                 <div className="flex items-center justify-between">
                     <div>
-                        <h2 className="text-base font-semibold text-slate-100">Jenkins Accounts</h2>
-                        <p className="text-xs text-slate-400 mt-0.5">Configure your Jenkins servers to view pipelines and trigger builds.</p>
+                        <h2 className="text-sm font-black text-foreground uppercase tracking-widest">Jenkins Accounts</h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">Configurá tus servidores Jenkins para ver pipelines y ejecutar builds.</p>
                     </div>
                     {editingId !== 'new' && (
-                        <button
+                        <Button
+                            size="sm"
                             onClick={() => setEditingId('new')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500 hover:bg-sky-600 text-white rounded-md text-xs font-medium transition-colors shadow-sm"
+                            className="h-8 gap-1.5 text-[10px] font-black uppercase tracking-widest bg-sky-500 hover:bg-sky-600 text-white"
                         >
-                            <Plus size={14} /> Add Account
-                        </button>
+                            <Plus size={13} /> Add Account
+                        </Button>
                     )}
                 </div>
 
                 {editingId === 'new' && (
                     <AccountForm
-                        onSave={(draft) => {
-                            addAccount(draft);
-                            setEditingId(null);
-                            onSaved?.();
-                        }}
+                        onSave={(draft) => { addAccount(draft); setEditingId(null); onSaved?.(); }}
                         onCancel={() => setEditingId(null)}
                     />
                 )}
 
                 {accounts.length === 0 && editingId !== 'new' && (
-                    <div className="border border-slate-800 border-dashed rounded-xl p-8 text-center bg-slate-900/30">
-                        <Server size={32} className="mx-auto text-slate-700 mb-3" />
-                        <h3 className="text-sm font-medium text-slate-300">No accounts configured</h3>
-                        <p className="text-xs text-slate-500 mt-1 mb-4">You haven't added any Jenkins servers yet.</p>
-                        <button
+                    <div className="border border-dashed border-border rounded-2xl p-10 text-center bg-muted/10">
+                        <Server size={28} className="mx-auto text-muted-foreground/30 mb-3" />
+                        <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Sin cuentas</h3>
+                        <p className="text-xs text-muted-foreground mt-1 mb-4">No configuraste ningún servidor Jenkins todavía.</p>
+                        <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => setEditingId('new')}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md text-xs transition-colors"
+                            className="gap-1.5 text-[10px] font-black uppercase tracking-widest"
                         >
-                            <Plus size={13} /> Add your first account
-                        </button>
+                            <Plus size={13} /> Agregar primera cuenta
+                        </Button>
                     </div>
                 )}
 
-                <div className="grid gap-4">
-                    {accounts.map(acc => (
+                <div className="space-y-3">
+                    {accounts.map(acc =>
                         editingId === acc.id ? (
                             <AccountForm
                                 key={acc.id}
                                 account={acc}
-                                onSave={(draft) => {
-                                    updateAccount(acc.id!, draft);
-                                    setEditingId(null);
-                                    onSaved?.();
-                                }}
+                                onSave={(draft) => { updateAccount(acc.id!, draft); setEditingId(null); onSaved?.(); }}
                                 onCancel={() => setEditingId(null)}
                                 onDelete={() => {
-                                    if (confirm('Are you sure you want to delete this account?')) {
+                                    if (confirm('¿Eliminár esta cuenta?')) {
                                         removeAccount(acc.id!);
                                         setEditingId(null);
                                     }
                                 }}
                             />
                         ) : (
-                            <div key={acc.id} className="flex items-center justify-between p-4 bg-slate-900/50 border border-slate-800 rounded-lg hover:border-slate-700 transition-colors">
+                            <div
+                                key={acc.id}
+                                className="flex items-center justify-between px-4 py-3 bg-card border border-border rounded-xl hover:border-border/80 transition-colors"
+                            >
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded bg-sky-500/10 flex items-center justify-center border border-sky-500/20 text-sky-400">
+                                    <div className="w-8 h-8 rounded-lg bg-sky-500/10 flex items-center justify-center border border-sky-500/20 text-sky-400 shrink-0">
                                         <Server size={14} />
                                     </div>
-                                    <div>
-                                        <h4 className="text-sm font-medium text-slate-200">{acc.name}</h4>
-                                        <p className="text-xs text-slate-500 font-mono">{acc.baseUrl}</p>
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-black text-foreground uppercase tracking-tight">{acc.name}</p>
+                                        <p className="text-[10px] text-muted-foreground font-mono truncate">{acc.baseUrl}</p>
                                     </div>
                                 </div>
-                                <button
+                                <Button
+                                    variant="outline"
+                                    size="sm"
                                     onClick={() => setEditingId(acc.id!)}
-                                    className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors"
+                                    className="h-7 text-[9px] font-black uppercase tracking-widest shrink-0"
                                 >
-                                    Edit
-                                </button>
+                                    Editar
+                                </Button>
                             </div>
                         )
-                    ))}
+                    )}
                 </div>
 
             </div>

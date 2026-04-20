@@ -22,8 +22,9 @@ import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 
 import { useProcessStore } from '@/stores/processStore';
+import { useUIStore } from '@/stores/uiStore';
+import { getTerminalTheme } from '@/lib/terminalThemes';
 import {
-    TERMINAL_THEME_DEFAULT,
     TERMINAL_OPTIONS_BASE,
     FILE_PATH_REGEX,
 } from './terminal.constants';
@@ -92,10 +93,11 @@ export function useTerminalEngine(config: TerminalEngineConfig): TerminalEngineR
         isDisposedRef.current = false;
 
         // 1. Construir la instancia xterm
+        const baseTheme = getTerminalTheme(useUIStore.getState().terminalThemeId).theme;
         const term = new XTerm({
             ...TERMINAL_OPTIONS_BASE,
             scrollback: maxScrollback,
-            theme: { ...TERMINAL_THEME_DEFAULT, ...themeOverride },
+            theme: { ...baseTheme, ...themeOverride },
             disableStdin: readOnly || mode === 'log-stream',
         });
 
@@ -250,6 +252,16 @@ export function useTerminalEngine(config: TerminalEngineConfig): TerminalEngineR
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [/* solo se inicializa una vez; cambios de config se manejan en effects separados */]);
+
+    // ── Hot-swap del tema sin recrear la instancia ────────────────────────
+
+    const terminalThemeId = useUIStore(s => s.terminalThemeId);
+    useEffect(() => {
+        const term = xtermRef.current;
+        if (!term) return;
+        const baseTheme = getTerminalTheme(terminalThemeId).theme;
+        term.options.theme = { ...baseTheme, ...themeOverride };
+    }, [terminalThemeId, themeOverride]);
 
     // ── Pre-carga de historial via initialLogs (UI Inject) ────────────────
     

@@ -14,7 +14,8 @@ export function useJenkinsJobs() {
   });
 }
 
-/** Hook to fetch children of a folder/multibranch */
+/** Hook to fetch children of a folder/multibranch.
+ *  When `enabled` the query polls every 10 s so branch statuses stay live. */
 export function useJenkinsChildren(jobPath: string, enabled = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
@@ -22,11 +23,12 @@ export function useJenkinsChildren(jobPath: string, enabled = false) {
     queryKey: ['jenkins', 'children', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetChildren(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: false,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 
-/** Hook to fetch specific job status */
+/** Hook to fetch specific job status.
+ *  When `enabled` the query polls every 5 s (the main card status dot). */
 export function useJenkinsJobStatus(jobPath: string, enabled = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
@@ -34,11 +36,12 @@ export function useJenkinsJobStatus(jobPath: string, enabled = false) {
     queryKey: ['jenkins', 'job-status', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetJobStatus(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: false,
+    refetchInterval: enabled ? 5_000 : false,
   });
 }
 
-/** Hook to fetch build history */
+/** Hook to fetch build history.
+ *  When `enabled` the query polls every 10 s so running builds appear. */
 export function useJenkinsBuilds(jobPath: string, enabled = false) {
   const activeAccountId = useJenkinsStore((s) => s.activeAccountId);
   const config = useJenkinsStore((s) => s.accounts.find(a => a.id === activeAccountId) || { baseUrl: '', user: '', token: '' });
@@ -46,7 +49,7 @@ export function useJenkinsBuilds(jobPath: string, enabled = false) {
     queryKey: ['jenkins', 'builds', activeAccountId, jobPath],
     queryFn: () => api.jenkinsGetBuilds(config, jobPath),
     enabled: enabled && !!config.baseUrl,
-    refetchInterval: false,
+    refetchInterval: enabled ? 10_000 : false,
   });
 }
 

@@ -210,6 +210,16 @@ export function StoriesView() {
         }
     };
 
+    const handleAssignToMe = async (issueKey: string) => {
+        try {
+            await api.assignIssue(issueKey, myAccountId);
+            toast.success(`Asignado a vos: ${issueKey}`);
+            handleRefreshAll();
+        } catch (e: any) {
+            toast.error(e?.message ?? 'Error al asignarse');
+        }
+    };
+
     const handleTransition = async (task: JiraIssue, status: string, comment?: string, fields?: Record<string, any>) => {
         setTransitioningTask(task.key);
         try {
@@ -306,7 +316,7 @@ export function StoriesView() {
                     <div className={colBodyCls}>
                         {!selectedBusinessStoryKey && sortedStories.length === 0 ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una {cfg.level2Label || 'Business Story'}</p> : loadingTechStories ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedStories.map(story => (
                             <div key={story.id} className="relative group/story">
-                                <HierarchyCard issue={story} selected={selectedStoryKey === story.key} pinned={storePinnedStories.includes(story.key)} onSelect={() => handleSelectStory(story)} onPin={() => togglePin(story.key, storePinnedStories, storeSetPinnedStories)} onDetail={() => setTaskDetailTarget(story)} onLinkedIssues={() => setLinkedIssuesTarget(story.key)} />
+                                <HierarchyCard issue={story} selected={selectedStoryKey === story.key} pinned={storePinnedStories.includes(story.key)} onSelect={() => handleSelectStory(story)} onPin={() => togglePin(story.key, storePinnedStories, storeSetPinnedStories)} onDetail={() => setTaskDetailTarget(story)} onLinkedIssues={() => setLinkedIssuesTarget(story.key)} onAssign={() => handleAssignToMe(story.key)} />
                                 <button onClick={e => { e.stopPropagation(); setCreateForStory(story); }} className="absolute right-2 bottom-2 opacity-0 group-hover/story:opacity-100 transition-opacity bg-microtermix-neon text-microtermix-darker rounded-full w-5 h-5 flex items-center justify-center"><Plus size={10} /></button>
                             </div>
                         ))}
@@ -317,7 +327,7 @@ export function StoriesView() {
                     <div className={colHeaderCls}><p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{cfg.level4Label || 'Tasks'} {selectedStoryKey ? `(${tasks.length})` : ''}</p></div>
                     <div className={colBodyCls}>
                         {!selectedStoryKey && sortedTasks.length === 0 ? <p className="text-xs text-slate-600 text-center py-8">← Selecciona una {cfg.level3Label || 'Story'}</p> : loadingTasks ? <div className="flex justify-center py-8 text-slate-500"><RefreshCw size={14} className="animate-spin" /></div> : sortedTasks.map(task => (
-                            <HierarchyCard key={task.id} issue={task} selected={selectedTaskKey === task.key} pinned={storePinnedTasks.includes(task.key)} onPin={() => togglePin(task.key, storePinnedTasks, storeSetPinnedTasks)} onSelect={() => setSelectedTaskKey(prev => prev === task.key ? null : task.key)} onDetail={() => { setSelectedTaskKey(task.key); setTaskDetailTarget(task); }} />
+                            <HierarchyCard key={task.id} issue={task} selected={selectedTaskKey === task.key} pinned={storePinnedTasks.includes(task.key)} onPin={() => togglePin(task.key, storePinnedTasks, storeSetPinnedTasks)} onSelect={() => setSelectedTaskKey(prev => prev === task.key ? null : task.key)} onDetail={() => { setSelectedTaskKey(task.key); setTaskDetailTarget(task); }} onAssign={() => handleAssignToMe(task.key)} />
                         ))}
                     </div>
                 </div>

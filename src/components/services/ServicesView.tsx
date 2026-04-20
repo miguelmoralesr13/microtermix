@@ -1,17 +1,17 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useRef } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useProcessStore } from '../../stores/processStore';
 import { ProjectListPane } from './ProjectListPane';
 import { MultiExecutionBar } from './MultiExecutionBar';
 import { ServiceTerminals } from './ServiceTerminals';
-import { ViteWrapperModal, type ProxyCandidateItem } from '../project/ViteWrapperModal';
-import { ProjectSettingsModal } from './ProjectSettingsModal';
+import { ServicesBottomPanel, type BottomPanelHandle } from './ServicesBottomPanel';
+import { EnvSidePanel, type EnvPanelHandle } from './EnvSidePanel';
 import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
 
 interface ServicesViewProps {
     selectedProjects: string[];
-    setSelectedProjects: (val: string[]) => void;
+    setSelectedProjects: (projects: string[] | ((prev: string[]) => string[])) => void;
     multiScript: string;
     setMultiScript: (val: string) => void;
     globalEnvName: string;
@@ -39,11 +39,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     const updateProcessStatus = useProcessStore(s => s.updateProcessStatus);
     const removeProcess = useProcessStore(s => s.removeProcess);
 
-    // ─── Local UI State ──────────────────────────────────────────────────
-    const [viteWrapperModalOpen, setViteWrapperModalOpen] = useState(false);
-    const [viteWrapperCandidates, setViteWrapperCandidates] = useState<ProxyCandidateItem[]>([]);
-    const [settingsProject, setSettingsProject] = useState<string | null>(null);
-    const [settingsTab, setSettingsTab] = useState<string>('envs');
+    // ─── Panel refs ──────────────────────────────────────────────────────
+    const bottomPanelRef = useRef<BottomPanelHandle>(null);
+    const envPanelRef = useRef<EnvPanelHandle>(null);
 
     const JAVA_PRESETS = useMemo(() => [
         { name: 'Mvn: Clean & Install', cmd: 'mvn clean install -DskipTests' },
@@ -166,20 +164,6 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         }
     }, [activeProcesses, removeProcess, activeTerminalTab, setActiveTerminalTab]);
 
-    const projectWithPresets = useMemo(() => {
-        if (!settingsProject) return null;
-        const p = state.projects.find(proj => proj.path === settingsProject);
-        if (!p) return null;
-
-        const scripts = [...(p.scripts || [])];
-        if (p.project_type === 'java') {
-            JAVA_PRESETS.forEach(preset => {
-                if (!scripts.includes(preset.cmd)) scripts.push(preset.cmd);
-            });
-        }
-        return { ...p, scripts };
-    }, [settingsProject, state.projects, JAVA_PRESETS]);
-
     const activeSelectionType = useMemo(() => {
         if (selectedProjects.length === 0) return null;
         const types = new Set<string>();
@@ -191,6 +175,35 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         return null; // Mixto o desconocido
     }, [selectedProjects, state.projects]);
 
+    const serviceProcessIds = useMemo(() =>
+        Object.keys(activeProcesses).filter(id => activeProcesses[id].source === 'services'),
+        [activeProcesses]
+    );
+
+    const activeProjectPath = useMemo(() => {
+        if (activeTerminalTab) return activeTerminalTab.split('::')[0];
+        return selectedProjects[0] ?? null;
+    }, [activeTerminalTab, selectedProjects]);
+
+    // ─── Open panel from context menu ────────────────────────────────────
+    const handleOpenPanel = useCallback((path: string, tab?: string) => {
+        // Select the project so the panels show its data
+        if (!selectedProjects.includes(path)) {
+            setSelectedProjects(prev => [...prev, path]);
+        }
+
+        if (tab === 'envs') {
+            envPanelRef.current?.expand();
+        } else if (tab === 'deps') {
+            bottomPanelRef.current?.openTab('deps');
+        } else if (tab === 'vite') {
+            bottomPanelRef.current?.openTab('vite');
+        } else {
+            // Default: open commands tab
+            bottomPanelRef.current?.openTab('commands');
+        }
+    }, [selectedProjects, setSelectedProjects]);
+
     return (
         <div className="flex-1 w-full h-full flex overflow-hidden">
             <ProjectListPane
@@ -199,14 +212,16 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 onSelectAll={() => setSelectedProjects(state.projects.map(p => p.path))}
                 onDeselectAll={() => setSelectedProjects([])}
                 onToggleSelect={(path) => {
-                    if (selectedProjects.includes(path)) setSelectedProjects(selectedProjects.filter(p => p !== path));
-                    else setSelectedProjects([...selectedProjects, path]);
+                    setSelectedProjects(prev =>
+                        prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+                    );
                 }}
                 onPlayScript={handlePlayScript}
-                onOpenSettings={(path, tab) => { setSettingsProject(path); setSettingsTab(tab ?? 'envs'); }}
+                onOpenSettings={handleOpenPanel}
                 onQuickAction={handleQuickAction}
             />
 
+            {/* ── Center: execution bar + terminals + bottom config ── */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <MultiExecutionBar
                     allScripts={useMemo(() => Array.from(new Set([...state.projects.flatMap(p => p.scripts || []), ...JAVA_PRESETS.map(pr => pr.cmd)])), [state.projects, JAVA_PRESETS])}
@@ -243,60 +258,55 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     onRestart={async () => {
                         for (const p of selectedProjects) await handleQuickAction(p, 'restart');
                     }}
-                    onOpenViteWrapper={async () => {
-                        const list = await invoke<ProxyCandidateItem[]>('get_proxy_candidates', { workspacePath: state.currentPath });
-                        setViteWrapperCandidates(list);
-                        setViteWrapperModalOpen(true);
-                    }}
                     selectedCount={selectedProjects.length}
                     activeSelectionType={activeSelectionType}
                 />
 
-                <ProjectSettingsModal
-                    project={projectWithPresets}
-                    open={!!settingsProject}
-                    defaultTab={settingsTab}
-                    onOpenChange={(open) => !open && setSettingsProject(null)}
-                    onPlayScript={(s) => handlePlayScript(settingsProject!, s)}
-                />
+                {/* ── Terminal area + Env side panel ── */}
+                <div className="flex-1 flex min-h-0 overflow-hidden">
+                    <ServiceTerminals
+                        processIds={serviceProcessIds}
+                        activeProcesses={activeProcesses}
+                        activeTerminalTab={activeTerminalTab}
+                        vitePreviewOpen={vitePreviewOpen}
+                        onVitePreviewToggle={setVitePreviewOpen}
+                        onTabSelect={setActiveTerminalTab}
+                        onTabStop={async (e, id) => { e.preventDefault(); await invoke('kill_service', { serviceId: id }); updateProcessStatus(id, 'stopped'); }}
+                        onTabRestart={async (e, id) => {
+                            e.preventDefault();
+                            const p = activeProcesses[id];
+                            updateProcessStatus(id, 'stopped');
+                            await invoke('kill_service', { serviceId: id });
+                            await new Promise(r => setTimeout(r, 800));
+                            if (p.script) {
+                                toast.info(`Reiniciando ${id.split('::')[1]}...`);
+                                await handlePlayScript(id.split('::')[0], p.script as string);
+                            }
+                        }}
+                        onTabClose={async (e, id) => {
+                            e.preventDefault();
+                            await invoke('kill_service', { serviceId: id }).catch(() => { });
+                            removeProcess(id);
+                        }}
+                        onTabCloseAll={handleCloseAllTabs}
+                        onTabCloseFinished={handleCloseFinishedTabs}
+                    />
 
-                <ViteWrapperModal
-                    open={viteWrapperModalOpen}
-                    onOpenChange={setViteWrapperModalOpen}
-                    workspacePath={state.currentPath || ''}
-                    candidates={viteWrapperCandidates}
-                />
+                    {/* ── Right: Environment panel ── */}
+                    <EnvSidePanel
+                        ref={envPanelRef}
+                        activeTerminalTab={activeTerminalTab}
+                        selectedProjects={selectedProjects}
+                    />
+                </div>
 
-                <ServiceTerminals
-                    processIds={useMemo(() =>
-                        Object.keys(activeProcesses).filter(id => activeProcesses[id].source === 'services'),
-                        [activeProcesses]
-                    )}
-                    activeProcesses={activeProcesses}
-                    activeTerminalTab={activeTerminalTab}
-                    vitePreviewOpen={vitePreviewOpen}
-                    onVitePreviewToggle={setVitePreviewOpen}
-                    onTabSelect={setActiveTerminalTab}
-                    onTabStop={async (e, id) => { e.preventDefault(); await invoke('kill_service', { serviceId: id }); updateProcessStatus(id, 'stopped'); }}
-                    onTabRestart={async (e, id) => {
-                        e.preventDefault();
-                        const p = activeProcesses[id];
-                        // Cambiar a stopped en lugar de removeProcess para no cerrar la terminal
-                        updateProcessStatus(id, 'stopped');
-                        await invoke('kill_service', { serviceId: id });
-                        await new Promise(r => setTimeout(r, 800));
-                        if (p.script) {
-                            toast.info(`Reiniciando ${id.split('::')[1]}...`);
-                            await handlePlayScript(id.split('::')[0], p.script as string);
-                        }
-                    }}
-                    onTabClose={async (e, id) => {
-                        e.preventDefault();
-                        await invoke('kill_service', { serviceId: id }).catch(() => { });
-                        removeProcess(id);
-                    }}
-                    onTabCloseAll={handleCloseAllTabs}
-                    onTabCloseFinished={handleCloseFinishedTabs}
+                {/* ── Bottom: Commands / Dependencies / Vite MFE ── */}
+                <ServicesBottomPanel
+                    ref={bottomPanelRef}
+                    selectedProjects={selectedProjects}
+                    activeProjectPath={activeProjectPath}
+                    onScriptChange={setMultiScript}
+                    onRunScript={handlePlayScript}
                 />
             </div>
         </div>

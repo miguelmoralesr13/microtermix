@@ -12,23 +12,23 @@ interface SonarHeaderProps {
 
 export const SonarHeader: React.FC<SonarHeaderProps> = ({ isRunning, onRun, onStop, canRun, onRefresh }) => {
     return (
-        <div className="shrink-0 px-6 py-3 border-b border-white/5 flex items-center justify-between bg-slate-900/40 backdrop-blur-md">
+        <div className="shrink-0 px-6 py-3 border-b border-border flex items-center justify-between bg-card/80 backdrop-blur-md">
             <div className="flex items-center gap-4">
                 <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-400">
                     <BarChart3 size={18} />
                 </div>
                 <div className="text-left">
-                    <h2 className="text-sm font-black text-slate-100 uppercase tracking-widest leading-none">Sonar Manager</h2>
-                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">Scanner Engine</p>
+                    <h2 className="text-sm font-black text-foreground uppercase tracking-widest leading-none">Sonar Manager</h2>
+                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest mt-1">Scanner Engine</p>
                 </div>
             </div>
             <div className="flex items-center gap-2">
                 {onRefresh && (
-                    <Button 
+                    <Button
                         onClick={onRefresh}
-                        variant="outline" 
+                        variant="outline"
                         size="sm"
-                        className="font-black px-4 h-9 rounded-xl bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all text-[10px] tracking-widest"
+                        className="font-black px-4 h-9 rounded-xl text-[10px] tracking-widest"
                     >
                         <RefreshCw size={12} className="mr-2" />
                         REFRESH

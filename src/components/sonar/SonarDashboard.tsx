@@ -22,25 +22,25 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
     const { data: metrics, isLoading } = useSonarMetrics(project.path, projectKey);
 
     return (
-        <Card 
+        <Card
             onClick={() => onSelect(project.path)}
-            className="group relative bg-slate-900/40 border-slate-800 hover:border-blue-500/50 hover:bg-slate-900/60 transition-all cursor-pointer shadow-none overflow-hidden"
+            className="group relative bg-card border-border hover:border-blue-500/50 hover:bg-card/80 transition-all cursor-pointer shadow-none overflow-hidden"
         >
             <CardHeader className="p-5 pb-3 flex flex-row items-start justify-between space-y-0">
                 <div className="min-w-0">
-                    <CardTitle className="text-xs font-black text-slate-200 truncate group-hover:text-blue-400 transition-colors uppercase tracking-tight">
+                    <CardTitle className="text-xs font-black text-foreground truncate group-hover:text-blue-400 transition-colors uppercase tracking-tight">
                         {project.name}
                     </CardTitle>
-                    <p className="text-[10px] text-slate-500 font-mono truncate">{projectKey}</p>
+                    <p className="text-[10px] text-muted-foreground font-mono truncate">{projectKey}</p>
                 </div>
                 {isLoading ? (
-                    <RefreshCw size={14} className="text-slate-700 animate-spin" />
+                    <RefreshCw size={14} className="text-muted-foreground animate-spin" />
                 ) : metrics ? (
                     <div className={metrics.qualityGate === 'OK' ? 'text-microtermix-success' : 'text-microtermix-danger'}>
                         {metrics.qualityGate === 'OK' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
                     </div>
                 ) : (
-                    <AlertCircle size={18} className="text-slate-700" />
+                    <AlertCircle size={18} className="text-muted-foreground" />
                 )}
             </CardHeader>
 
@@ -50,7 +50,7 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
                         <div className="flex flex-col gap-1">
                             <span className="text-[8px] font-black text-slate-600 uppercase">Bugs</span>
                             <div className="flex items-center gap-1.5">
-                                <span className={cn("text-sm font-bold", metrics.bugs > 0 ? "text-red-400" : "text-slate-300")}>{metrics.bugs}</span>
+                                <span className={cn("text-sm font-bold", metrics.bugs > 0 ? "text-red-400" : "text-foreground")}>{metrics.bugs}</span>
                                 <Badge variant="outline" className={cn(
                                     "text-[9px] h-4 px-1 font-black",
                                     metrics.reliability === 'A' ? "text-emerald-500 border-emerald-900/50" : "text-red-400 border-red-900/50"
@@ -60,7 +60,7 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
                         <div className="flex flex-col gap-1">
                             <span className="text-[8px] font-black text-slate-600 uppercase">Vuln</span>
                             <div className="flex items-center gap-1.5">
-                                <span className={cn("text-sm font-bold", metrics.vulnerabilities > 0 ? "text-yellow-400" : "text-slate-300")}>{metrics.vulnerabilities}</span>
+                                <span className={cn("text-sm font-bold", metrics.vulnerabilities > 0 ? "text-yellow-400" : "text-foreground")}>{metrics.vulnerabilities}</span>
                                 <Badge variant="outline" className={cn(
                                     "text-[9px] h-4 px-1 font-black",
                                     metrics.security === 'A' ? "text-emerald-500 border-emerald-900/50" : "text-yellow-400 border-yellow-900/50"
@@ -70,7 +70,7 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
                         <div className="flex flex-col gap-1">
                             <span className="text-[8px] font-black text-slate-600 uppercase">Smells</span>
                             <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-bold text-slate-300">{metrics.codeSmells}</span>
+                                <span className="text-sm font-bold text-foreground">{metrics.codeSmells}</span>
                                 <Badge variant="outline" className={cn(
                                     "text-[9px] h-4 px-1 font-black",
                                     metrics.maintainability === 'A' ? "text-emerald-500 border-emerald-900/50" : "text-blue-400 border-blue-900/50"
@@ -79,8 +79,8 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
                         </div>
                     </div>
                 ) : (
-                    <div className="h-[38px] flex items-center justify-center border border-dashed border-slate-800 rounded-xl bg-slate-950/20">
-                        <span className="text-[9px] text-slate-600 font-bold uppercase tracking-widest italic">{isLoading ? 'Cargando...' : 'Sin Datos'}</span>
+                    <div className="h-[38px] flex items-center justify-center border border-dashed border-border rounded-xl bg-muted/20">
+                        <span className="text-[9px] text-muted-foreground font-bold uppercase tracking-widest italic">{isLoading ? 'Cargando...' : 'Sin Datos'}</span>
                     </div>
                 )}
             </CardContent>
@@ -94,23 +94,23 @@ const ProjectCard: React.FC<{ project: any; onSelect: (path: string) => void }> 
 
 export const SonarDashboard: React.FC<SonarDashboardProps> = ({ projects, onSelectProject }) => {
     return (
-        <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar bg-slate-950/20">
+        <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar bg-background">
             {/* Hero Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                    <h2 className="text-3xl font-black text-white tracking-tight uppercase flex items-center gap-3">
+                    <h2 className="text-3xl font-black text-foreground tracking-tight uppercase flex items-center gap-3">
                         <div className="p-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
                             <LayoutDashboard className="text-blue-500" size={32} />
                         </div>
                         Sonar Overview
                     </h2>
-                    <p className="text-slate-500 mt-2 font-medium italic text-sm">Estado de calidad y seguridad de todo el workspace</p>
+                    <p className="text-muted-foreground mt-2 font-medium italic text-sm">Estado de calidad y seguridad de todo el workspace</p>
                 </div>
                 
                 <div className="flex items-center gap-4">
-                    <div className="px-5 py-2.5 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex items-center gap-3">
+                    <div className="px-5 py-2.5 bg-card border border-border rounded-2xl shadow-2xl flex items-center gap-3">
                         <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                        <span className="text-xs font-black text-slate-300 uppercase tracking-widest">{projects.length} Proyectos Activos</span>
+                        <span className="text-xs font-black text-foreground uppercase tracking-widest">{projects.length} Proyectos Activos</span>
                     </div>
                 </div>
             </div>
@@ -126,8 +126,8 @@ export const SonarDashboard: React.FC<SonarDashboardProps> = ({ projects, onSele
             {/* Projects Grid */}
             <div className="space-y-6">
                 <div className="flex items-center gap-4">
-                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.3em] whitespace-nowrap">Project Breakdown</h3>
-                    <div className="h-px w-full bg-slate-800" />
+                    <h3 className="text-xs font-black text-muted-foreground uppercase tracking-[0.3em] whitespace-nowrap">Project Breakdown</h3>
+                    <div className="h-px w-full bg-border" />
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -141,13 +141,13 @@ export const SonarDashboard: React.FC<SonarDashboardProps> = ({ projects, onSele
 };
 
 const StatCard: React.FC<{ label: string; icon: React.ElementType; color: string; value: string }> = ({ label, icon: Icon, color, value }) => (
-    <Card className="bg-slate-900/60 border-slate-800 p-5 flex items-center gap-4 shadow-none">
-        <div className={cn("p-3 rounded-2xl bg-slate-950 border border-slate-800 shadow-inner", color)}>
+    <Card className="bg-card border-border p-5 flex items-center gap-4 shadow-none">
+        <div className={cn("p-3 rounded-2xl bg-background border border-border shadow-inner", color)}>
             <Icon size={24} />
         </div>
         <div>
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mb-0.5">{label}</p>
-            <p className="text-sm font-black text-slate-200 tracking-tight">{value}</p>
+            <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-0.5">{label}</p>
+            <p className="text-sm font-black text-foreground tracking-tight">{value}</p>
         </div>
     </Card>
 );
