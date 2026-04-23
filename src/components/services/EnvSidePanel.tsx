@@ -1,11 +1,13 @@
 import React, { useState, useImperativeHandle, forwardRef } from 'react';
-import { Plus, Trash2, Eye, EyeOff, PanelRightClose, PanelRightOpen, Variable } from 'lucide-react';
+import { Plus, Trash2, Eye, EyeOff, PanelRightClose, PanelRightOpen, Variable, Upload, Copy, ChevronDown, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useProjectEnvs } from '../project/useProjectEnvs';
 import { useProcessStore } from '../../stores/processStore';
+import { invoke } from '@tauri-apps/api/core';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 // ── Storage key for collapsed state ──────────────────────────────────────────
 const COLLAPSED_KEY = 'microtermix-env-panel-collapsed';
@@ -51,22 +53,44 @@ function RunEnvsSection({ envs }: { envs: Record<string, string> }) {
     );
 }
 
+// ── .env file parser ─────────────────────────────────────────────────────────
+
+function parseEnvFileContent(text: string): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const line of text.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq <= 0) continue;
+        const key = trimmed.slice(0, eq).trim();
+        let val = trimmed.slice(eq + 1).trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))
+            val = val.slice(1, -1);
+        if (key) out[key] = val;
+    }
+    return out;
+}
+
 // ── Compact env editor ────────────────────────────────────────────────────────
 
 function CompactEnvManager({ projectPath }: { projectPath: string }) {
     const {
         store, activeEnv, envNames,
         setActiveEnv, addEnv, setEnvVar, deleteEnvVar,
+        copyEnvVars, overwriteEnvVars, reloadFromFiles,
     } = useProjectEnvs(projectPath);
 
     const vars = store.envs[activeEnv] ?? {};
     const entries = Object.entries(vars);
+    const otherEnvs = envNames.filter(e => e !== activeEnv);
 
     const [newKey, setNewKey] = useState('');
     const [newVal, setNewVal] = useState('');
     const [masked, setMasked] = useState(false);
     const [addingProfile, setAddingProfile] = useState(false);
     const [newProfileName, setNewProfileName] = useState('');
+    const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+    const [reloading, setReloading] = useState(false);
 
     const handleAddVar = () => {
         const k = newKey.trim();
@@ -84,9 +108,29 @@ function CompactEnvManager({ projectPath }: { projectPath: string }) {
         setAddingProfile(false);
     };
 
+    const handleImportFile = async () => {
+        try {
+            const selected = await openDialog({
+                multiple: false,
+                directory: false,
+                filters: [{ name: 'Env', extensions: ['env'] }, { name: 'Todos', extensions: ['*'] }],
+                title: 'Seleccionar archivo .env',
+            });
+            if (!selected || Array.isArray(selected)) return;
+            const content = await invoke<string>('read_file_at_path', { path: selected });
+            const parsed = parseEnvFileContent(content);
+            Object.entries(parsed).forEach(([k, v]) => setEnvVar(activeEnv, k, v));
+        } catch { /* user cancelled or error */ }
+    };
+
+    const handleReload = () => {
+        setReloading(true);
+        reloadFromFiles().finally(() => setTimeout(() => setReloading(false), 600));
+    };
+
     return (
         <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            {/* Profile selector */}
+            {/* Profile selector row */}
             <div className="flex items-center gap-1 px-2 py-1.5 border-b border-slate-800/40 shrink-0">
                 <div className="flex items-center gap-1.5 shrink-0">
                     <div className="w-1 h-1 rounded-full bg-emerald-400/70" />
@@ -125,6 +169,70 @@ function CompactEnvManager({ projectPath }: { projectPath: string }) {
                     className="shrink-0 p-0.5 rounded text-slate-600 hover:text-slate-400 hover:bg-slate-800/50 transition-colors"
                 >
                     {masked ? <Eye size={10} /> : <EyeOff size={10} />}
+                </button>
+            </div>
+
+            {/* Action row: import file + copy from env + reload */}
+            <div className="flex items-center gap-1 px-2 py-1 border-b border-slate-800/40 shrink-0 bg-slate-900/30">
+                {/* Import from file */}
+                <button
+                    onClick={handleImportFile}
+                    title="Importar desde archivo .env"
+                    className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] text-slate-500 hover:text-microtermix-neon hover:bg-slate-800/50 rounded transition-colors border border-slate-800/60 hover:border-microtermix-neon/30"
+                >
+                    <Upload size={9} />
+                    <span>Importar .env</span>
+                </button>
+
+                {/* Copy from another environment */}
+                {otherEnvs.length > 0 && (
+                    <div className="relative">
+                        <button
+                            onClick={() => setCopyMenuOpen(o => !o)}
+                            title="Copiar variables desde otro ambiente"
+                            className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] text-slate-500 hover:text-microtermix-neon hover:bg-slate-800/50 rounded transition-colors border border-slate-800/60 hover:border-microtermix-neon/30"
+                        >
+                            <Copy size={9} />
+                            <span>Copiar desde</span>
+                            <ChevronDown size={8} />
+                        </button>
+                        {copyMenuOpen && (
+                            <>
+                                <div className="fixed inset-0 z-20" onClick={() => setCopyMenuOpen(false)} />
+                                <div className="absolute left-0 top-full mt-1 z-30 bg-slate-900 border border-slate-700/60 rounded-lg shadow-2xl text-xs overflow-hidden" style={{ minWidth: 180 }}>
+                                    <div className="px-2.5 py-1.5 text-[9px] text-slate-500 uppercase tracking-wider border-b border-slate-800">
+                                        → <strong className="text-slate-300">{activeEnv}</strong>
+                                    </div>
+                                    {otherEnvs.map(src => (
+                                        <div key={src} className="border-b border-slate-800/50 last:border-0">
+                                            <button
+                                                onClick={() => { copyEnvVars(src, activeEnv); setCopyMenuOpen(false); }}
+                                                className="w-full text-left px-3 py-1.5 text-[10px] text-slate-300 hover:bg-slate-800 flex flex-col gap-0.5 transition-colors"
+                                            >
+                                                <span className="font-medium">Merge desde <strong className="text-emerald-400">{src}</strong></span>
+                                                <span className="text-[9px] text-slate-600">Agrega sin pisar existentes</span>
+                                            </button>
+                                            <button
+                                                onClick={() => { overwriteEnvVars(src, activeEnv); setCopyMenuOpen(false); }}
+                                                className="w-full text-left px-3 py-1.5 text-[10px] text-slate-500 hover:bg-slate-800 flex flex-col gap-0.5 transition-colors"
+                                            >
+                                                <span>Reemplazar con <strong className="text-slate-300">{src}</strong></span>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* Reload from .env files */}
+                <button
+                    onClick={handleReload}
+                    title="Re-leer archivos .env del proyecto"
+                    className="ml-auto p-0.5 text-slate-600 hover:text-slate-400 hover:bg-slate-800/50 rounded transition-colors"
+                >
+                    <RefreshCw size={9} className={reloading ? 'animate-spin' : ''} />
                 </button>
             </div>
 
@@ -212,11 +320,14 @@ function CompactEnvManager({ projectPath }: { projectPath: string }) {
 interface EnvSidePanelProps {
     activeTerminalTab: string | null;
     selectedProjects: string[];
+    /** When set, this project path takes priority over activeTerminalTab */
+    focusedProjectPath?: string | null;
 }
 
 export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
     activeTerminalTab,
     selectedProjects,
+    focusedProjectPath,
 }, ref) => {
     const [collapsed, setCollapsed] = useState(() =>
         localStorage.getItem(COLLAPSED_KEY) === 'true'
@@ -236,12 +347,15 @@ export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
         });
     };
 
-    const projectPath = activeTerminalTab?.split('::')[0] ?? selectedProjects[0] ?? null;
-    const script = activeTerminalTab?.split('::')[1]?.trim() ?? null;
+    const projectPath = focusedProjectPath ?? activeTerminalTab?.split('::')[0] ?? selectedProjects[0] ?? null;
     const projectName = projectPath?.split(/[/\\]/).pop() ?? null;
 
+    // Only associate the active terminal with this panel if it belongs to the same project
+    const terminalBelongsToProject = activeTerminalTab != null && activeTerminalTab.split('::')[0] === projectPath;
+    const script = terminalBelongsToProject ? (activeTerminalTab!.split('::')[1]?.trim() ?? null) : null;
+
     const process = useProcessStore(s =>
-        activeTerminalTab ? s.activeProcesses[activeTerminalTab] : null
+        terminalBelongsToProject && activeTerminalTab ? s.activeProcesses[activeTerminalTab] : null
     );
 
     const usedEnvs: Record<string, string> = React.useMemo(() => {
@@ -278,7 +392,7 @@ export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
 
     // ── Expanded state ──
     return (
-        <div className="w-[232px] shrink-0 border-l border-slate-800/60 bg-slate-950/80 flex flex-col overflow-hidden">
+        <div className="w-[232px] shrink-0 h-full border-l border-slate-800/60 bg-slate-950/80 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-2.5 py-1.5 border-b border-slate-800/40 bg-slate-900/40 shrink-0">
                 <div className="flex items-center justify-between">
@@ -310,7 +424,7 @@ export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
             {projectPath ? (
                 <>
                     <RunEnvsSection envs={usedEnvs} />
-                    <CompactEnvManager projectPath={projectPath} />
+                    <CompactEnvManager key={projectPath} projectPath={projectPath} />
                 </>
             ) : (
                 <div className="flex-1 flex items-center justify-center px-4">

@@ -61,6 +61,7 @@ export interface MicrotermixConfig {
     sonarProjectLinks?: Record<string, SonarProjectLink>;
     ssmTunnels?: SsmTunnel[];
     visibleUtilities?: Record<string, boolean>;
+    envPanelCollapsed?: boolean;
 }
 
 export const WORKSPACE_CONFIG_FILENAME = 'microtermix.json';
@@ -176,6 +177,11 @@ export function applyWorkspaceConfigToStorage(
             } catch (_) { }
         }
     }
+    if (config.envPanelCollapsed != null) {
+        try {
+            localStorage.setItem('microtermix-env-panel-collapsed', config.envPanelCollapsed ? 'true' : 'false');
+        } catch (_) { }
+    }
     
     // Restaurar asignaciones de cuentas Git (id -> fullPath)
     if (config.repoAccounts) {
@@ -264,5 +270,6 @@ export function buildWorkspaceConfigFromCurrentState(
         sonarProjectLinks: useSonarStore.getState().projectLinks,
         ssmTunnels: useAwsStore.getState().ssm.tunnels,
         visibleUtilities: Object.keys(visibleUtilities).length ? visibleUtilities : undefined,
+        envPanelCollapsed: localStorage.getItem('microtermix-env-panel-collapsed') === 'true',
     };
 }

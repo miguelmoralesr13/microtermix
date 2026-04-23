@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback, useRef, useState } from 'react';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { useProcessStore } from '../../stores/processStore';
 import { ProjectListPane } from './ProjectListPane';
@@ -42,6 +42,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     // ─── Panel refs ──────────────────────────────────────────────────────
     const bottomPanelRef = useRef<BottomPanelHandle>(null);
     const envPanelRef = useRef<EnvPanelHandle>(null);
+
+    // ─── Focused project for env panel ───────────────────────────────────
+    const [envFocusedPath, setEnvFocusedPath] = useState<string | null>(null);
 
     const JAVA_PRESETS = useMemo(() => [
         { name: 'Mvn: Clean & Install', cmd: 'mvn clean install -DskipTests' },
@@ -193,6 +196,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         }
 
         if (tab === 'envs') {
+            setEnvFocusedPath(path);
             envPanelRef.current?.expand();
         } else if (tab === 'deps') {
             bottomPanelRef.current?.openTab('deps');
@@ -297,6 +301,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                         ref={envPanelRef}
                         activeTerminalTab={activeTerminalTab}
                         selectedProjects={selectedProjects}
+                        focusedProjectPath={envFocusedPath}
                     />
                 </div>
 
