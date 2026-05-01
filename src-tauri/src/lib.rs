@@ -5,7 +5,10 @@ mod workspace_config;
 mod os_utils;
 mod state;
 mod projects;
-mod processes;
+mod registry;
+mod services;
+mod system;
+mod fileops;
 mod proxy;
 mod file_server;
 mod workspace;
@@ -41,14 +44,23 @@ pub use crate::s3::{s3_list_buckets, s3_list_objects, s3_download_object};
 pub use crate::git_native::git_get_stash_diff;
 pub use crate::state::AppState;
 pub use crate::projects::{
-    get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects,
-    pypi_search, get_python_packages, maven_search, cargo_search, get_cargo_details, go_search, get_go_details, Project,
+    get_project_script_bodies, list_test_files, read_project_envs, scan_path, scan_projects, Project,
 };
-pub use crate::processes::{
-    ensure_directory, execute_pipeline, execute_service_script, get_listening_processes,
-    get_pipeline_state, get_service_logs, kill_all_services, kill_process_by_pid, kill_service,
-    kill_tree_unix_pub, list_diagram_files, open_in_editor, read_file_at_path, read_file_content,
-    write_file_content, ListeningProcess, LogEvent,
+pub use crate::registry::{
+    pypi_search, get_python_packages, maven_search, cargo_search, get_cargo_details, go_search, get_go_details,
+    PypiSearchResult, PythonPackage, MavenSearchResult, CargoSearchResult, CargoDetails, GoSearchResult, GoDetails,
+};
+pub use crate::services::{
+    execute_service_script, kill_service, kill_all_services,
+    execute_pipeline, get_pipeline_state, get_service_logs,
+    spawn_local_git_terminal, LogEvent,
+};
+pub use crate::system::{
+    get_listening_processes, kill_process_by_pid, kill_tree_unix_pub, ListeningProcess,
+};
+pub use crate::fileops::{
+    read_file_content, read_file_at_path, write_file_content, ensure_directory,
+    list_diagram_files, open_in_editor,
 };
 pub use crate::proxy::{
     get_proxy_candidates, has_vite_config, parse_vite_federation, start_proxy, stop_proxy,
@@ -422,7 +434,7 @@ pub fn run() {
             watch_repo,
             stop_watching_repo,
             git_watcher::set_active_git_project,
-            crate::processes::spawn_local_git_terminal,
+            spawn_local_git_terminal,
             read_project_envs,
             get_project_script_bodies,
             get_listening_processes,
@@ -512,9 +524,9 @@ pub fn run() {
             notes::notes_rename_entry,
             java_manager::list_local_jdks,
             java_manager::download_jdk,
-            crate::processes::execute_ephemeral_task,
-            crate::processes::run_semgrep_scan,
-            crate::processes::check_semgrep_installed,
+            crate::services::executor::execute_ephemeral_task,
+            crate::services::executor::run_semgrep_scan,
+            crate::services::executor::check_semgrep_installed,
             write_file,
             read_text_file,
             os_utils::rust_copy_to_clipboard,

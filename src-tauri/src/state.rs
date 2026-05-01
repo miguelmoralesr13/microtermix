@@ -10,6 +10,14 @@ pub struct ServerHandle {
     pub join: tokio::task::JoinHandle<()>,
 }
 
+/// Atomic process tracking: combines notify handle + PID in a single struct
+/// to eliminate the race condition between separate maps.
+pub struct TrackedProcess {
+    pub notify: Arc<tokio::sync::Notify>,
+    pub pid: u32,
+    pub started_at: std::time::Instant,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PipelineStepCondition {
     WaitPort(u16),
@@ -38,10 +46,9 @@ pub struct PipelineState {
 
 /// Estado compartido de la aplicación backend.
 pub struct AppState {
-    pub processes: Arc<AsyncMutex<HashMap<String, Arc<tokio::sync::Notify>>>>,
+    /// Active child processes — single map with atomic tracking (notify + pid).
+    pub processes: Arc<AsyncMutex<HashMap<String, TrackedProcess>>>,
     pub pipelines: Arc<AsyncMutex<HashMap<String, PipelineState>>>,
-    /// PIDs of active child processes — uses a std Mutex so it can be read synchronously on exit.
-    pub process_pids: Arc<std::sync::Mutex<HashMap<String, u32>>>,
     pub stdin_senders: Arc<AsyncMutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<String>>>>,
     pub pty_resizers: Arc<AsyncMutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<(u16, u16)>>>>,
     pub proxy_abort: Arc<AsyncMutex<Option<ServerHandle>>>,
@@ -61,7 +68,6 @@ impl AppState {
         Self {
             processes: Arc::new(AsyncMutex::new(HashMap::new())),
             pipelines: Arc::new(AsyncMutex::new(HashMap::new())),
-            process_pids: Arc::new(std::sync::Mutex::new(HashMap::new())),
             stdin_senders: Arc::new(AsyncMutex::new(HashMap::new())),
             pty_resizers: Arc::new(AsyncMutex::new(HashMap::new())),
             proxy_abort: Arc::new(AsyncMutex::new(None)),
@@ -101,8 +107,8 @@ pub async fn stop_background_work(state: &AppState) {
     }
     {
         let mut procs = state.processes.lock().await;
-        for notify in procs.values() {
-            notify.notify_waiters();
+        for tracked in procs.values() {
+            tracked.notify.notify_waiters();
         }
         procs.clear();
     }
@@ -116,12 +122,14 @@ pub async fn stop_background_work(state: &AppState) {
 
 /// Kill all tracked child processes synchronously (safe to call from non-async exit handlers).
 pub fn kill_all_pids_sync(state: &AppState) {
-    let pids: Vec<u32> = state.process_pids
-        .lock()
-        .map(|g| g.values().copied().collect())
+    // Collect PIDs from the processes map (best-effort via try_lock)
+    let pids: Vec<u32> = state.processes
+        .try_lock()
+        .ok()
+        .map(|g| g.values().map(|tp| tp.pid).collect())
         .unwrap_or_default();
     for pid in pids {
-        crate::processes::kill_tree_unix_pub(pid);
+        crate::system::process_killer::kill_tree_unix_pub(pid);
     }
 }
 

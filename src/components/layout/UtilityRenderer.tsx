@@ -4,10 +4,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { useServiceManagerState } from '../../hooks/useServiceManagerState';
 
 // Panels
-import { ServicesView } from '../services/ServicesView';
+import { ServicesView } from '../../services/ui/ServicesView';
 import { GitPanel } from '../git/GitPanel';
 import { JiraPanel } from '../jira/JiraPanel';
-import { ProcessesPanel } from '../system/ProcessesPanel';
+import { ProcessesPanel } from '../../processes/ui/ProcessesPanel';
 import { ProxyPanel } from '../networking/ProxyPanel';
 import { TestsPanel } from '../tests/TestsPanel';
 import { SonarPanel } from '../sonar/SonarPanel';

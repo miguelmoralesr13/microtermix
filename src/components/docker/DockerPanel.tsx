@@ -8,7 +8,7 @@ import { Box, Layers, HardDrive, RefreshCw, Globe, X, GripHorizontal } from 'luc
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SiDocker } from 'react-icons/si';
-import { TerminalView } from '@/components/services/TerminalView';
+import { TerminalView } from '@/services/ui/TerminalView';
 import { DockerFileViewer } from './DockerFileViewer';
 
 import { DockerInspectModal } from './DockerInspectModal';

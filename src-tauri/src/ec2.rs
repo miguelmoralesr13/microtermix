@@ -234,8 +234,8 @@ pub async fn spawn_interactive(
     // Kill any existing session with the same id
     {
         let mut procs = procs_arc.lock().await;
-        if let Some(notify) = procs.remove(&service_id) {
-            notify.notify_waiters();
+        if let Some(tracked) = procs.remove(&service_id) {
+            tracked.notify.notify_waiters();
         }
     }
     {
@@ -301,9 +301,14 @@ pub async fn spawn_interactive(
     });
 
     let notify = Arc::new(tokio::sync::Notify::new());
+    let child_pid = child.id().unwrap_or(0);
     {
         let mut procs = procs_arc.lock().await;
-        procs.insert(service_id.clone(), notify.clone());
+        procs.insert(service_id.clone(), crate::state::TrackedProcess {
+            notify: notify.clone(),
+            pid: child_pid,
+            started_at: std::time::Instant::now(),
+        });
     }
 
     // Stdout reader task
@@ -355,9 +360,9 @@ pub async fn spawn_interactive(
                     #[cfg(not(target_os = "windows"))]
                     if let Some(pid) = child.id() {
                         use nix::sys::signal::Signal;
-                        crate::processes::kill_tree_unix(pid, Signal::SIGTERM);
+                        crate::system::process_killer::kill_tree_unix(pid, Signal::SIGTERM);
                         tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
-                        crate::processes::kill_tree_unix(pid, Signal::SIGKILL);
+                        crate::system::process_killer::kill_tree_unix(pid, Signal::SIGKILL);
                     }
                     let _ = child.kill().await;
                 }
@@ -396,8 +401,8 @@ pub async fn spawn_process(
     // Kill any existing session with the same id
     {
         let mut procs = procs_arc.lock().await;
-        if let Some(notify) = procs.remove(&service_id) {
-            notify.notify_waiters();
+        if let Some(tracked) = procs.remove(&service_id) {
+            tracked.notify.notify_waiters();
         }
     }
     {
@@ -441,7 +446,12 @@ pub async fn spawn_process(
     }
 
     let notify = std::sync::Arc::new(tokio::sync::Notify::new());
-    procs_arc.lock().await.insert(service_id.clone(), notify.clone());
+    let child_pid = child.id().unwrap_or(0);
+    procs_arc.lock().await.insert(service_id.clone(), crate::state::TrackedProcess {
+        notify: notify.clone(),
+        pid: child_pid,
+        started_at: std::time::Instant::now(),
+    });
 
     // Stdin writer task — xterm.js sends \r for Enter, so we pass raw bytes as-is
     {
@@ -529,9 +539,9 @@ pub async fn spawn_process(
                     #[cfg(not(target_os = "windows"))]
                     if let Some(pid) = child.id() {
                         use nix::sys::signal::Signal;
-                        crate::processes::kill_tree_unix(pid, Signal::SIGTERM);
+                        crate::system::process_killer::kill_tree_unix(pid, Signal::SIGTERM);
                         tokio::time::sleep(tokio::time::Duration::from_millis(400)).await;
-                        crate::processes::kill_tree_unix(pid, Signal::SIGKILL);
+                        crate::system::process_killer::kill_tree_unix(pid, Signal::SIGKILL);
                     }
                     let _ = child.kill().await;
                 }
@@ -574,7 +584,7 @@ pub async fn spawn_pty_process(
     // Kill any existing session with the same id
     {
         let mut procs = procs_arc.lock().await;
-        if let Some(notify) = procs.remove(&service_id) { notify.notify_waiters(); }
+        if let Some(tracked) = procs.remove(&service_id) { tracked.notify.notify_waiters(); }
     }
     stdins_arc.lock().await.remove(&service_id);
     resizers_arc.lock().await.remove(&service_id);
@@ -658,7 +668,11 @@ pub async fn spawn_pty_process(
 
     // ── stdout reader (PTY master → pty-output events) ────────────────────────
     let notify = std::sync::Arc::new(tokio::sync::Notify::new());
-    procs_arc.lock().await.insert(service_id.clone(), notify.clone());
+    procs_arc.lock().await.insert(service_id.clone(), crate::state::TrackedProcess {
+        notify: notify.clone(),
+        pid: 0, // PTY process — no direct PID
+        started_at: std::time::Instant::now(),
+    });
 
     {
         let app2  = app.clone();
@@ -761,7 +775,7 @@ pub async fn spawn_pty_shell(
 
     {
         let mut procs = procs_arc.lock().await;
-        if let Some(notify) = procs.remove(&service_id) { notify.notify_waiters(); }
+        if let Some(tracked) = procs.remove(&service_id) { tracked.notify.notify_waiters(); }
     }
     stdins_arc.lock().await.remove(&service_id);
     resizers_arc.lock().await.remove(&service_id);
@@ -839,7 +853,11 @@ pub async fn spawn_pty_shell(
     });
 
     let notify = std::sync::Arc::new(tokio::sync::Notify::new());
-    procs_arc.lock().await.insert(service_id.clone(), notify.clone());
+    procs_arc.lock().await.insert(service_id.clone(), crate::state::TrackedProcess {
+        notify: notify.clone(),
+        pid: 0, // PTY shell — no direct PID
+        started_at: std::time::Instant::now(),
+    });
 
     {
         let app2  = app.clone();

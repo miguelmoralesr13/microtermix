@@ -24,15 +24,18 @@ pub struct AppDiagnostics {
 pub async fn get_microtermix_performance_data(state: tauri::State<'_, AppState>) -> Result<AppDiagnostics, String> {
     use sysinfo::{Pid, ProcessRefreshKind};
 
+    // Collect tracked process info first (no await while holding sys lock)
+    let tracked: Vec<(String, u32)> = {
+        let procs_guard = state.processes.lock().await;
+        procs_guard.iter().map(|(sid, tp)| (sid.clone(), tp.pid)).collect()
+    };
+
     let mut sys = state.sys_monitor.lock().map_err(|e| e.to_string())?;
-    
-    // Refresh only process stats (CPU/Memory).
-    // In sysinfo 0.30+, this uses the existing state to calculate CPU usage over time.
     sys.refresh_processes_specifics(ProcessRefreshKind::new().with_cpu().with_memory());
-    
+
     let current_pid = std::process::id();
     let sys_pid = Pid::from_u32(current_pid);
-    
+
     let (mem_rss, mem_virt, cpu, threads) = if let Some(p) = sys.process(sys_pid) {
         (p.memory(), p.virtual_memory(), p.cpu_usage(), p.run_time())
     } else {
@@ -40,22 +43,21 @@ pub async fn get_microtermix_performance_data(state: tauri::State<'_, AppState>)
     };
 
     let mut managed = Vec::new();
-    {
-        let pids_guard = state.process_pids.lock().map_err(|e| e.to_string())?;
-        for (service_id, &pid) in pids_guard.iter() {
-            let mut cpu_val = 0.0;
-            let mut mem_val = 0;
+    for (service_id, pid) in tracked {
+        let mut cpu_val = 0.0;
+        let mut mem_val = 0;
+        if pid > 0 {
             if let Some(p) = sys.process(Pid::from_u32(pid)) {
                 cpu_val = p.cpu_usage();
                 mem_val = p.memory();
             }
-            managed.push(ManagedProcessInfo {
-                service_id: service_id.clone(),
-                pid: Some(pid),
-                cpu_usage: cpu_val,
-                memory_bytes: mem_val,
-            });
         }
+        managed.push(ManagedProcessInfo {
+            service_id,
+            pid: Some(pid),
+            cpu_usage: cpu_val,
+            memory_bytes: mem_val,
+        });
     }
 
     Ok(AppDiagnostics {

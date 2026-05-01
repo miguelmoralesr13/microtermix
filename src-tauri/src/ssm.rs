@@ -160,7 +160,7 @@ pub async fn ssm_start_session(
     // Kill any existing session with the same id
     {
         let mut p = procs_arc.lock().await;
-        if let Some(n) = p.remove(&service_id) { n.notify_waiters(); }
+        if let Some(n) = p.remove(&service_id) { n.notify.notify_waiters(); }
     }
     stdins_arc.lock().await.remove(&service_id);
 
