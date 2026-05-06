@@ -188,6 +188,60 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
         return selectedProjects[0] ?? null;
     }, [activeTerminalTab, selectedProjects]);
 
+    // ─── Env panel width (resizable) ─────────────────────────────────────
+    const [envPanelWidth, setEnvPanelWidth] = useState(() => {
+        const stored = localStorage.getItem('microtermix-env-panel-width');
+        if (stored) {
+            const parsed = parseInt(stored, 10);
+            if (!isNaN(parsed) && parsed >= 180 && parsed <= 500) return parsed;
+        }
+        return 232;
+    });
+
+    const [keyColumnWidth, setKeyColumnWidth] = useState(() => {
+        const stored = localStorage.getItem('microtermix-env-key-width');
+        if (stored) {
+            const parsed = parseInt(stored, 10);
+            if (!isNaN(parsed) && parsed >= 60 && parsed <= 200) return parsed;
+        }
+        return 72;
+    });
+
+    const envDragRef = useRef(false);
+    const envDragStartX = useRef(0);
+    const envDragStartW = useRef(0);
+
+    const handleEnvDragStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        envDragRef.current = true;
+        envDragStartX.current = e.clientX;
+        envDragStartW.current = envPanelWidth;
+        document.addEventListener('mousemove', handleEnvDragMove);
+        document.addEventListener('mouseup', handleEnvDragEnd);
+    };
+
+    const handleEnvDragMove = (e: MouseEvent) => {
+        if (!envDragRef.current) return;
+        const delta = envDragStartX.current - e.clientX;
+        const newWidth = Math.max(180, Math.min(500, envDragStartW.current + delta));
+        setEnvPanelWidth(newWidth);
+    };
+
+    const handleEnvDragEnd = () => {
+        envDragRef.current = false;
+        document.removeEventListener('mousemove', handleEnvDragMove);
+        document.removeEventListener('mouseup', handleEnvDragEnd);
+    };
+
+    // Persist env panel width
+    React.useEffect(() => {
+        localStorage.setItem('microtermix-env-panel-width', String(envPanelWidth));
+    }, [envPanelWidth]);
+
+    React.useEffect(() => {
+        localStorage.setItem('microtermix-env-key-width', String(keyColumnWidth));
+    }, [keyColumnWidth]);
+
     // ─── Open panel from context menu ────────────────────────────────────
     const handleOpenPanel = useCallback((path: string, tab?: string) => {
         // Select the project so the panels show its data
@@ -294,12 +348,23 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                         onTabCloseFinished={handleCloseFinishedTabs}
                     />
 
+                    {/* Drag handle */}
+                    <div
+                        className="w-[3px] shrink-0 bg-transparent hover:bg-microtermix-neon/40 cursor-ew-resize transition-colors group relative z-10"
+                        onMouseDown={handleEnvDragStart}
+                    >
+                        <div className="h-full w-full group-hover:shadow-[0_0_4px_rgba(56,189,248,0.4)]" />
+                    </div>
+
                     {/* ── Right: Environment panel ── */}
                     <EnvSidePanel
                         ref={envPanelRef}
                         activeTerminalTab={activeTerminalTab}
                         selectedProjects={selectedProjects}
                         focusedProjectPath={envFocusedPath}
+                        width={envPanelWidth}
+                        keyWidth={keyColumnWidth}
+                        onKeyWidthChange={setKeyColumnWidth}
                     />
                 </div>
 

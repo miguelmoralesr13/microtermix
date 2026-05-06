@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Github, Gitlab, Plus, Pencil, Trash2, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { useGitStore, type GitAccount } from '../../stores/gitStore';
+import { useGitStore } from '../../stores/gitStore';
+import type { GitAccount } from '../../git/domain';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components//ui/dialog';
 import { Input } from '@/components//ui/input';
 import { Button } from '@/components//ui/button';

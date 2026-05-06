@@ -1,8 +1,10 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
-import { SemgrepFinding, useSemgrepStore } from '../../stores/semgrepStore';
+import { useSemgrepStore } from '../../stores/semgrepStore';
 import { toast } from 'sonner';
 import { listen } from '@tauri-apps/api/event';
+import type { SemgrepFinding } from '../../semgrep/domain/SemgrepFinding';
+import { resolveEffectiveConfig } from '../../semgrep/domain/SemgrepScanConfig';
 
 export const semgrepKeys = {
     all: ['semgrep'] as const,
@@ -19,7 +21,7 @@ export function useSemgrepInstalled() {
                 return false;
             }
         },
-        staleTime: Infinity, // Installation status doesn't change often
+        staleTime: Infinity,
     });
 }
 
@@ -32,10 +34,9 @@ interface ScanParams {
 
 export function useSemgrepScan() {
     const setFindings = useSemgrepStore(s => s.setFindings);
-    
+
     return useMutation({
         mutationFn: async ({ projectPath, configPath, onLog, onProgress }: ScanParams) => {
-            // Listener for progress (and optional logs)
             const unlisten = await listen<string>('semgrep-log', (event) => {
                 const line = String(event.payload);
                 if (line.startsWith('PROG:')) {
@@ -48,21 +49,32 @@ export function useSemgrepScan() {
             });
 
             try {
-                const resultStr = await invoke<string>('run_semgrep_scan', { 
+                const effectiveConfig = resolveEffectiveConfig(configPath || 'p/default');
+                const resultStr = await invoke<string>('run_semgrep_scan', {
                     projectPath,
-                    configPath: configPath === 'p/default' ? null : configPath 
+                    configPath: effectiveConfig,
                 });
-                
-                const data = JSON.parse(resultStr);
-                const mapped: SemgrepFinding[] = (data.results || []).map((r: any) => ({
-                    id: Math.random().toString(36).substr(2, 9),
-                    path: r.path,
-                    line: r.start.line,
-                    message: r.extra.message,
-                    severity: r.extra.severity,
-                    ruleId: r.check_id,
-                    extra: r.extra
-                }));
+
+                const data = JSON.parse(resultStr) as { results?: Array<Record<string, unknown>> };
+                const mapped: SemgrepFinding[] = (data.results || []).map((r) => {
+                    const extra = r.extra as Record<string, unknown> | undefined;
+                    const start = r.start as Record<string, unknown> | undefined;
+                    return {
+                        id: crypto.randomUUID(),
+                        path: (r.path as string) || '',
+                        line: (start?.line as number) || 0,
+                        message: (extra?.message as string) || '',
+                        severity: (extra?.severity as SemgrepFinding['severity']) || 'INFO',
+                        ruleId: (r.check_id as string) || '',
+                        extra: {
+                            ...(extra || {}),
+                            message: extra?.message as string | undefined,
+                            severity: extra?.severity as SemgrepFinding['severity'] | undefined,
+                            fix: extra?.fix as string | undefined,
+                            metadata: extra?.metadata as SemgrepFinding['extra']['metadata'] | undefined,
+                        },
+                    };
+                });
 
                 setFindings(projectPath, mapped);
                 return mapped;

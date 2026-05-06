@@ -70,7 +70,7 @@ const BranchSelect: React.FC<BranchSelectProps> = ({ value, options, onChange, p
 };
 import { createGithubPR } from '../../services/githubApi';
 import { createGitlabMR } from '../../services/gitlabApi';
-import type { GitAccount } from '../../stores/gitStore';
+import type { GitAccount } from '../../git/domain';
 import { NormalizedPR, normalizeGithubPR, normalizeGitlabMR } from './PRSection';
 
 interface CreatePRModalProps {

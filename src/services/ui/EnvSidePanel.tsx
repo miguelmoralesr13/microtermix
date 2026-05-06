@@ -9,7 +9,7 @@ import { useProcessStore } from '../../stores/processStore';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
-// ── Storage key for collapsed state ──────────────────────────────────────────
+// ── Storage keys ──────────────────────────────────────────────────────────────
 const COLLAPSED_KEY = 'microtermix-env-panel-collapsed';
 
 export interface EnvPanelHandle {
@@ -42,8 +42,8 @@ function RunEnvsSection({ envs }: { envs: Record<string, string> }) {
             <div className="px-2 pb-2 space-y-px max-h-[140px] overflow-y-auto scrollbar-thin">
                 {entries.map(([k, v]) => (
                     <div key={k} className="flex gap-1.5 items-center py-0.5 px-1 rounded hover:bg-slate-900/40 group">
-                        <span className="text-[10px] font-mono text-amber-400/80 truncate w-[80px] shrink-0 leading-tight">{k}</span>
-                        <span className="text-[10px] font-mono text-slate-500 truncate flex-1 min-w-0 leading-tight">
+                        <span title={k} className="text-[10px] font-mono text-amber-400/80 truncate w-[80px] shrink-0 leading-tight">{k}</span>
+                        <span title={masked ? undefined : (v || 'vacío')} className="text-[10px] font-mono text-slate-500 truncate flex-1 min-w-0 leading-tight">
                             {masked ? '••••••' : (v || <span className="italic text-slate-700">vacío</span>)}
                         </span>
                     </div>
@@ -73,7 +73,7 @@ function parseEnvFileContent(text: string): Record<string, string> {
 
 // ── Compact env editor ────────────────────────────────────────────────────────
 
-function CompactEnvManager({ projectPath }: { projectPath: string }) {
+function CompactEnvManager({ projectPath, keyWidth, onKeyWidthChange }: { projectPath: string; keyWidth: number; onKeyWidthChange: (w: number) => void }) {
     const {
         store, activeEnv, envNames,
         setActiveEnv, addEnv, setEnvVar, deleteEnvVar,
@@ -262,16 +262,44 @@ function CompactEnvManager({ projectPath }: { projectPath: string }) {
             )}
 
             {/* Vars list */}
-            <div className="flex-1 overflow-y-auto px-1.5 py-1 space-y-px min-h-0 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto px-1.5 pt-2 space-y-px min-h-0 scrollbar-thin">
                 {entries.length === 0 ? (
                     <p className="text-[10px] text-slate-700 italic py-4 text-center">Sin variables en "{activeEnv}"</p>
                 ) : (
                     entries.map(([k, v]) => (
-                        <div key={k} className="group flex items-center gap-1 py-[3px] rounded px-1 hover:bg-slate-800/30 transition-colors">
-                            <span className="text-[10px] font-mono text-emerald-400/80 w-[72px] shrink-0 truncate leading-tight">{k}</span>
-                            <span className="text-[10px] font-mono text-slate-500 flex-1 truncate min-w-0 leading-tight">
-                                {masked ? '••••' : (v || <span className="italic text-slate-700">vacío</span>)}
-                            </span>
+                        <div key={k} className="group flex items-center py-[3px] rounded px-1 hover:bg-slate-800/30 transition-colors">
+                            <span style={{ width: keyWidth, minWidth: keyWidth }} title={k} className="text-[10px] font-mono text-emerald-400/80 shrink-0 truncate leading-tight block">{k}</span>
+                            {/* Draggable divider — always visible, more prominent on hover */}
+                            <div
+                                className="relative w-[6px] shrink-0 cursor-ew-resize group/drag"
+                                style={{ height: 16 }}
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const startX = e.clientX;
+                                    const startW = keyWidth;
+                                    const onMove = (me: MouseEvent) => {
+                                        const delta = me.clientX - startX;
+                                        onKeyWidthChange(Math.max(60, Math.min(200, startW + delta)));
+                                    };
+                                    const onUp = () => {
+                                        document.removeEventListener('mousemove', onMove);
+                                        document.removeEventListener('mouseup', onUp);
+                                    };
+                                    document.addEventListener('mousemove', onMove);
+                                    document.addEventListener('mouseup', onUp);
+                                }}
+                            >
+                                <div className="absolute inset-y-0 left-[2px] w-[2px] bg-slate-700/40 group-hover/drag:bg-microtermix-neon/60 transition-colors rounded-full" />
+                            </div>
+                            <input
+                                type={masked ? 'password' : 'text'}
+                                value={masked ? '••••' : v}
+                                readOnly={masked}
+                                title={masked ? undefined : (v || 'vacío')}
+                                onChange={(e) => setEnvVar(activeEnv, k, e.target.value)}
+                                className="text-[10px] font-mono bg-transparent text-slate-400 flex-1 truncate min-w-0 leading-tight border-0 bg-none focus:outline-none focus:ring-0 p-0"
+                            />
                             <button
                                 onClick={() => deleteEnvVar(activeEnv, k)}
                                 className="opacity-0 group-hover:opacity-100 text-slate-700 hover:text-red-400 shrink-0 transition-all p-0.5 rounded hover:bg-red-400/10"
@@ -285,18 +313,43 @@ function CompactEnvManager({ projectPath }: { projectPath: string }) {
 
             {/* Add var row */}
             <div className="border-t border-slate-800/40 px-2 py-1.5 shrink-0 bg-slate-900/20">
-                <div className="flex gap-1">
+                <div className="flex items-center">
                     <Input
                         value={newKey}
                         onChange={e => setNewKey(e.target.value)}
                         placeholder="KEY"
-                        className="h-[22px] text-[10px] font-mono bg-slate-950/60 border-slate-700/40 px-1.5 flex-1 min-w-0 uppercase"
+                        title={newKey || undefined}
+                        style={{ width: keyWidth, minWidth: keyWidth }}
+                        className="h-[22px] text-[10px] font-mono bg-slate-950/60 border-slate-700/40 px-1.5 shrink-0 min-w-0 uppercase"
                         onKeyDown={e => e.key === 'Enter' && handleAddVar()}
                     />
+                    {/* Draggable divider — always visible */}
+                    <div
+                        className="relative w-[6px] shrink-0 cursor-ew-resize"
+                        style={{ height: 22 }}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            const startX = e.clientX;
+                            const startW = keyWidth;
+                            const onMove = (me: MouseEvent) => {
+                                const delta = me.clientX - startX;
+                                onKeyWidthChange(Math.max(60, Math.min(200, startW + delta)));
+                            };
+                            const onUp = () => {
+                                document.removeEventListener('mousemove', onMove);
+                                document.removeEventListener('mouseup', onUp);
+                            };
+                            document.addEventListener('mousemove', onMove);
+                            document.addEventListener('mouseup', onUp);
+                        }}
+                    >
+                        <div className="absolute inset-y-0 left-[2px] w-[2px] bg-slate-700/40 hover:bg-microtermix-neon/60 transition-colors rounded-full" />
+                    </div>
                     <Input
                         value={newVal}
                         onChange={e => setNewVal(e.target.value)}
                         placeholder="valor"
+                        title={newVal || undefined}
                         className="h-[22px] text-[10px] font-mono bg-slate-950/60 border-slate-700/40 px-1.5 flex-1 min-w-0"
                         onKeyDown={e => e.key === 'Enter' && handleAddVar()}
                     />
@@ -322,12 +375,23 @@ interface EnvSidePanelProps {
     selectedProjects: string[];
     /** When set, this project path takes priority over activeTerminalTab */
     focusedProjectPath?: string | null;
+    /** Controlled width — parent owns the resize state */
+    width: number;
+    /** Width of the key column in the vars list */
+    keyWidth: number;
+    onKeyWidthChange: (w: number) => void;
 }
+
+const KEY_MIN = 60;
+const KEY_MAX = 200;
 
 export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
     activeTerminalTab,
     selectedProjects,
     focusedProjectPath,
+    width,
+    keyWidth,
+    onKeyWidthChange,
 }, ref) => {
     const [collapsed, setCollapsed] = useState(() =>
         localStorage.getItem(COLLAPSED_KEY) === 'true'
@@ -358,7 +422,7 @@ export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
         terminalBelongsToProject && activeTerminalTab ? s.activeProcesses[activeTerminalTab] : null
     );
 
-    const usedEnvs: Record<string, string> = React.useMemo(() => {
+    const usedEnvs = React.useMemo(() => {
         if (!process?.envJson) return {};
         try { return JSON.parse(process.envJson) as Record<string, string>; }
         catch { return {}; }
@@ -392,7 +456,7 @@ export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
 
     // ── Expanded state ──
     return (
-        <div className="w-[232px] shrink-0 h-full border-l border-slate-800/60 bg-slate-950/80 flex flex-col overflow-hidden">
+        <div style={{ width }} className="shrink-0 h-full border-l border-slate-800/60 bg-slate-950/80 flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-2.5 py-1.5 border-b border-slate-800/40 bg-slate-900/40 shrink-0">
                 <div className="flex items-center justify-between">
@@ -424,7 +488,30 @@ export const EnvSidePanel = forwardRef<EnvPanelHandle, EnvSidePanelProps>(({
             {projectPath ? (
                 <>
                     <RunEnvsSection envs={usedEnvs} />
-                    <CompactEnvManager key={projectPath} projectPath={projectPath} />
+                    {/* Key column drag handle */}
+                    <div className="relative">
+                        <div
+                            className="absolute left-1.5 right-1.5 top-0 h-[2px] bg-slate-800/40 hover:bg-microtermix-neon/40 cursor-ns-resize transition-colors z-10 group"
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                const startY = e.clientY;
+                                const startW = keyWidth;
+                                const onMove = (me: MouseEvent) => {
+                                    const delta = startY - me.clientY;
+                                    onKeyWidthChange(Math.max(KEY_MIN, Math.min(KEY_MAX, startW + delta)));
+                                };
+                                const onUp = () => {
+                                    document.removeEventListener('mousemove', onMove);
+                                    document.removeEventListener('mouseup', onUp);
+                                };
+                                document.addEventListener('mousemove', onMove);
+                                document.addEventListener('mouseup', onUp);
+                            }}
+                        >
+                            <div className="h-full w-full group-hover:shadow-[0_0_4px_rgba(56,189,248,0.4)]" />
+                        </div>
+                    </div>
+                    <CompactEnvManager key={projectPath} projectPath={projectPath} keyWidth={keyWidth} onKeyWidthChange={onKeyWidthChange} />
                 </>
             ) : (
                 <div className="flex-1 flex items-center justify-center px-4">

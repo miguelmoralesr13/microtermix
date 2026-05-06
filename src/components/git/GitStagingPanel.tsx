@@ -5,7 +5,7 @@ import { GitCommit, GitMerge, RefreshCw, Layers, CheckSquare, Square, MinusSquar
 import { FileHistoryModal } from './FileHistoryModal';
 import { GitAmendModal } from './GitAmendModal';
 
-import { GitStatusEntry } from '../../stores/gitStore';
+import type { GitStatusEntry } from '../../git/domain';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';

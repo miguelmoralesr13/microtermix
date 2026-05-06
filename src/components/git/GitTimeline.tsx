@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { RefreshCw, Search, X, GitBranch, Tag, Archive, Pencil, Trash2, AlertTriangle, GitMerge, Copy } from 'lucide-react';
-import { useGitStore, RawCommit } from '../../stores/gitStore';
+import { useGitStore } from '../../stores/gitStore';
+import type { GitCommit as RawCommit } from '../../git/domain';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';

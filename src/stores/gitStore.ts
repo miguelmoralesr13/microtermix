@@ -1,51 +1,29 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import type { GitAccount as GitAccountDomain } from '../git/domain/GitAccount';
+import type { GitStatusEntry as GitStatusEntryDomain } from '../git/domain/GitStatusEntry';
+import type { GitCommit as RawCommitDomain } from '../git/domain/GitCommit';
+import type { GitAheadBehind as AheadBehindDomain } from '../git/domain/GitAheadBehind';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Re-export domain types for backward compatibility
+// Components expect: GitStatusEntry, RawCommit, AheadBehind, BranchFilter, GitAccount, CloneFavorite, GitUi
+export type GitStatusEntry = GitStatusEntryDomain;
+export type RawCommit = RawCommitDomain;
+export type AheadBehind = AheadBehindDomain;
+export type GitAccount = GitAccountDomain;
 
-export interface GitStatusEntry {
-    file: string;
-    stateCode: string;
-    isStaged: boolean;
-    isUnstaged: boolean;
-    isConflicted: boolean;
-}
-
-export interface RawCommit {
-    hash: string;
-    shortHash: string;
-    parents: string[];
-    author: string;
-    date: string;
-    message: string;
-    refs: string;
-}
-
-export interface AheadBehind {
-    ahead: number;
-    behind: number;
-    hasUpstream: boolean;
-}
-
-export type BranchFilter = 'all' | 'local' | 'remote';
-
-export interface GitAccount {
-    id: string;
-    alias: string;
-    provider: 'github' | 'gitlab';
-    url: string;
-    token: string;
-}
-
+// CloneFavorite keeps 'private' field (not isPrivate) for backward compatibility
 export interface CloneFavorite {
-    id: string; // full_name or path_with_namespace
+    id: string;
     name: string;
     fullName: string;
     cloneUrl: string;
     htmlUrl: string;
     provider: 'github' | 'gitlab';
-    private: boolean;
+    private: boolean; // Note: kept as 'private' for backward compatibility
 }
+
+export type BranchFilter = 'all' | 'local' | 'remote';
 
 export interface GitUi {
     activeTab: string | null;
@@ -93,7 +71,7 @@ export const useGitStore = create<GitState & GitActions>()(
 
             addAccount: (a) => {
                 const id = crypto.randomUUID();
-                set(s => ({ accounts: [...s.accounts, { ...a, id }] }));
+                set(s => ({ accounts: [...s.accounts, { ...a, id } as GitAccount] }));
                 return id;
             },
 

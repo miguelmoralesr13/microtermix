@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { X, GitMerge, Loader2, GitCommit, AlertCircle, Info } from 'lucide-react';
-import { RawCommit } from '../../stores/gitStore';
+import type { GitCommit as RawCommit } from '../../git/domain';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';

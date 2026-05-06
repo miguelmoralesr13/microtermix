@@ -10,7 +10,7 @@ import {
     fetchGitlabMRCommits, fetchGitlabMRChanges,
     type GitlabMRCommit, type GitlabMRChange,
 } from '../../services/gitlabApi';
-import type { GitAccount } from '../../stores/gitStore';
+import type { GitAccount } from '../../git/domain';
 import type { NormalizedPR } from './PRSection';
 import { invoke } from '@tauri-apps/api/core';
 import { useQueryClient } from '@tanstack/react-query';

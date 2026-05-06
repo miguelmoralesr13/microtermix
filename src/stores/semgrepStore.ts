@@ -1,21 +1,19 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { SemgrepFinding as SemgrepFindingDomain, SemgrepFindingExtra } from '../semgrep/domain/SemgrepFinding';
 
-export interface SemgrepFinding {
-    id: string;
-    path: string;
-    line: number;
-    message: string;
-    severity: 'ERROR' | 'WARNING' | 'INFO';
-    ruleId: string;
-    extra: any;
-}
+/**
+ * Re-export domain types for backward compatibility.
+ * New code should import from `src/semgrep/domain` directly.
+ */
+export type { SemgrepFindingExtra };
+export type SemgrepFinding = SemgrepFindingDomain;
 
 interface SemgrepStore {
     findings: Record<string, SemgrepFinding[]>; // projectPath -> findings
     lastScan: Record<string, string>;           // projectPath -> timestamp
     configPath: string;                         // Ruta global persistente del config
-    
+
     setFindings: (path: string, findings: SemgrepFinding[]) => void;
     setConfigPath: (path: string) => void;
     clearFindings: (path: string) => void;

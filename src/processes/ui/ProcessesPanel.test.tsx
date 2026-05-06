@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ListeningProcess } from '../../domain';
+import type { ListeningProcess } from '../domain';
 
 // Replicate the filter logic from ProcessesPanel for testing
 interface TechFilterStrategy {

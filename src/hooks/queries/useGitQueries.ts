@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
-import { GitStatusEntry, RawCommit, AheadBehind } from '../../stores/gitStore';
+import { parseGitStateCode } from '../../git/domain';
+import type { GitStatusEntry, GitCommit, GitAheadBehind } from '../../git/domain';
 import { useGitStore } from '../../stores/gitStore';
 import { listen } from '@tauri-apps/api/event';
 import {
@@ -47,13 +48,39 @@ export function useGitRepoCheck(path: string | null) {
 export function useGitStatus(path: string | null) {
     return useQuery({
         queryKey: gitKeys.status(path || ''),
-        queryFn: () => invoke<{
-            files: GitStatusEntry[];
-            currentBranch: string;
-            isMergeInProgress: boolean;
-            isRebaseInProgress: boolean;
-            statusOutput: string;
-        }>('git_status_native', { projectPath: path }),
+        queryFn: async () => {
+            const result = await invoke<{
+                files: Array<{
+                    file: string;
+                    stateCode: string;
+                    isStaged: boolean;
+                    isUnstaged: boolean;
+                    isConflicted: boolean;
+                }>;
+                currentBranch: string;
+                isMergeInProgress: boolean;
+                isRebaseInProgress: boolean;
+                statusOutput: string;
+            }>('git_status_native', { projectPath: path });
+
+            // Transform raw Tauri data into domain types
+            const domainFiles: GitStatusEntry[] = result.files.map(f => ({
+                file: f.file,
+                stateCode: f.stateCode,
+                isStaged: f.isStaged,
+                isUnstaged: f.isUnstaged,
+                isConflicted: f.isConflicted,
+                state: parseGitStateCode(f.stateCode),
+            }));
+
+            return {
+                files: domainFiles,
+                currentBranch: result.currentBranch,
+                isMergeInProgress: result.isMergeInProgress,
+                isRebaseInProgress: result.isRebaseInProgress,
+                statusOutput: result.statusOutput,
+            };
+        },
         enabled: !!path,
         staleTime: 30_000,
     });
@@ -76,7 +103,7 @@ export function useGitTimeline(path: string | null) {
     return useQuery({
         queryKey: gitKeys.timeline(path || ''),
         queryFn: () => invoke<{
-            commits: RawCommit[];
+            commits: GitCommit[];
             localHashes: string[];
         }>('git_log_native', { projectPath: path }),
         enabled: !!path,
@@ -87,7 +114,7 @@ export function useGitTimeline(path: string | null) {
 export function useGitAheadBehind(path: string | null) {
     return useQuery({
         queryKey: gitKeys.aheadBehind(path || ''),
-        queryFn: () => invoke<AheadBehind>('git_ahead_behind_native', { projectPath: path }),
+        queryFn: () => invoke<GitAheadBehind>('git_ahead_behind_native', { projectPath: path }),
         enabled: !!path,
         staleTime: 30_000,
         retry: false, // Don't spam if no remote

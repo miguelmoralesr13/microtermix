@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { GitPullRequest, RefreshCw, Plus, ExternalLink, Folder, GitMerge, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { fetchGithubPRs, type GithubPR } from '../../services/githubApi';
 import { fetchGitlabMRs, type GitlabMR } from '../../services/gitlabApi';
-import type { GitAccount } from '../../stores/gitStore';
+import type { GitAccount } from '../../git/domain';
 import { CreatePRModal } from './CreatePRModal';
 import { MergePRModal } from './MergePRModal';
 

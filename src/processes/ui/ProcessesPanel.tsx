@@ -90,7 +90,8 @@ export const ProcessesPanel: React.FC = () => {
         }
     };
 
-    const isLocalhost = (addr: string) => {
+    const isLocalhost = (addr: string | undefined | null) => {
+        if (!addr) return false;
         return addr.startsWith('0.0.0.0') || addr.startsWith('127.0.0.1') || addr.startsWith('[::]') || addr.startsWith('localhost');
     };
 
