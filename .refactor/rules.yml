@@ -1,0 +1,23 @@
+rules:
+    types:
+        no_any: true
+        explicit_return_types: false
+        strict_null_checks: true
+    components:
+        max_lines: 250
+        extract_if_over: true
+        max_props: 5
+    state:
+        no_props_drilling_over: 3
+        prefer_custom_hooks: true
+    testing:
+        all_changed_files_tested: true
+        min_coverage_delta: 0
+    commits:
+        conventional: true
+        atomic: true
+        max_per_task: 1
+    behavior:
+        no_breaking_changes: true
+        no_new_dependencies: true
+        preserve_public_api: true

@@ -1,0 +1,33 @@
+{
+  "language": "typescript",
+  "stack": [
+    "tauri",
+    "react",
+    "tailwind",
+    "vite",
+    "zustand",
+    "vitest",
+    "typescript",
+    "rust",
+    "monaco-editor",
+    "xterm",
+    "xyflow",
+    "recharts",
+    "tanstack-query",
+    "swagger",
+    "postman",
+    "mermaid",
+    "ejs",
+    "mustache",
+    "pug",
+    "liquidjs",
+    "marked"
+  ],
+  "timestamp": "now",
+  "tools": {
+    "build": "npx run build",
+    "coverage": "npx vitest run --coverage",
+    "test": "npx vitest run",
+    "typecheck": "npx tsc --noEmit"
+  }
+}

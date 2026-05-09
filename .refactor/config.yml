@@ -1,0 +1,34 @@
+project:
+    name: microtermix
+    stack:
+        - tauri
+        - react
+        - tailwind
+        - vite
+        - zustand
+        - vitest
+        - typescript
+        - rust
+        - monaco-editor
+        - xterm
+        - xyflow
+        - recharts
+        - tanstack-query
+        - swagger
+        - postman
+        - mermaid
+        - ejs
+        - mustache
+        - pug
+        - liquidjs
+        - marked
+    language: typescript
+    package_manager: npm
+tools:
+    typecheck: npx tsc --noEmit
+    test: npx vitest run
+    build: npx run build
+    coverage: npx vitest run --coverage
+paths:
+    src: src/
+    tests: src/**/*.test.{ts,tsx}
